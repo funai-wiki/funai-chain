@@ -126,7 +126,8 @@ func makeBatchEntries(n, salt int) []types.SettlementEntry {
 
 func makeBatchMsg(proposer sdk.AccAddress, entries []types.SettlementEntry) *types.MsgBatchSettlement {
 	merkleRoot := keeper.ComputeMerkleRoot(entries)
-	sig, _ := benchProposerKey.Sign(merkleRoot)
+	merkleHash := sha256.Sum256(merkleRoot)
+	sig, _ := benchProposerKey.Sign(merkleHash[:])
 	return types.NewMsgBatchSettlement(proposer.String(), merkleRoot, entries, sig)
 }
 
