@@ -63,7 +63,9 @@ func (nopWorkerKeeper) UpdateWorkerStats(_ sdk.Context, _ sdk.AccAddress, _ sdk.
 func (nopWorkerKeeper) GetWorkerPubkey(_ sdk.Context, _ sdk.AccAddress) (string, bool) {
 	return string(benchProposerKey.PubKey().Bytes()), true
 }
-func (nopWorkerKeeper) TombstoneWorker(_ sdk.Context, _ sdk.AccAddress) {}
+func (nopWorkerKeeper) TombstoneWorker(_ sdk.Context, _ sdk.AccAddress)                  {}
+func (nopWorkerKeeper) ReputationOnAccept(_ sdk.Context, _ sdk.AccAddress)               {}
+func (nopWorkerKeeper) UpdateAvgLatency(_ sdk.Context, _ sdk.AccAddress, _ uint32)       {}
 
 // ── Setup helpers ─────────────────────────────────────────────────────────────
 

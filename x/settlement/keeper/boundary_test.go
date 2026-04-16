@@ -154,8 +154,8 @@ func TestDistributeSuccessFee_DustHandling(t *testing.T) {
 	v2 := makeAddr("dust-v2")
 	v3 := makeAddr("dust-v3")
 
-	// Fee = 100 ufai. Verifier total = 100*45/1000 = 4 (truncated). perVerifier = 4/3 = 1.
-	// Last verifier should get remainder: 4 - 1 - 1 = 2
+	// Fee = 100 ufai. Verifier total = 100*120/1000 = 12. perVerifier = 12/3 = 4.
+	// Audit = 100*30/1000 = 3. Executor = 100 - 12 - 3 = 85.
 	fee := sdk.NewCoin("ufai", math.NewInt(100))
 	_ = k.ProcessDeposit(ctx, user, fee)
 
@@ -178,19 +178,19 @@ func TestDistributeSuccessFee_DustHandling(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// executor = 100 - verifier(4) - audit(0) = 96 (remainder-based, no dust loss)
+	// executor = 100 - verifier(12) - audit(3) = 85 (remainder-based, no dust loss)
 	gotWorker := bk.receivedBy(worker)
-	if !gotWorker.Equal(math.NewInt(96)) {
-		t.Fatalf("executor expected 96, got %s", gotWorker)
+	if !gotWorker.Equal(math.NewInt(85)) {
+		t.Fatalf("executor expected 85, got %s", gotWorker)
 	}
 
-	// Verify total verifier distribution = 100*45/1000 = 4
+	// Verify total verifier distribution = 100*120/1000 = 12
 	gotV1 := bk.receivedBy(v1)
 	gotV2 := bk.receivedBy(v2)
 	gotV3 := bk.receivedBy(v3)
 	totalVerifier := gotV1.Add(gotV2).Add(gotV3)
-	if !totalVerifier.Equal(math.NewInt(4)) {
-		t.Fatalf("total verifier expected 4, got %s", totalVerifier)
+	if !totalVerifier.Equal(math.NewInt(12)) {
+		t.Fatalf("total verifier expected 12, got %s", totalVerifier)
 	}
 
 	// Last verifier gets remainder

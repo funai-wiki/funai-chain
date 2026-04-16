@@ -135,6 +135,10 @@ func (m *mockWorkerKeeper) UpdateWorkerStats(_ sdk.Context, addr sdk.AccAddress,
 
 func (m *mockWorkerKeeper) TombstoneWorker(_ sdk.Context, _ sdk.AccAddress) {}
 
+func (m *mockWorkerKeeper) ReputationOnAccept(_ sdk.Context, _ sdk.AccAddress) {}
+
+func (m *mockWorkerKeeper) UpdateAvgLatency(_ sdk.Context, _ sdk.AccAddress, _ uint32) {}
+
 func (m *mockWorkerKeeper) GetWorkerPubkey(_ sdk.Context, _ sdk.AccAddress) (string, bool) {
 	return string(testProposerKey.PubKey().Bytes()), true
 }

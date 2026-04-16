@@ -258,7 +258,7 @@ func TestAuditOverturn_FailToSuccess_UserNotDoubleCharged(t *testing.T) {
 
 // ============================================================
 // Fix 3: Verifier fee dust loss
-// Spec: "verifier_fee_ratio = 4.5% (45‰, 1.5% each × 3 verifiers)"
+// Spec: "verifier_fee_ratio = 12% (120‰, 4% each × 3 verifiers)"
 // Total verifier amount must be fully distributed, no coins lost.
 // ============================================================
 
@@ -267,14 +267,14 @@ func TestDistributeSuccessFee_NoDustLoss(t *testing.T) {
 		name       string
 		feeAmount  int64
 		verifiers  int
-		wantTotal  int64 // 4.5% of fee (verifier_fee_ratio = 45‰)
+		wantTotal  int64 // 12% of fee (verifier_fee_ratio = 120‰)
 	}{
-		{"divisible_by_3", 1_000_000, 3, 45_000},
-		{"not_divisible_by_3", 1_000_001, 3, 45_000},      // 1_000_001 * 45 / 1000 = 45_000
-		{"remainder_in_per_verifier", 999_999, 3, 44_999},  // 999_999 * 45 / 1000 = 44_999
-		{"single_verifier", 1_000_000, 1, 45_000},
-		{"large_fee", 999_999_999, 3, 44_999_999},
-		{"tiny_fee_rounds_to_zero", 10, 3, 0},              // 10 * 45 / 1000 = 0
+		{"divisible_by_3", 1_000_000, 3, 120_000},
+		{"not_divisible_by_3", 1_000_001, 3, 120_000},      // 1_000_001 * 120 / 1000 = 120_000
+		{"remainder_in_per_verifier", 999_999, 3, 119_999},  // 999_999 * 120 / 1000 = 119_999
+		{"single_verifier", 1_000_000, 1, 120_000},
+		{"large_fee", 999_999_999, 3, 119_999_999},
+		{"tiny_fee_rounds_to_zero", 10, 3, 1},               // 10 * 120 / 1000 = 1
 	}
 
 	for _, tt := range tests {
@@ -394,10 +394,10 @@ func TestDistributeFailFee_VerifiersPaidFromFailFee(t *testing.T) {
 	_, _ = k.ProcessBatchSettlement(ctx, msg)
 
 	// failFee = 1M * 50/1000 = 50_000
-	// verifier share of failFee = 50_000 * 45/50 = 45_000  (verifier=45, audit=5, total=50)
-	// per verifier = 45_000 / 3 = 15_000
+	// verifier share of failFee = 50_000 * 120/150 = 40_000  (verifier=120, audit=30, total=150)
+	// per verifier = 40_000 / 3 = 13_333 (last gets 13_334)
 	totalVerifier := bk.receivedBy(v1).Add(bk.receivedBy(v2)).Add(bk.receivedBy(v3))
-	wantVerifierTotal := math.NewInt(45_000)
+	wantVerifierTotal := math.NewInt(40_000)
 	if !totalVerifier.Equal(wantVerifierTotal) {
 		t.Fatalf("verifier total from FAIL: want %s, got %s", wantVerifierTotal, totalVerifier)
 	}
