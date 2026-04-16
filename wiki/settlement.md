@@ -39,20 +39,22 @@ VRF check
 
 | Recipient | Share |
 |-----------|-------|
-| Worker | 95.0% |
-| Verifier 1 | 1.5% |
-| Verifier 2 | 1.5% |
-| Verifier 3 | 1.5% |
-| Audit fund | 0.5% |
+| Executor (Worker) | 85.0% (850/1000) |
+| Verifier 1 | ~4.0% |
+| Verifier 2 | ~4.0% |
+| Verifier 3 | ~4.0% |
+| Audit fund | 3.0% (30/1000) |
 | **Total** | **100.0%** |
+
+Verifiers share 12.0% (120/1000) equally (~4% each for 3 verifiers).
 
 ### FAIL (user pays only 5% of the agreed fee)
 
 | Recipient | Share of 5% fee | Effect |
 |-----------|-----------------|--------|
 | Worker | 0% | Jailed |
-| Verifiers | 4.5% | -- |
-| Audit fund | 0.5% | -- |
+| Verifiers | 12.0% | -- |
+| Audit fund | 3.0% | -- |
 
 ### TIMEOUT (user pays only 5% of the agreed fee)
 
@@ -74,7 +76,7 @@ VRF check
 
 ### Audit overturns FAIL to SUCCESS
 
-- Task is settled as a normal SUCCESS (Worker 95%, Verifiers 4.5%, Audit fund 0.5%).
+- Task is settled as a normal SUCCESS (Executor 85%, Verifiers 12%, Audit fund 3%).
 - Verifiers who originally returned FAIL are jailed.
 
 ---
@@ -84,7 +86,7 @@ VRF check
 A user SDK can submit `MsgFraudProof` if it detects a content mismatch between what was received and what was signed.
 
 - **Before settlement:** the task entry is skipped in the batch. No payout occurs.
-- **After settlement:** the Worker's 95% share is recovered and the user is refunded.
+- **After settlement:** the Worker's 85% share is recovered and the user is refunded.
 - **Worker penalty:** immediate slash of 5% of stake + permanent tombstone. This is the only slash scenario besides a 3rd jail offense.
 
 ---

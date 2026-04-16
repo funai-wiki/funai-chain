@@ -14,7 +14,7 @@
 | Page | Summary | Sources |
 |------|---------|---------|
 | [Three-Layer Architecture](architecture.md) | L1 (Cosmos chain), L2 (libp2p P2P), L3 (SDK). Five first principles. Lightning scheme. | V52_Final |
-| [Settlement State Machine](settlement.md) | VERIFIED -> CLEARED/PENDING_AUDIT/PENDING_REAUDIT. Fee distribution (95/4.5/0.5). Batch processing. | V52_Final |
+| [Settlement State Machine](settlement.md) | VERIFIED -> CLEARED/PENDING_AUDIT/PENDING_REAUDIT. Fee distribution (85/12/3). Batch processing. | V52_Final |
 | [VRF Unified Formula](vrf.md) | score = hash(seed \|\| pubkey) / stake^α. Six use cases with α values 0.0-1.0. | V52_Final |
 | [Verification Protocol](verification.md) | Teacher forcing (~0.6s), logits check (4/5), deterministic sampling (ChaCha20, float32). | V52_Final |
 | [Token Economics](tokenomics.md) | $FAI, 210B supply, 4000 FAI/block, halving ~4.16yr, 99%/1% reward split. | V52_Final |
@@ -27,7 +27,7 @@
 
 | Page | Summary | Sources |
 |------|---------|---------|
-| [EVM Integration](evm-integration.md) | Cosmos EVM, Chain ID 333, JSON-RPC :8545, precompile bridge at 0x...0900. | CosmosEVM_KT |
+| [EVM Integration](evm-integration.md) | Cosmos EVM, Chain ID 123123123, JSON-RPC :8545, precompile bridge at 0x...0900. | CosmosEVM_KT |
 | [Client SDK](sdk.md) | OpenAI-compatible API, function calling, JSON mode, streaming, auto-pricing, privacy. | SDK_OpenClaw_Spec, SDK_Developer_Guide |
 | [Per-Token Billing (S9)](per-token-billing.md) | Shadow balance, Worker truncation, two-party cross-verification, anti-cheat (C1/C2/C3). | S9_Billing |
 | [On-Chain Message Types](msg-types.md) | All 11 Msg types: Deposit, Withdraw, RegisterWorker, BatchSettlement, FraudProof, etc. | V52_Final |
@@ -38,9 +38,9 @@
 | Page | Summary | Sources |
 |------|---------|---------|
 | [Security Audit](security-audit.md) | A1-A7 findings (A1 FIXED, A4 VERIFIED, A7 acknowledged). Dispatch audit D1-D4. | Security_Audit_KT, Dispatch_Audit |
-| [Code vs Spec Compliance](code-review.md) | 3 open P0 blockers (sampling pipeline, sig no-op), 5 P1, 12 P2, 4 P3. | funai-chain-review |
+| [Code vs Spec Compliance](code-review.md) | All P0 fixed (P0-6 partial), 3 open P1, 12 P2, 4 P3. | funai-chain-review |
 | [Test Plan Status](test-status.md) | 227 scenarios across 6 layers. 73/85 implemented. P0 blockers: E14, S4. | Test plans (4 docs) |
-| [Testnet Configuration](testnet.md) | Chain ID funai_333-1, seed 34.87.21.99, TGI 34.143.145.204:8080. 11-step join guide. | Join_Testnet, ops-runbook |
+| [Testnet Configuration](testnet.md) | Chain ID funai-testnet-1, seed 34.87.21.99, TGI 34.143.145.204:8080. 11-step join guide. | Join_Testnet, ops-runbook |
 | [Operations Runbook](operations.md) | Env vars, monitoring metrics, troubleshooting, deployment, emergency procedures. | ops-runbook, Phase4_Guide |
 | [Worker Operator Guide](../docs/guides/Worker_Operator_Guide.md) | Setup, registration, staking, GPU config, model management, reputation, penalties. | Worker_Operator_Guide |
 | [Validator Guide](../docs/guides/Validator_Guide.md) | VRF committee selection, block rewards, staking, governance. | Validator_Guide |

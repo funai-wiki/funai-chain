@@ -412,7 +412,7 @@ func (k Keeper) IncrementVerifierEpochCount(ctx sdk.Context, verifierAddr string
 	key := types.VerifierEpochCountKey(addr)
 	count := uint64(0)
 	bz := store.Get(key)
-	if bz != nil && len(bz) == 8 {
+	if len(bz) == 8 {
 		count = binary.BigEndian.Uint64(bz)
 	}
 	count++
@@ -430,7 +430,7 @@ func (k Keeper) IncrementAuditorEpochCount(ctx sdk.Context, auditorAddr string) 
 	key := types.AuditorEpochCountKey(addr)
 	count := uint64(0)
 	bz := store.Get(key)
-	if bz != nil && len(bz) == 8 {
+	if len(bz) == 8 {
 		count = binary.BigEndian.Uint64(bz)
 	}
 	count++
@@ -578,7 +578,7 @@ func (k Keeper) incrementBlockSignerCount(ctx sdk.Context, validatorAddr string)
 	key := types.BlockSignerCountKey(validatorAddr)
 	count := uint64(0)
 	bz := store.Get(key)
-	if bz != nil && len(bz) == 8 {
+	if len(bz) == 8 {
 		count = binary.BigEndian.Uint64(bz)
 	}
 	count++

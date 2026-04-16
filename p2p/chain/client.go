@@ -430,11 +430,6 @@ func (c *Client) GetActiveWorkers(ctx context.Context) ([]WorkerListEntry, error
 	return workers, nil
 }
 
-type kvPair struct {
-	Key   []byte `json:"key"`
-	Value []byte `json:"value"`
-}
-
 // BroadcastTx broadcasts a signed transaction to the chain.
 func (c *Client) BroadcastTx(ctx context.Context, txBytes []byte) (string, error) {
 	url := fmt.Sprintf("%s/broadcast_tx_sync?tx=0x%x", c.rpcURL, txBytes)

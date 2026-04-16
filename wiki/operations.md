@@ -71,7 +71,7 @@ Key settings in `~/.funaid/config/app.toml`:
 | `minimum-gas-prices` | `0ufai` | Minimum accepted gas price |
 | `[api] address` | `tcp://localhost:1317` | REST API endpoint |
 | `[grpc] address` | `0.0.0.0:9090` | gRPC endpoint |
-| `[evm] chain-id` | `333` | EVM chain ID (must match genesis) |
+| `[evm] chain-id` | `123123123` | EVM chain ID (must match genesis) |
 
 See [EVM Integration](evm-integration.md) for EVM-specific configuration.
 
@@ -233,7 +233,7 @@ This produces a full state export that can be used to restart the chain from a k
 ### Recovery from state export
 
 ```bash
-funaid init new-node --chain-id funai_333-2
+funaid init new-node --chain-id funai_123123123-3
 cp state_backup.json ~/.funaid/config/genesis.json
 funaid start
 ```

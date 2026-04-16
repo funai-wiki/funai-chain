@@ -10,8 +10,8 @@ Sources: [Join_Testnet.md](../docs/Join_Testnet.md), [ops-runbook.md](../docs/op
 
 | Parameter | Value |
 |-----------|-------|
-| Chain ID | `funai_333-1` |
-| EVM Chain ID | `333` |
+| Chain ID | `funai-testnet-1` |
+| EVM Chain ID | `123123123` |
 | Block time | 5 seconds |
 | Token denom | `ufai` (1 FAI = 1,000,000 ufai) |
 | Min gas price | `0ufai` |
@@ -55,7 +55,7 @@ make build-all    # produces ./build/funaid and ./build/funai-node
 ### Step 2 -- Initialize the node
 
 ```bash
-./build/funaid init my-node --chain-id funai_333-1
+./build/funaid init my-node --chain-id funai-testnet-1
 ```
 
 ### Step 3 -- Get the testnet genesis
@@ -177,7 +177,7 @@ This script starts the chain, registers workers, starts P2P nodes, and optionall
 |---------|-------------|-----|
 | `catching_up` stays `true` forever | Seed node unreachable or genesis mismatch | Verify firewall allows outbound 46656; confirm `genesis.json` matches testnet |
 | `connection refused` on RPC | Chain node not running or RPC bound to wrong interface | Check `funaid` process is running; verify `laddr` in `config.toml` |
-| `worker not found` after registration | Transaction not yet committed or wrong chain queried | Wait for next block; confirm `--chain-id funai_333-1` |
+| `worker not found` after registration | Transaction not yet committed or wrong chain queried | Wait for next block; confirm `--chain-id funai-testnet-1` |
 | No dispatch logs on P2P node | Boot peer unreachable or model not activated | Verify port 5001 is open; check model activation status via [model registry](model-registry.md) query |
 | Inference timeout | TGI backend down or network latency | Confirm TGI endpoint is reachable: `curl http://34.143.145.204:8080/health` |
 | `insufficient balance` on settlement | Deposit too low for accumulated inference fees | Top up with `MsgDeposit`; see [overspend protection](overspend-protection.md) for the three-layer balance check |

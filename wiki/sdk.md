@@ -4,6 +4,8 @@ The FunAI Client SDK is a drop-in replacement for OpenAI and Claude APIs. It han
 
 Sources: [SDK & OpenClaw Integration Spec](../docs/integration/FunAI_SDK_OpenClaw_Integration_Spec.md), [SDK README](../sdk/README.md), [SDK Developer Guide](../docs/guides/SDK_Developer_Guide.md)
 
+> Note: The SDK spec moved from `docs/FunAI_SDK_OpenClaw_Integration_Spec.md` to `docs/integration/` during the docs restructure.
+
 ---
 
 ## Initialization Modes

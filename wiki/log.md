@@ -1,5 +1,22 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-16] update | Sync wiki pages with merged fixes and current code
+
+**Operator:** Claude (LLM)
+
+**Wiki pages updated (7):**
+- `wiki/code-review.md` — Moved P0-1, P0-2, P0-3 to Previously Fixed (all merged). Moved P1-3, P1-4 to Previously Fixed. 3 open P1 remain (P1-1, P1-2, P1-5). Updated Priority Summary.
+- `wiki/testnet.md` — Chain ID updated from `funai_333-1` to `funai-testnet-1`, EVM Chain ID from `333` to `123123123`.
+- `wiki/settlement.md` — Fee distribution updated to match code: Executor 85% (850/1000), Verifiers 12% (120/1000), Audit fund 3% (30/1000).
+- `wiki/sdk.md` — Added note about SDK spec path relocation to `docs/integration/`.
+- `wiki/operations.md` — EVM chain ID updated to `123123123`, recovery chain-id updated to `funai_123123123-3`.
+- `wiki/index.md` — Updated summaries for code-review, settlement, EVM, and testnet entries.
+- `wiki/log.md` — This entry.
+
+**Notes:** Fee ratios verified against `x/settlement/types/params.go` defaults (850/120/30 per-mille). P0 fixes confirmed in commits `335618d` (P0-1+P0-2 TGI v3 top_tokens parsing) and `3840189` (P1-3 AssignTask sig + Worker concurrency).
+
+---
+
 ## [2026-04-16] ingest | Add FunAI Whitepaper
 
 **Operator:** Claude (LLM)
