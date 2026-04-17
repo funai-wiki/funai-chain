@@ -40,6 +40,7 @@
 | [Security Second verification](security-second verification.md) | A1-A7 findings (A1 FIXED, A4 VERIFIED, A7 acknowledged). Dispatch second verification D1-D4. | Security_Second verification_KT, Dispatch_Second verification |
 | [Code vs Spec Compliance](code-review.md) | All P0+P1 fixed (P0-6 partial). Remaining: 12 P2, 4 P3. | funai-chain-review |
 | [Test Plan Status](test-status.md) | 227 scenarios across 6 layers. 73/85 implemented. P0 blockers: E14, S4. Now also covers TPS + logits consistency plan (C0–C4, 5-layer TPS). | Test plans (5 docs) |
+| [Pre-Launch Final Audit](../docs/protocol/FunAI_PreLaunch_Final_Audit_KT.md) | 12 protocol-level decisions (jms/KT, 2026-04-14) required before mainnet: rank 10→21, top-p, Reputation, AssignTask fields, latency-weighted VRF, long-tail model gates, 48h retention, 85/12/3 distribution, weights-hash in model_id, balance-check-first in Leader. Effort: 2.5–3 weeks. | PreLaunch_Audit_KT |
 | [Testnet Configuration](testnet.md) | Chain ID funai-testnet-1, seed 34.87.21.99, TGI 34.143.145.204:8080. 11-step join guide. | Join_Testnet, ops-runbook |
 | [Operations Runbook](operations.md) | Env vars, monitoring metrics, troubleshooting, deployment, emergency procedures. | ops-runbook, Phase4_Guide |
 | [Worker Operator Guide](../docs/guides/Worker_Operator_Guide.md) | Setup, registration, staking, GPU config, model management, reputation, penalties. | Worker_Operator_Guide |
