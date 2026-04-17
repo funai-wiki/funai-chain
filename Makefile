@@ -5,7 +5,7 @@ GO := go
 GOFLAGS := -mod=readonly
 LDFLAGS := -s -w
 
-.PHONY: all build build-p2p build-e2e-client build-all install clean test test-e2e test-e2e-real bench lint proto \
+.PHONY: all build build-p2p build-e2e-client build-all install clean test test-e2e test-e2e-real test-p2p-e2e-mock bench lint proto \
         init start testnet-init testnet-clean docker-build
 
 all: build-all
@@ -62,6 +62,9 @@ test-e2e: build
 
 test-e2e-real: build-all
 	bash scripts/e2e-real-inference.sh
+
+test-p2p-e2e-mock: build-all
+	bash scripts/e2e-mock-inference.sh
 
 docker-build:
 	docker build --target funaid -t funai-chain:latest .
