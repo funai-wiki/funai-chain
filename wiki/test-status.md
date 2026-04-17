@@ -72,6 +72,40 @@ Source: [T4_E2E_Test_Plan.md](../docs/T4_E2E_Test_Plan.md)
 | B4 | OpenClaw provider integration pending |
 | B5 | SDK Python bindings not available |
 
+## TPS Stress + Logits Consistency Test Plan
+
+Source: [FunAI_TPS_Logits_Test_Plan_KT.md](../docs/testing/FunAI_TPS_Logits_Test_Plan_KT.md). Baseline commit: `ce87883`.
+
+Two parallel test tracks on pinned TGI `3.3.6` + Qwen2.5-8B-Instruct FP16.
+
+### Logits consistency (C0–C4)
+
+| ID | Scope | Scale | Pass criterion |
+|----|-------|-------|----------------|
+| **C0** | Concurrent batching vs single-request logits (⚠ blocking) | 1 GPU, 10 min | `< 1e-6` rel error |
+| C1 | Same-hardware bit-exactness | 2 × 4090, 2 hr | 100% identical |
+| C2 | Cross-hardware tolerance (4090 vs A100) | 4090 + A100, 2 hr | Curve vs prompt length drives `logits_match_threshold` |
+| C3 | FP16 vs INT4 must diverge (register as distinct `model_id`) | 1 × 4090 | `> 0.01` rel error (inverse check) |
+| C4 | TGI v2 vs v3 mixability | 1 × 4090 | Identical → mixable; diverge → lock version |
+
+If **C0 FAILs**, verifier may need to bypass continuous batching; see doc §1.3 for mitigations A/B/C.
+
+### TPS stress (5 layers)
+
+Total network TPS = `min(` layer 1 throughput × GPU count, layer 2 pipeline latency⁻¹, layer 3 Leader ceiling, layer 4 P2P gossipsub ceiling, layer 5 on-chain BatchSettlement ceiling `)`.
+
+| Layer | Scope | Budget |
+|-------|-------|--------|
+| 1 | Single-GPU tok/s at 1/2/4/8-way concurrency | Local 5090 |
+| 2 | End-to-end pipeline t0–t8 timestamps, 4 nodes (Leader + Worker + 2 Verifiers) | 4 × 4090, 2 hr |
+| 3 | Leader dispatch knee point (1 → 20 req/s) | 10–20 × 4090, 2 hr |
+| 4 | P2P gossipsub propagation at 100 nodes with tc netem 100 ms | 100 × CPU, 3 hr |
+| 5 | BatchSettlement gas + time at 1K/5K/10K/40K entries | Local `go test -bench` |
+
+### Execution
+
+4-day timeline, total budget ~$35 on Vast.ai (see doc §3). For teams executing on Alibaba Cloud instead, see `scripts/tgi-bootstrap-aliyun.sh` which provisions a pinned-TGI endpoint on A10 / L20 / A100 class ECS instances in one command.
+
 ## Related Pages
 
 - [Security Second verification Findings](security-second verification.md)
