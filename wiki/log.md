@@ -1,5 +1,22 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-17] ingest | FunAI_PreLaunch_Final_Audit_KT.md (English)
+
+**Operator:** Claude (LLM)
+
+**New source doc ingested:**
+- `docs/protocol/FunAI_PreLaunch_Final_Audit_KT.md` (532 lines) — Pre-launch final audit by jms (KT), dated 2026-04-14, cataloguing 12 protocol-level decisions that must land before mainnet. Covers rank window 10→21, top-p sampling, Reputation mechanism, AssignTask field extension, latency-weighted VRF, long-tail model activation gates, 48h data retention, 85/12/3 distribution, ComputeModelId + weights hash, Leader balance-check-first, Chain ID finalization. Total effort estimate: 2.5–3 weeks. English translation of the earlier Chinese document; same technical content.
+
+**Wiki pages updated:**
+- `wiki/index.md` — Added entry in Operations & Status section.
+- `wiki/log.md` — This entry.
+
+**Status of the 12 decisions (as of this ingest):**
+- **Done:** #1 rank 10→21 (verifier.go:185, proposer.go:174), #2 top-p (InferRequest.TopP), #3 Reputation (ReputationScore + ReputationOnAccept/Miss/DecayAll wired), #4 AssignTask fields (MaxLatencyMs/StreamMode/TopP), #5 latency-weighted VRF (PR #3 integrated LatencyFactor into RankWorkers for all alphas), #6 long-tail gates (CanServe uses ServiceStakeRatio), #7 48h retention (DefaultRetentionDuration), #8 85/12/3 distribution (PR #2), #9 weights-hash in ComputeModelId, #10 Leader balance-check-first (checkBalanceWithPending in HandleRequest).
+- **Documentation drift — conflicts with code:** #11 (doc says `funai_333-1`, code has `funai_123123123-3`); #8 weight split inside verifier pool (doc says 80/20, code ships 85/15 via DefaultFeeWeight=0.85); decision H in the appendix still references "5% max_fee" penalty (code is now 15% after PR #2).
+
+---
+
 ## [2026-04-17] ingest | FunAI_TPS_Logits_Test_Plan_KT.md + Alibaba Cloud bootstrap script
 
 **Operator:** Claude (LLM)
