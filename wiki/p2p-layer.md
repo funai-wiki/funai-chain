@@ -54,7 +54,7 @@ Every node can serve up to **7 simultaneous roles**:
 
 1. **Worker** -- executes inference tasks
 2. **Verifier** -- performs teacher-forcing [verification](verification.md)
-3. **Auditor** -- conducts post-settlement audits
+3. **SecondVerifier** -- conducts post-settlement second verifications
 4. **Leader** -- dispatches tasks within a model sub-topic
 5. **Proposer** -- constructs `MsgBatchSettlement` for on-chain [settlement](settlement.md)
 6. **Validator** -- participates in CometBFT consensus
@@ -62,7 +62,7 @@ Every node can serve up to **7 simultaneous roles**:
 
 ## Data Retention
 
-All participating nodes retain task data (prompts, outputs, receipts, signatures) for **7 days**. After 7 days, data is pruned automatically. This window covers the maximum audit and dispute resolution period.
+All participating nodes retain task data (prompts, outputs, receipts, signatures) for **7 days**. After 7 days, data is pruned automatically. This window covers the maximum second verification and dispute resolution period.
 
 ## Overspend Checks
 

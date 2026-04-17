@@ -538,7 +538,7 @@ test_U3() {
   log_info "Querying settlement params..."
   local settle_params
   settle_params=$(query_params 0 2>&1)
-  assert_contains "$settle_params" "executor_fee_ratio\|ExecutorFeeRatio\|audit_base_rate\|AuditBaseRate" \
+  assert_contains "$settle_params" "executor_fee_ratio\|ExecutorFeeRatio\|second_verification_base_rate\|Second verificationBaseRate" \
     "U3.1: Settlement params contain fee ratios"
 
   # 2. Query worker params (validator0 may not be registered as worker — tolerate failure)

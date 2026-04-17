@@ -11,17 +11,17 @@ Tracking spec-vs-implementation gaps identified in the funai-chain code review. 
 | P0-2 | Worker uses TGI native sampling instead of ChaCha20 | FIXED |
 | P0-3 (review) | ChaCha20 2^64 | FIXED |
 | P0-3 | SDK key exchange signature verification is a no-op | FIXED |
-| P0-4 | Audit VRF seed | FIXED |
+| P0-4 | Second verification VRF seed | FIXED |
 | P0-5 | X25519 key | FIXED |
 | P0-6 | Key exchange sig | PARTIALLY FIXED |
-| P0-7 | `jailAuditors` | FIXED |
+| P0-7 | `jailSecondVerifiers` | FIXED |
 | P0-8 | `expire_block` | FIXED |
 | P0-9 | FraudProof receipt | FIXED |
 | P0-10 | PII Chinese patterns | FIXED |
-| P1-1 (review) | Re-audit timeout | FIXED |
+| P1-1 (review) | Re-second verification timeout | FIXED |
 | P1-1 | VRF pubkey decode used hex only; base64 keys from chain failed silently | FIXED |
-| P1-2 (review) | Audit fund FAIL | FIXED |
-| P1-2 | `LogitsHash` uses placeholder zeros — auditors cannot verify logits integrity | FIXED |
+| P1-2 (review) | Second verification fund FAIL | FIXED |
+| P1-2 | `LogitsHash` uses placeholder zeros — second verifiers cannot verify logits integrity | FIXED |
 | P1-3 (review) | Softmax order | FIXED |
 | P1-3 | `AssignTask` missing `Temperature`, `UserSeed`, `DispatchBlockHash` | FIXED |
 | P1-4 | Leader `PrivKey` never set -- `LeaderSig` always empty | FIXED |
@@ -42,7 +42,7 @@ All P0 and P1 blockers are resolved (P0-6 partially). Remaining items are P2 (mo
 
 ## Related Pages
 
-- [Security Audit Findings](security-audit.md)
+- [Security Second verification Findings](security-second verification.md)
 - [Test Plan Status](test-status.md)
 - [Verification](verification.md)
 - [VRF](vrf.md)

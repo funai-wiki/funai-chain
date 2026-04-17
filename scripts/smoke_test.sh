@@ -46,7 +46,7 @@ pass "Worker params correct"
 
 SETTLEMENT_PARAMS=$($BINARY q settlement params $NODE 2>&1)
 echo "$SETTLEMENT_PARAMS" | grep -q "executor_fee_ratio" || fail "Settlement params missing executor_fee_ratio"
-echo "$SETTLEMENT_PARAMS" | grep -q "audit_base_rate" || fail "Settlement params missing audit_base_rate"
+echo "$SETTLEMENT_PARAMS" | grep -q "second_verification_base_rate" || fail "Settlement params missing second_verification_base_rate"
 pass "Settlement params correct"
 
 # ============================================================

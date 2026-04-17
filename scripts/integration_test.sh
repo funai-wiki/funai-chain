@@ -211,27 +211,27 @@ else
   info "Scenario 3: Worker jail state: $POST_JAIL (FAIL settlement may require signed P2P receipts)"
 fi
 
-# ── Scenario 4: Audit Flip SUCCESS → FAIL ────────────────────────────────
+# ── Scenario 4: Second verification Flip SUCCESS → FAIL ────────────────────────────────
 
-scenario "Scenario 4: Audit — SUCCESS→FAIL Flip"
-info "Chain-level: submit audit result that flips a SUCCESS task to FAIL."
+scenario "Scenario 4: Second verification — SUCCESS→FAIL Flip"
+info "Chain-level: submit second verification result that flips a SUCCESS task to FAIL."
 
-TASK_ID_AUDIT="audit00000000000000000000000000000000000000000000000000000000001"
+TASK_ID_AUDIT="second verification00000000000000000000000000000000000000000000000000000000001"
 
-# Submit the audit result (3 auditors vote FAIL)
+# Submit the second verification result (3 second verifiers vote FAIL)
 # This requires a task in PENDING_AUDIT state, which the proposer creates.
-# Here we verify the MsgSubmitAuditResult message handler is available.
-AUDIT_TX=$($BINARY tx settlement submit-audit-result \
+# Here we verify the MsgSubmitSecondVerificationResult message handler is available.
+AUDIT_TX=$($BINARY tx settlement submit-second verification-result \
   --task-id "$TASK_ID_AUDIT" \
-  --auditor "$V0" \
+  --second verifier "$V0" \
   --result "FAIL" \
   --from validator0 --home "$BASE_DIR/node0" \
   $KEYRING $CHAIN $YES $NODE 2>&1 || echo "ERROR")
 
-if echo "$AUDIT_TX" | grep -qiE "code: 0|task not found|not in audit"; then
-  pass "Scenario 4: MsgSubmitAuditResult handler is functional"
+if echo "$AUDIT_TX" | grep -qiE "code: 0|task not found|not in second verification"; then
+  pass "Scenario 4: MsgSubmitSecondVerificationResult handler is functional"
 else
-  info "Scenario 4: Audit TX: $AUDIT_TX"
+  info "Scenario 4: Second verification TX: $AUDIT_TX"
 fi
 
 # ── Scenario 5: FraudProof ───────────────────────────────────────────────

@@ -29,7 +29,7 @@ After **50 consecutive successful tasks**, the `jail_count` resets to 0. This gi
 |------|---------------------|
 | Worker | 1 completed inference |
 | Verifier | 1 completed verification |
-| Auditor | 1 completed audit |
+| SecondVerifier | 1 completed second verification |
 | Leader | 1 dispatch epoch |
 | Proposer | 1 block produced |
 
@@ -41,13 +41,13 @@ There are five scenarios that trigger a jail event:
 
 | # | Trigger | Who gets jailed |
 |---|---------|-----------------|
-| 1 | Audit overturns `SUCCESS` to `FAIL` | Worker who produced incorrect output |
-| 2 | Audit overturns `FAIL` to `SUCCESS` | Original verifiers who incorrectly reported FAIL |
-| 3 | Original verification reports `FAIL` (confirmed by audit) | Worker who produced incorrect output |
-| 4 | Re-audit overturns audit `PASS` to `FAIL` | Original auditor who incorrectly passed |
-| 5 | Re-audit overturns audit `FAIL` to `PASS` | Original auditor who incorrectly failed |
+| 1 | Second verification overturns `SUCCESS` to `FAIL` | Worker who produced incorrect output |
+| 2 | Second verification overturns `FAIL` to `SUCCESS` | Original verifiers who incorrectly reported FAIL |
+| 3 | Original verification reports `FAIL` (confirmed by second verification) | Worker who produced incorrect output |
+| 4 | Re-second verification overturns second verification `PASS` to `FAIL` | Original second verifier who incorrectly passed |
+| 5 | Re-second verification overturns second verification `FAIL` to `PASS` | Original second verifier who incorrectly failed |
 
-All jail triggers flow through the [settlement state machine](../x/settlement/). Tasks selected for audit (10%) or re-audit (1%) are determined by VRF. See [tokenomics](tokenomics.md) for fee consequences of SUCCESS vs FAIL outcomes.
+All jail triggers flow through the [settlement state machine](../x/settlement/). Tasks selected for second verification (10%) or third-verification (1%) are determined by VRF. See [tokenomics](tokenomics.md) for fee consequences of SUCCESS vs FAIL outcomes.
 
 ## FraudProof
 

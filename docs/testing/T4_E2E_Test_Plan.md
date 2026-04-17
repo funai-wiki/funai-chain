@@ -248,7 +248,7 @@ funai-node-3 :4004  (Worker + Verifier)
 | E2 | Function calling | OpenClaw Skill → SDK | Model returns tool_call JSON, SDK parses correctly, OpenClaw executes tool and returns result |
 | E3 | JSON mode | OpenClaw Skill → SDK | `response_format: json_object`, returns valid JSON, max 3 retries |
 | E4 | Multi-turn conversation | OpenClaw → SDK | messages array → chat template → prompt, context maintained |
-| E5 | Audit trigger | Proposer → Auditor | Set audit_rate high (100%), audit PASS → CLEARED |
+| E5 | Second verification trigger | Proposer → SecondVerifier | Set second_verification_rate high (100%), second verification PASS → CLEARED |
 | E6 | Worker timeout retry | SDK → Leader | Worker doesn't respond for 5s, SDK auto-resends, second Worker completes |
 | E7 | Insufficient balance | User | Deposit 1 ufai, inference fee=100000 ufai, returns insufficient_balance error |
 | E8 | Concurrent inference | 3 OpenClaw Skills concurrent | 3 requests arrive simultaneously, 3 different Workers handle them respectively, all succeed |
@@ -274,7 +274,7 @@ echo "=== E4: Multi-turn ==="
 python3 tests/openclaw/test_multiturn.py
 
 echo "=== E5-E8: Advanced scenarios ==="
-go test ./tests/e2e/ -run "TestE2E_T4_Audit|TestE2E_T4_Timeout|TestE2E_T4_InsufficientBalance|TestE2E_T4_Concurrent" -v
+go test ./tests/e2e/ -run "TestE2E_T4_Second verification|TestE2E_T4_Timeout|TestE2E_T4_InsufficientBalance|TestE2E_T4_Concurrent" -v
 ```
 
 ---
@@ -439,7 +439,7 @@ Week 3 (second half): Fix discovered bugs + regression testing
 
 ### Should Pass (high priority)
 
-- [ ] Phase 2 E3 (JSON mode) + E5 (audit) + E7 (insufficient balance) pass
+- [ ] Phase 2 E3 (JSON mode) + E5 (second verification) + E7 (insufficient balance) pass
 - [ ] Phase 3 OC6 (error recovery) + OC7 (balance warning) pass
 - [ ] Phase 4 sustained run for 1 hour without anomalies
 

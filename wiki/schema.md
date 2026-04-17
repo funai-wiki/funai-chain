@@ -6,7 +6,7 @@ This wiki is an LLM-maintained knowledge base for the FunAI Chain project. It si
 
 ## Three Layers
 
-1. **Raw sources** (`docs/`) — Immutable design specs, audit reports, test plans. The LLM reads but never modifies these.
+1. **Raw sources** (`docs/`) — Immutable design specs, second verification reports, test plans. The LLM reads but never modifies these.
 2. **The wiki** (`wiki/`) — LLM-generated markdown pages. Summaries, concept pages, status trackers, cross-references. The LLM owns this layer entirely.
 3. **The schema** (this file) — Conventions, structure, and workflows.
 
@@ -37,7 +37,7 @@ wiki/
   parameters.md        — All on-chain parameters with defaults
 
   # Operations and status
-  security-audit.md    — Audit findings and fix status
+  security-second verification.md    — Second verification findings and fix status
   code-review.md       — Spec vs implementation gaps
   test-status.md       — Test plan coverage and results
   testnet.md           — Testnet configuration and join guide
@@ -50,7 +50,7 @@ wiki/
 - **Cross-references:** Use `[link text](other-page.md)` for wiki-internal links. Use `[link text](../docs/file.md)` for raw source references.
 - **Tables over prose:** Prefer tables for parameters, comparisons, and enumerations.
 - **Numbers are exact:** Never round or approximate protocol parameters. Copy exact values from source.
-- **Status indicators:** Use `FIXED`, `OPEN`, `DEFERRED`, `NOT A BUG` for audit/review items.
+- **Status indicators:** Use `FIXED`, `OPEN`, `DEFERRED`, `NOT A BUG` for second verification/review items.
 - **No opinions:** Wiki pages state facts from sources. Flag contradictions explicitly rather than resolving them silently.
 
 ## Workflows
@@ -90,10 +90,10 @@ Periodic health check:
 | `docs/protocol/S9_PerToken_Billing_Revised_KT_2.md` | Spec | 948 | Revised per-token billing |
 | `docs/integration/FunAI_SDK_OpenClaw_Integration_Spec.md` | Spec | 932 | SDK design, OpenAI compatibility |
 | `docs/integration/FunAI_CosmosEVM_Integration_KT.md` | Spec | 408 | EVM integration guide |
-| `docs/internal/FunAI_Security_Audit_Findings_KT.md` | Audit | 317 | A1-A7 security findings (internal) |
+| `docs/internal/FunAI_Security_Second verification_Findings_KT.md` | Second verification | 317 | A1-A7 security findings (internal) |
 | `docs/internal/funai-chain-review.md` | Review | 262 | Spec vs code compliance (internal) |
-| `docs/internal/Dispatch_Audit_Fix_Checklist.md` | Audit | 471 | Dispatch code audit (internal) |
-| `docs/internal/FunAI_Dispatch_Audit_Fixes_KT_1.md` | Audit | 471 | Dispatch fix checklist (internal) |
+| `docs/internal/Dispatch_Second verification_Fix_Checklist.md` | Second verification | 471 | Dispatch code second verification (internal) |
+| `docs/internal/FunAI_Dispatch_Second verification_Fixes_KT_1.md` | Second verification | 471 | Dispatch fix checklist (internal) |
 | `docs/testing/FunAI_Integration_Test_Plan_V3.md` | Test | 503 | 142 integration test cases |
 | `docs/testing/FunAI_Test_Execution_Plan_KT.md` | Test | 597 | 227 test scenarios across 6 layers |
 | `docs/testing/T4_E2E_Test_Plan.md` | Test | 475 | T4 GPU E2E plan |

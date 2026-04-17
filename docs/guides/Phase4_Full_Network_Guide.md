@@ -25,7 +25,7 @@ Node 2 (Worker + Verifier)
   ├── funai-p2p (P2P node, port 4003)
   └── vLLM (inference engine, port 8002, model: Qwen-0.5B)
 
-Node 3 (Worker + Verifier + Auditor)
+Node 3 (Worker + Verifier + SecondVerifier)
   ├── funaid (chain node, port 26660)
   ├── funai-p2p (P2P node, port 4004)
   └── vLLM (inference engine, port 8003, model: Qwen-0.5B)
@@ -87,13 +87,13 @@ Verify:
   - After unjail: Worker.Jailed = false
 ```
 
-### Scenario 4: Audit Flip SUCCESS→FAIL
+### Scenario 4: Second verification Flip SUCCESS→FAIL
 
 ```
 1. Normal inference, 3 verifiers all PASS (but verifiers were lazy)
-2. VRF selects task for audit (10% probability)
+2. VRF selects task for second verification (10% probability)
 3. Task goes to PENDING_AUDIT (not settled yet)
-4. 3 auditors independently verify → 2/3 FAIL → audit FAIL
+4. 3 second verifiers independently verify → 2/3 FAIL → second verification FAIL
 5. Flip: SUCCESS → FAIL
 6. Worker jailed + original PASS verifiers jailed
 7. Task NOT settled (money not distributed)
@@ -141,7 +141,7 @@ Verify:
 | Settlement TPS | > 0 | Count MsgBatchSettlement per block |
 | Inference latency | < 10s (500 tokens) | SDK timing |
 | Verification time | < 0.6s | P2P logs |
-| Audit rate | ~10% | `funaid q settlement params` |
+| Second-verification rate | ~10% | `funaid q settlement params` |
 | Jail events | 0 (normal) | Block explorer events |
 | Committee rotation | every 120 blocks | VRF events |
 
@@ -155,5 +155,5 @@ Verify:
 | 7-8 | Proposer batch construction + chain submission |
 | 9-10 | SDK client + streaming + retry |
 | 11-12 | 4-node testnet with real vLLM inference |
-| 13-14 | Audit/reaudit flow + FraudProof |
+| 13-14 | Second verification/third_verification flow + FraudProof |
 | 15-16 | Stress testing + bug fixing |

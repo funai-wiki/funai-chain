@@ -40,16 +40,16 @@ The chain is responsible for everything that requires global consensus and perma
 - **Penalties** -- [jail/unjail/tombstone](settlement.md) for misbehaving Workers and Verifiers. `MsgFraudProof` triggers immediate slash 5% + tombstone.
 - **Stake and registration** -- `MsgRegisterWorker` with pubkey, stake, endpoint, GPU info, and supported models.
 - **Model registry** -- `MsgModelProposal` defines `model_id` and epsilon tolerance. Activation requires installed_stake >= 2/3 AND workers >= 4 AND operators >= 4.
-- **Block rewards** -- 4,000 FAI per block (5-second block time), halving every ~4.16 years. Split: 99% by inference contribution, 1% by verification/audit count (when inference exists); 100% to consensus committee otherwise.
+- **Block rewards** -- 4,000 FAI per block (5-second block time), halving every ~4.16 years. Split: 99% by inference contribution, 1% by verification/second verification count (when inference exists); 100% to consensus committee otherwise.
 
 ### On-Chain Modules
 
 | Module | Purpose |
 |--------|---------|
-| `x/settlement/` | User balances, `BatchSettlement`, per-task audit, `FraudProof` |
+| `x/settlement/` | User balances, `BatchSettlement`, per-task second verification, `FraudProof` |
 | `x/worker/` | Worker registration, stake, jail/unjail/tombstone, stats |
 | `x/modelreg/` | Model proposals, activation thresholds, suggested pricing |
-| `x/reward/` | Block reward distribution (99% inference / 1% verify-audit) |
+| `x/reward/` | Block reward distribution (99% inference / 1% verify-second verification) |
 | `x/vrf/` | [Unified VRF formula](vrf.md) for all ranking |
 
 ---
@@ -101,5 +101,5 @@ The SDK is a pure client-side library that sits between the user application and
 ## Related Pages
 
 - [Settlement State Machine](settlement.md) -- how tasks move from VERIFIED to payout
-- [VRF Unified Formula](vrf.md) -- the single formula behind dispatch, verification, audit, and leader election
+- [VRF Unified Formula](vrf.md) -- the single formula behind dispatch, verification, second verification, and leader election
 - [Schema Reference](schema.md) -- protobuf message definitions

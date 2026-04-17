@@ -1,6 +1,6 @@
 # Settlement State Machine
 
-FunAI Chain uses a multi-stage settlement pipeline that moves tasks from verification through optional audit to final payout. Only CLEARED tasks are ever included in a `MsgBatchSettlement` -- tasks in PENDING_AUDIT or PENDING_REAUDIT are never settled until they reach a terminal state.
+FunAI Chain uses a multi-stage settlement pipeline that moves tasks from verification through optional second verification to final payout. Only CLEARED tasks are ever included in a `MsgBatchSettlement` -- tasks in PENDING_AUDIT or PENDING_REAUDIT are never settled until they reach a terminal state.
 
 Source: [FunAI V52 Final Design Spec](../docs/FunAI_V52_Final.md)
 
@@ -18,18 +18,18 @@ VRF check
   └── 10% ──► PENDING_AUDIT
                   │
                   ▼
-              Audit result
-                  ├── 99% ──► CLEARED or FAILED (audit result applies)
+              Second verification result
+                  ├── 99% ──► CLEARED or FAILED (second verification result applies)
                   │
                   └──  1% ──► PENDING_REAUDIT
                                   │
                                   ▼
-                              Re-audit result ──► CLEARED or FAILED
+                              Re-second verification result ──► CLEARED or FAILED
 ```
 
 - **90% of tasks** are CLEARED immediately after verification and settle in the next batch (~15 seconds).
-- **10% of tasks** enter PENDING_AUDIT for a full audit cycle.
-- **1% of audited tasks** (0.1% of all tasks) undergo a second re-audit.
+- **10% of tasks** enter PENDING_AUDIT for a full second verification cycle.
+- **1% of second verificationed tasks** (0.1% of all tasks) undergo a second third-verification.
 
 ---
 
@@ -43,7 +43,7 @@ VRF check
 | Verifier 1 | ~4.0% |
 | Verifier 2 | ~4.0% |
 | Verifier 3 | ~4.0% |
-| Audit fund | 3.0% (30/1000) |
+| Second verification fund | 3.0% (30/1000) |
 | **Total** | **100.0%** |
 
 Verifiers share 12.0% (120/1000) equally (~4% each for 3 verifiers).
@@ -54,7 +54,7 @@ Verifiers share 12.0% (120/1000) equally (~4% each for 3 verifiers).
 |-----------|-----------------|--------|
 | Worker | 0% | Jailed |
 | Verifiers | 12.0% | -- |
-| Audit fund | 3.0% | -- |
+| Second verification fund | 3.0% | -- |
 
 ### TIMEOUT (user pays only 5% of the agreed fee)
 
@@ -62,21 +62,21 @@ Verifiers share 12.0% (120/1000) equally (~4% each for 3 verifiers).
 |-----------|-----------------|--------|
 | Worker | 0% | Jailed |
 | Verifiers | 0% | -- |
-| Audit fund | 5.0% | Receives entire 5% |
+| Second verification fund | 5.0% | Receives entire 5% |
 
 ---
 
-## Audit Overturns
+## Second verification Overturns
 
-### Audit overturns SUCCESS to FAIL
+### Second verification overturns SUCCESS to FAIL
 
 - No settlement occurs for the task.
 - Worker is jailed.
 - Verifiers who originally returned PASS are jailed.
 
-### Audit overturns FAIL to SUCCESS
+### Second verification overturns FAIL to SUCCESS
 
-- Task is settled as a normal SUCCESS (Executor 85%, Verifiers 12%, Audit fund 3%).
+- Task is settled as a normal SUCCESS (Executor 85%, Verifiers 12%, Second verification fund 3%).
 - Verifiers who originally returned FAIL are jailed.
 
 ---
@@ -106,32 +106,32 @@ Jailing follows a Cosmos-style progressive penalty system shared across all role
 
 ---
 
-## Audit Rates
+## Second-Verification Rates
 
-Audit and re-audit rates are **dynamic** -- they are never hardcoded to a fixed value.
+Second verification and third-verification rates are **dynamic** -- they are never hardcoded to a fixed value.
 
-### Audit rate
+### Second-verification rate
 
 - **Base rate:** 10%
 - **Range:** 5% -- 30%
-- **Formula:** `rate = base * (1 + 10 * recent_fail_rate + 50 * recent_audit_fail_rate)`
-- A Worker with a high recent failure rate or audit failure rate will be audited much more frequently.
+- **Formula:** `rate = base * (1 + 10 * recent_fail_rate + 50 * recent_second verification_fail_rate)`
+- A Worker with a high recent failure rate or second verification failure rate will be second verificationed much more frequently.
 
-### Re-audit rate
+### Re-second verification rate
 
 - **Base rate:** 1%
 - **Range:** 0.5% -- 5%
 
 ---
 
-## Audit Timeouts
+## Second-Verification Timeouts
 
 | Stage | Timeout | On timeout |
 |-------|---------|------------|
-| Initial audit | 12 hours | Original verification result takes effect |
-| Re-audit | 24 hours | Original audit result takes effect |
+| Initial second verification | 12 hours | Original verification result takes effect |
+| Re-second verification | 24 hours | Original second verification result takes effect |
 
-If an audit or re-audit times out, the system falls back to the previous stage's result rather than leaving the task in limbo.
+If an second verification or third-verification times out, the system falls back to the previous stage's result rather than leaving the task in limbo.
 
 ---
 
@@ -158,5 +158,5 @@ Three layers prevent users from spending more than their deposited balance:
 ## Related Pages
 
 - [Three-Layer Architecture](architecture.md) -- where settlement fits in the L1 chain layer
-- [VRF Unified Formula](vrf.md) -- how VRF determines audit selection and dispatch ranking
-- [Schema Reference](schema.md) -- protobuf message definitions for `MsgBatchSettlement`, `MsgFraudProof`, `MsgAuditResult`
+- [VRF Unified Formula](vrf.md) -- how VRF determines second verification selection and dispatch ranking
+- [Schema Reference](schema.md) -- protobuf message definitions for `MsgBatchSettlement`, `MsgFraudProof`, `MsgSecondVerificationResult`

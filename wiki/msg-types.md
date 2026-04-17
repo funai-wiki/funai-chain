@@ -16,7 +16,7 @@ Source: [FunAI V52 Final Design Spec](../docs/FunAI_V52_Final.md)
 | `MsgModelProposal` | Anyone | `model_id` (bytes32), `epsilon` (float32), `weight_hash` (bytes32), `quant_config_hash` (bytes32), `runtime_image_hash` (bytes32) | Propose a new model_id with epsilon tolerance | `model_id = SHA256(weight_hash \|\| quant_config_hash \|\| runtime_image_hash)`. Proposer must test 100 prompts x 2+ GPU types x 3 runs to calibrate epsilon. See [Model Registry](model-registry.md) |
 | `MsgDeclareInstalled` | Worker | `worker_pubkey` (bytes32), `model_id` (bytes32) | Declare a model installed on the Worker | Counts toward [activation thresholds](model-registry.md): installed_stake >= 2/3 AND workers >= 4 AND operators >= 4 |
 | `MsgBatchSettlement` | Proposer | `batch_id` (uint64), `proposer` (bytes32), `merkle_root` (bytes32), `entries` ([SettlementEntry; N]), `proposer_sig` (bytes64) | Batch-settle CLEARED tasks on-chain | Only CLEARED tasks are included -- never PENDING_AUDIT or PENDING_REAUDIT. See [Settlement](settlement.md) for the full state machine |
-| `MsgAuditResult` | Proposer | `task_id` (bytes32), `audit_type` (uint8), `result` (uint8), `auditor_sigs` ([]bytes64) | Submit audit or re-audit results | Proposer packages results received over P2P. Outcome moves the task to CLEARED or FAILED |
+| `MsgSecondVerificationResult` | Proposer | `task_id` (bytes32), `second verification_type` (uint8), `result` (uint8), `second verifier_sigs` ([]bytes64) | Submit second verification or third-verification results | Proposer packages results received over P2P. Outcome moves the task to CLEARED or FAILED |
 | `MsgFraudProof` | User SDK | `task_id` (bytes32), `user_pubkey` (bytes32), `evidence` (bytes) | Report content mismatch -- slash Worker 5% + tombstone | User receives full refund. See [Jail & Slashing](jail-and-slashing.md) for timing scenarios |
 | `MsgUnjail` | Any jailed node | `address` (address) | Remove jail status after cooldown expires | 1st jail: 120 blocks (10 min), 2nd jail: 720 blocks (1 hour), 3rd: permanent tombstone. See [Jail & Slashing](jail-and-slashing.md) |
 | `MsgDelegate` | -- | -- | -- | **RESERVED** -- not implemented in V1 |
@@ -88,14 +88,14 @@ When a task settles as SUCCESS (user pays 100% of the agreed fee):
 |-----------|-------|-----------|
 | Worker (executor) | 95.0% | `executor_fee_ratio = 950` |
 | 3 Verifiers (split) | 4.5% (1.5% each) | `verifier_fee_ratio = 45` |
-| Audit fund | 0.5% | `audit_fund_ratio = 5` |
+| Second verification fund | 0.5% | `multi_verification_fund_ratio = 5` |
 
 When a task settles as FAIL (user pays only 5% of the agreed fee):
 
 | Recipient | Share | Parameter |
 |-----------|-------|-----------|
 | 3 Verifiers (split) | 4.5% (1.5% each) | `verifier_fee_ratio = 45` |
-| Audit fund | 0.5% | `audit_fund_ratio = 5` |
+| Second verification fund | 0.5% | `multi_verification_fund_ratio = 5` |
 | Worker | 0% | Worker is jailed |
 
 See [Parameters](parameters.md) for all configurable fee ratios and [Settlement](settlement.md) for the full state machine.

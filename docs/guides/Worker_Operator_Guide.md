@@ -8,7 +8,7 @@ A FunAI Worker node participates in the decentralized AI inference network by:
 
 - **Inference execution** — Running AI models on GPU
 - **Verification** — Teacher forcing to verify other Workers' results
-- **Auditing** — Random audit of verified tasks
+- **Second verificationing** — Random second verification of verified tasks
 - **Leader** — Dispatching tasks for a model topic (auto-elected)
 - **Proposer** — Batching settlements on-chain (CometBFT rotation)
 
@@ -203,7 +203,7 @@ The model proposer tests epsilon tolerance across 100 prompts x 2+ GPU types x 3
 ### Block Rewards
 
 - Base: 4,000 FAI/block, halving every ~4.16 years
-- **With inference activity**: 99% distributed by inference contribution, 1% by verification/audit count
+- **With inference activity**: 99% distributed by inference contribution, 1% by verification/second verification count
 - **Without inference**: 100% to consensus committee by signed blocks
 
 ### Inference Fee Distribution (on SUCCESS)
@@ -212,7 +212,7 @@ The model proposer tests epsilon tolerance across 100 prompts x 2+ GPU types x 3
 |-----------|-------|
 | Worker | 85% |
 | 3 Verifiers | 12% (4% each) |
-| Audit fund | 3% |
+| Second verification fund | 3% |
 
 ### Contribution Weight Formula
 
@@ -235,7 +235,7 @@ Each worker has a reputation score that affects VRF ranking.
 |-------|-------|-------|
 | Task accepted & completed | +0.01 | Also resets consecutive reject counter |
 | Worker miss (timeout/fail) | -0.10 | |
-| Auditor miss | -0.20 | Higher penalty for audit failures |
+| SecondVerifier miss | -0.20 | Higher penalty for second verification failures |
 | 10+ consecutive rejects (not busy) | -0.05 | Penalty for excessive idle rejections |
 | Hourly decay | ±0.005 | Gradually returns toward 1.0 |
 

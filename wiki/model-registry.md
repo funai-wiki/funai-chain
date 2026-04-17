@@ -45,7 +45,7 @@ A model is eligible for dispatch when **both** conditions are met:
 | Installed stake | >= 1/10 of total stake |
 | Installed worker count | >= 10 |
 
-**Rationale for 10 workers minimum:** Each inference task requires 1 Worker (inference) + 3 Verifiers = 4 rigid slots. The remaining 6 workers serve as the audit candidate pool. Since audit requires 3 independent results, a pool of 6 is sufficient to guarantee availability.
+**Rationale for 10 workers minimum:** Each inference task requires 1 Worker (inference) + 3 Verifiers = 4 rigid slots. The remaining 6 workers serve as the second verification candidate pool. Since second verification requires 3 independent results, a pool of 6 is sufficient to guarantee availability.
 
 If the running condition is not met, the [P2P layer](p2p-layer.md) stops dispatching tasks for that `model_id`. When conditions recover (e.g., workers come back online or new workers install the model), dispatch resumes automatically. No manual intervention or on-chain transaction is required.
 

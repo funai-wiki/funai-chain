@@ -8,7 +8,7 @@
 
 FunAI is a decentralized network for AI inference that separates settlement from computation. The chain acts as a bank — handling deposits, withdrawals, staking, and reward distribution — while all inference happens off-chain over a peer-to-peer network. This "Lightning Scheme" design, inspired by Bitcoin's Lightning Network, enables the network to scale to over one million inferences per second without being bottlenecked by blockchain throughput.
 
-Every inference result is cryptographically verified through teacher forcing, deterministic sampling, and random auditing. Workers stake FAI tokens to participate, and the protocol's incentive structure ensures that cheating is economically irrational. The system is permissionless: anyone with a GPU and sufficient stake can join.
+Every inference result is cryptographically verified through teacher forcing, deterministic sampling, and random second verification. Workers stake FAI tokens to participate, and the protocol's incentive structure ensures that cheating is economically irrational. The system is permissionless: anyone with a GPU and sufficient stake can join.
 
 ---
 
@@ -61,7 +61,7 @@ FunAI draws on Bitcoin's economic security philosophy: making cheating unprofita
 |-----------|---------|----------------|
 | Workers not working | Miners not mining doesn't affect others | Jail mechanism |
 | Probabilistic correctness | Transactions are valid or invalid | Epsilon tolerance + P99.9 false-positive control |
-| Quality fraud | No "poor quality" transactions | Random auditing |
+| Quality fraud | No "poor quality" transactions | Random second verification |
 
 ---
 
@@ -88,7 +88,7 @@ graph TB
         P2P2["Worker\nInference"]
         P2P3["Verifier\nTeacher Forcing"]
         P2P4["Proposer\nBatch Evidence"]
-        P2P5["Auditor\nRandom Audit"]
+        P2P5["SecondVerifier\nRandom Second verification"]
     end
 
     subgraph L1["Layer 1: Cosmos Chain — Bank"]
@@ -102,7 +102,7 @@ graph TB
 
     L3 -->|"Signed requests via P2P"| L2
     L2 -->|"Streaming tokens via P2P"| L3
-    L2 -->|"Settlement txs & audit results"| L1
+    L2 -->|"Settlement txs & second verification results"| L1
     L1 -->|"Balance queries & worker list"| L2
 
     style L3 fill:#E8F4FD,stroke:#4A90D9,stroke-width:2px,color:#1A3A5C
@@ -126,7 +126,7 @@ graph TB
 | `MsgModelProposal` | Propose a new model with epsilon tolerance |
 | `MsgDeclareInstalled` | Worker declares a model installed |
 | `MsgBatchSettlement` | Proposer submits batch of CLEARED task settlements |
-| `MsgAuditResult` | Audit/re-audit verification results |
+| `MsgSecondVerificationResult` | Second verification/third-verification verification results |
 | `MsgFraudProof` | User SDK reports content mismatch |
 | `MsgUnjail` | Unjail a penalized node |
 
@@ -138,7 +138,7 @@ Every registered Worker can dynamically serve multiple roles, selected by VRF:
 |------|----------|-----------|
 | **Worker** | Executes AI inference on GPU | VRF rank #1 per task (alpha=1.0) |
 | **Verifier** | Teacher forcing + logits/sampling check | VRF top 3 per task (alpha=0.5) |
-| **Auditor** | Random re-verification of cleared tasks | VRF random 15-20 candidates (alpha=0.0) |
+| **SecondVerifier** | Random re-verification of cleared tasks | VRF random 15-20 candidates (alpha=0.0) |
 | **Leader** | Dispatches tasks for a model topic | VRF per model, 30s epoch (alpha=1.0) |
 | **Proposer** | Batches settlements on-chain | CometBFT rotation |
 | **Validator** | Signs and proposes blocks | VRF 100-person committee (alpha=1.0) |
@@ -236,7 +236,7 @@ sequenceDiagram
     rect rgb(255, 243, 224)
         Note over Chain: Settlement
         Worker->>Chain: 8. Evidence via Proposer batch
-        Note over Chain: VRF audit check: 90% CLEARED / 10% PENDING_AUDIT
+        Note over Chain: VRF second verification check: 90% CLEARED / 10% PENDING_SECOND_VERIFICATION
         Chain->>Worker: 9. Fee distributed (85%)
         Chain->>V: 9. Fee distributed (12%)
     end
@@ -300,25 +300,25 @@ stateDiagram-v2
     [*] --> VERIFIED: Task verified\nby 3 Verifiers
 
     VERIFIED --> CLEARED: VRF check\n90% pass
-    VERIFIED --> PENDING_AUDIT: VRF check\n10% selected
+    VERIFIED --> PENDING_SECOND_VERIFICATION: VRF check\n10% selected
 
     CLEARED --> SETTLED: BatchSettlement\ninstant payout
 
-    PENDING_AUDIT --> CLEARED_2: Audit confirms\n(~99%)
-    PENDING_AUDIT --> PENDING_REAUDIT: Selected for\nre-audit (~1%)
-    PENDING_AUDIT --> FAILED: Audit overturns\nWorker jailed
+    PENDING_SECOND_VERIFICATION --> CLEARED_2: Second verification confirms\n(~99%)
+    PENDING_SECOND_VERIFICATION --> PENDING_THIRD_VERIFICATION: Selected for\nthird verification (~1%)
+    PENDING_SECOND_VERIFICATION --> FAILED: Second verification overturns\nWorker jailed
 
     CLEARED_2 --> SETTLED
 
-    PENDING_REAUDIT --> SETTLED: Re-audit\nconfirms
-    PENDING_REAUDIT --> FAILED: Re-audit\noverturns
+    PENDING_THIRD_VERIFICATION --> SETTLED: Third verification\nconfirms
+    PENDING_THIRD_VERIFICATION --> FAILED: Third verification\noverturns
 
     SETTLED --> [*]
     FAILED --> [*]
 
     note right of SETTLED
         SUCCESS: User pays 100% fee
-        Worker 85% / Verifiers 12% / Audit 3%
+        Worker 85% / Verifiers 12% / Second verification 3%
     end note
 
     note right of FAILED
@@ -327,9 +327,9 @@ stateDiagram-v2
     end note
 ```
 
-Audit and re-audit rates are dynamic, adjusted per epoch based on network conditions:
-- Audit rate: 5% - 30% (base: 10%)
-- Re-audit rate: 0.5% - 5% (base: 1%)
+Second verification and third-verification rates are dynamic, adjusted per epoch based on network conditions:
+- Second-verification rate: 5% - 30% (base: 10%)
+- Third-verification rate: 0.5% - 5% (base: 1%)
 
 ---
 
@@ -349,8 +349,8 @@ Lower score = higher rank. The `alpha` parameter controls how much stake influen
 |----------|-------|------|--------|
 | Dispatch | 1.0 | `task_id \|\| block_hash` | Proportional to stake |
 | Verification | 0.5 | `task_id \|\| result_hash` | Proportional to sqrt(stake) |
-| Audit | 0.0 | `task_id \|\| post_verification_block_hash` | Equal probability |
-| Re-audit | 0.0 | `task_id \|\| post_audit_block_hash` | Equal probability |
+| Second verification | 0.0 | `task_id \|\| post_verification_block_hash` | Equal probability |
+| Third verification | 0.0 | `task_id \|\| post_second verification_block_hash` | Equal probability |
 | Leader election | 1.0 | `model_id \|\| sub_topic_id \|\| epoch_block_hash` | Stake-weighted |
 | Validator committee | 1.0 | `epoch_block_hash` | Stake-weighted |
 
@@ -358,7 +358,7 @@ Lower score = higher rank. The `alpha` parameter controls how much stake influen
 
 - **Dispatch (alpha=1.0):** Pure stake weight prevents whale account-splitting (splitting yields zero benefit). Income volatility for small holders is addressed through delegation pools, not VRF tuning.
 - **Verification (alpha=0.5):** sqrt(stake) weight allows small GPUs to participate (verification only takes ~0.6s) while reducing collusion probability.
-- **Audit (alpha=0.0):** Pure random selection is the safest; whale probability of controlling all 3 auditors drops by ~3,400x compared to stake-weighted selection.
+- **Second verification (alpha=0.0):** Pure random selection is the safest; whale probability of controlling all 3 second verifiers drops by ~3,400x compared to stake-weighted selection.
 
 ### 6.3 Effective Stake
 
@@ -384,7 +384,7 @@ Each Worker maintains a reputation score that directly affects VRF ranking:
 |-------|-------------|
 | Task accepted and completed | +0.01 |
 | Worker miss (timeout/failure) | -0.10 |
-| Auditor miss | -0.20 |
+| SecondVerifier miss | -0.20 |
 | 10+ consecutive idle rejects | -0.05 |
 | Hourly decay | +/-0.005 toward 1.0 |
 
@@ -412,7 +412,7 @@ Progressive penalties follow the Cosmos validator jail model:
 | Worker uses smaller model | Logits diverge by > 1.0 (vs. hardware epsilon < 0.01); caught immediately |
 | Leader dispatches to colluder | Rankings are publicly recomputable; 30s rotation limits window |
 | Verifier collusion | alpha=0.5 adds randomness; 3 independent verifiers required |
-| Auditor manipulation | alpha=0.0 (pure random); probability of controlling all 3 auditors is negligible |
+| SecondVerifier manipulation | alpha=0.0 (pure random); probability of controlling all 3 second verifiers is negligible |
 | Sybil attack on model registry | Activation requires 2/3 stake ratio + 4 workers + 4 distinct operators |
 | Overspend attack | Three-layer protection: Leader tracking, Worker self-check, on-chain fallback |
 | Replay attack | `task_id` uniqueness enforced on-chain; `expire_block` voids old signatures |
@@ -442,17 +442,18 @@ When a task is successfully settled:
 |-----------|-------|
 | Worker (executor) | 85% |
 | Verifiers (3) | 12% (~4% each) |
-| Audit fund | 3% |
+| Multi-verification fund | 3% |
 
-On failure, the user pays 5% of the fee (verifiers 4.5%, audit fund 0.5%), and the Worker is jailed.
+On failure (Worker caught cheating or output rejected), the user pays **15%** of the fee: 12% to verifiers and 3% to the multi-verification fund. The Worker is jailed. This 15% matches the non-worker share of a successful settlement and fully covers verification and second/third-verification overhead.
 
 ### 8.3 Block Reward Distribution
 
-Epoch length: 100 blocks (500 seconds).
+Epoch length: 100 blocks (500 seconds). The block-reward pool is split with the same 85/12/3 ratio as the inference fee, so economic incentives across fees and rewards are perfectly aligned.
 
 **When inference activity exists:**
-- 99% distributed by inference contribution: `w_i = 0.8 * (fee_i / total_fee) + 0.2 * (task_count_i / total_tasks)`
-- 1% distributed by verification + audit count
+- **85% inference pool** — distributed to Workers by `w_i = 0.85 * (fee_i / total_fee) + 0.15 * (task_count_i / total_tasks)`
+- **12% verifier pool** — distributed to all verifiers (1st-tier + 2nd + 3rd verifiers combined) by the same formula, with `fee_i` being the fee each verifier+second-verifier+third-verifier earned this epoch
+- **3% multi-verification fund** — minted into the settlement module account and paid out per-epoch to 2nd/3rd verifiers via the multi-verification fund distribution mechanism (alongside fee-based fund accumulation)
 
 **When no inference activity exists:**
 - 100% distributed to consensus committee by blocks signed
@@ -529,7 +530,7 @@ By default, the SDK automatically detects and removes personally identifiable in
 
 ### 10.3 Data Retention
 
-All participating nodes retain task data for 48 hours (reduced from 7 days for data minimization). This provides sufficient time for auditing while limiting exposure.
+All participating nodes retain task data for 48 hours (reduced from 7 days for data minimization). This provides sufficient time for second verification while limiting exposure.
 
 ---
 
@@ -609,7 +610,7 @@ The Lightning Scheme removes the chain as a bottleneck. P2P throughput scales ho
 ### 13.1 On-Chain Governance
 
 Protocol parameters are governable through on-chain proposals:
-- Audit and re-audit rates
+- Second verification and third-verification rates
 - Reward distribution weights
 - Stake minimums and slash percentages
 - Model activation thresholds
@@ -629,7 +630,7 @@ The following features are designed but not yet active, to be enabled as the net
 
 ## 14. Conclusion
 
-FunAI addresses the fundamental limitations of centralized AI inference — single points of failure, censorship, and opaque pricing — through a design that separates settlement from computation. The Lightning Scheme enables million-TPS throughput without blockchain bottlenecks. Full-chain deterministic verification through teacher forcing, ChaCha20 sampling, and random auditing ensures result integrity without trusting any single participant.
+FunAI addresses the fundamental limitations of centralized AI inference — single points of failure, censorship, and opaque pricing — through a design that separates settlement from computation. The Lightning Scheme enables million-TPS throughput without blockchain bottlenecks. Full-chain deterministic verification through teacher forcing, ChaCha20 sampling, and random second verification ensures result integrity without trusting any single participant.
 
 The protocol's security rests on economic incentives rather than cryptographic impossibility: cheating is not prevented — it is made unprofitable. This approach, proven by Bitcoin over 17 years, adapts naturally to AI inference with the addition of epsilon-tolerant verification and progressive penalties.
 

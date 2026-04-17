@@ -122,7 +122,7 @@ All metrics are exposed on the `FUNAI_METRICS_ADDR` endpoint (default `:9100/met
 | `funai_inference_latency_seconds` | p95 < 10s | p99 > 30s | End-to-end inference latency including dispatch, execution, and verification |
 | `funai_verification_latency_seconds` | p95 < 0.6s | p99 > 2s | Teacher forcing verification time (single forward pass) |
 | `funai_settlement_total` | Growing | No new settlements for 5 min | Cumulative count of settled tasks in `MsgBatchSettlement` |
-| `funai_audit_rate_permille` | 80--120 | < 50 or > 300 | Current audit sampling rate in permille (100 = 10%). See [settlement](settlement.md) for dynamic rate details |
+| `funai_second_verification_rate_permille` | 80--120 | < 50 or > 300 | Current second verification sampling rate in permille (100 = 10%). See [settlement](settlement.md) for dynamic rate details |
 | `funai_worker_jail_total` | 0 | Any increase | Cumulative jail events. Any jail warrants investigation -- see [jail and slashing](jail-and-slashing.md) |
 | `funai_leader_failover_total` | 0 | > 3/hour | Leader failover events. Frequent failovers indicate network instability or leader node issues |
 | `funai_p2p_connected_peers` | >= 3 | < 2 | Connected libp2p peers. Below 2 means the node is effectively isolated |
@@ -153,7 +153,7 @@ All metrics are exposed on the `FUNAI_METRICS_ADDR` endpoint (default `:9100/met
 | P2P connection failure | Firewall blocking ports or wrong boot peers | Verify ports 26656/5001 are open; confirm boot peer multiaddr |
 | Settlement stuck (no new `funai_settlement_total`) | Proposer down or no CLEARED tasks | Check proposer logs; verify tasks are reaching CLEARED state via [settlement pipeline](settlement.md) |
 | Worker jailed | Failed verification or timeout | Check `jail_count` -- 1st/2nd jail is recoverable via `MsgUnjail` after cooldown. 3rd = permanent tombstone. See [jail and slashing](jail-and-slashing.md) |
-| Audit rate anomaly (too high or too low) | Dynamic rate adjustment responding to network conditions | Rates are dynamic (5--30% audit, 0.5--5% re-audit) -- verify the rate is within bounds. Sustained out-of-range values indicate a parameter misconfiguration |
+| Second-verification rate anomaly (too high or too low) | Dynamic rate adjustment responding to network conditions | Rates are dynamic (5--30% second verification, 0.5--5% third-verification) -- verify the rate is within bounds. Sustained out-of-range values indicate a parameter misconfiguration |
 | High leader failover rate | Leader node unstable or network partition | Check leader node health and connectivity; review `funai_p2p_connected_peers` on the leader |
 
 ---
@@ -168,7 +168,7 @@ On-chain parameters can be updated through governance proposals without restarti
 funaid tx gov submit-proposal param-change proposal.json --from validator --fees 500ufai
 ```
 
-Governable parameters include audit rates, reward splits, and stake minimums.
+Governable parameters include second verification rates, reward splits, and stake minimums.
 
 ### Software upgrades (binary swap)
 
@@ -201,7 +201,7 @@ Critical parameters that must be verified before mainnet genesis:
 | `BlockReward` | 4,000 FAI | Per-block reward, see [tokenomics](tokenomics.md) |
 | `HalvingInterval` | 26,250,000 | ~4.16 years at 5s blocks |
 | `MinWorkerStake` | 10,000 FAI | Minimum stake for worker registration |
-| `AuditBaseRate` | 100 | Base audit rate in permille (10%) |
+| `Second verificationBaseRate` | 100 | Base second verification rate in permille (10%) |
 | `CommitteeSize` | 100 | Number of validators in consensus committee |
 | `UnbondingTime` | 1,814,400s | 21 days |
 | `BondDenom` | `ufai` | Must match all module configs |

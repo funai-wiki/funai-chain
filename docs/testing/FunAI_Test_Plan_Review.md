@@ -40,12 +40,12 @@
 | AC1 | Honest Worker (reported count matches) | ✅ | `ResolveTokenCounts:2158` returns worker-reported count |
 | AC2 | Worker over-reports (exceeds tolerance) | ✅ | `effectiveTolerance:2190` + `resolveTokenPair:2199`, takes median |
 | AC3 | 3 over-reports trigger jail | ✅ | `IncrementDishonestCount:1956` + `DishonestJailThreshold=3` |
-| AC4 | Collusion audit reversal | ✅ | `keeper.go:1322-1427` collusion detection + `jailWorkerAndVerifiers:1564` |
+| AC4 | Collusion second verification reversal | ✅ | `keeper.go:1322-1427` collusion detection + `jailWorkerAndVerifiers:1564` |
 | AC5 | Within tolerance (diff <= tolerance) | ✅ | `effectiveTolerance` abs=2 / pct=2%, takes the larger value |
 | AC6 | 50 consecutive successes reset | ✅ | `ResetDishonestCount:1973` |
 | AC7 | Disabled skips token count check | ✅ | `PerTokenBillingEnabled` toggle skips check |
-| AC8 | Pair tracking audit boost | ✅ | `CalculateWorkerAuditBoost:2118` + `TokenMismatchRecord` |
-| AC9 | Verifier direct jail | ✅ | `jailWorkerAndVerifiers:1564`, direct jail upon audit reversal |
+| AC8 | Pair tracking second verification boost | ✅ | `CalculateWorkerSecond verificationBoost:2118` + `TokenMismatchRecord` |
+| AC9 | Verifier direct jail | ✅ | `jailWorkerAndVerifiers:1564`, direct jail upon second verification reversal |
 | TR4 | MinBudget (at least 1 token) | ✅ | Worker layer `shouldStopGeneration:487` + settlement layer `CalculatePerTokenFee` |
 
 ---
@@ -60,14 +60,14 @@
 | E4 | Epoch boundary | ✅ | `epoch = currentHeight / 100`, `RewardRecord.Epoch` | |
 | E5 | Genesis migration | ✅ | `DefaultParams` populates S9 fields | Already has `TestGenesisRoundtrip` |
 | E6 | Tombstone re-registration | ⚠️ Partial | `worker.go:Tombstoned` field exists | New address registration sets dishonest_count=0 **needs flow verification** |
-| E7 | Pair storage scale | ✅ | `TokenMismatchRecord` + `CalculateWorkerAuditBoost` query | |
+| E7 | Pair storage scale | ✅ | `TokenMismatchRecord` + `CalculateWorkerSecond verificationBoost` query | |
 | E8 | Large batch 10K | ✅ | keeper loop processing | |
 | E9 | 2 Verifiers | ⚠️ Behavior uncertain | `medianUint32([a,b])` returns the larger value | **No documentation stating this is expected behavior** |
 | E10 | 1 Verifier | ⚠️ No confidence marking | `medianUint32([a])` returns a | **No low-confidence marking mechanism** |
 | E11 | 0 Verifiers | ⚠️ No protection | `medianUint32([])` returns 0 | **No timeout trigger or fallback** |
 | E12 | expire_block too short | ✅ | `HandleFrozenBalanceTimeouts` + max 17280 blocks | |
 | E13 | Double settlement | ✅ | `SettledTask` deduplication `keeper.go:737` | |
-| E14 | All Verifiers return 0 | ❌ **Design blind spot** | `medianUint32([0,0,0])=0` | **Worker completes inference but earns near-zero income, no fallback/audit trigger** |
+| E14 | All Verifiers return 0 | ❌ **Design blind spot** | `medianUint32([0,0,0])=0` | **Worker completes inference but earns near-zero income, no fallback/second verification trigger** |
 | E15 | Epoch+Proposer rotation | ⚠️ Partial | Proposer rotation handled by CometBFT | **No application-layer test interface** |
 | E16 | Block time variance | ✅ | Based on block count, not dependent on absolute time | |
 | E17 | Batch gas limit | ⚠️ | `gasLimit = 200000 + len*2000` | **No validation against block gas limit** |
@@ -76,7 +76,7 @@
 | E20 | Broadcast failure doesn't lose entries | ✅ Implemented+fixed | `p2p/proposer/proposer_test.go:TestBatchLoop_BroadcastFail` | commit 30edd37 |
 | E21 | Sequence reset | ✅ Implemented | `p2p/chain/client_test.go:TestBatchLoop_SequenceReset` | commit 199c694 |
 | E22 | Gas estimation validation | ⚠️ | Formula exists | **Whether per-token needs more gas is unverified** |
-| E23 | Audit dispatch | ✅ | `ProcessPending` returns `AuditDispatch` | |
+| E23 | Second verification dispatch | ✅ | `ProcessPending` returns `Second verificationDispatch` | |
 
 ---
 
@@ -115,7 +115,7 @@
 
 | ID | Scenario | Status | Key Code Location | Notes |
 |----|------|------|------------|------|
-| S1 | Forged AuditResponse | ✅ | `p2p/dispatch.go:handleAuditResponse:346-368` signature verification | |
+| S1 | Forged SecondVerificationResponse | ✅ | `p2p/dispatch.go:handleSecondVerificationResponse:346-368` signature verification | |
 | S2 | Replay attack | ✅ | `SettledTask` deduplication `keeper.go:737` | |
 | S3 | Cross-denom attack | ✅ | `msgs.go:ValidateBasic:50` denom validation | |
 | S4 | Malicious Leader tampers AssignTask | ❌ **Not implemented** | Worker only checks sender address (`worker.go:122-126`) | **Does not verify AssignTask cryptographic signature, test will inevitably FAIL** |
@@ -138,7 +138,7 @@
 | R4 | Large batch 10K/50K/125K | ✅ | keeper loop processing, split into mock + real two steps |
 | R5 | Concurrent inference throughput | ✅ | Leader HandleRequest + rate limit |
 | R6 | On-chain state growth | ✅ | Cosmos DB + cleanup mechanism |
-| R7 | Pair tracking query | ✅ | `CalculateWorkerAuditBoost` |
+| R7 | Pair tracking query | ✅ | `CalculateWorkerSecond verificationBoost` |
 
 ---
 
@@ -164,7 +164,7 @@
 
 | ID | Issue | Impact | Recommendation |
 |----|------|------|------|
-| **E14** | No protection when all Verifiers return 0 — `medianUint32([0,0,0])=0`, Worker completes inference but earns near-zero income | Design blind spot, current behavior is unreasonable | **Make design decision first**: (A) fallback to per-request (B) force audit (C) keep as-is but mark as low confidence |
+| **E14** | No protection when all Verifiers return 0 — `medianUint32([0,0,0])=0`, Worker completes inference but earns near-zero income | Design blind spot, current behavior is unreasonable | **Make design decision first**: (A) fallback to per-request (B) force second verification (C) keep as-is but mark as low confidence |
 | **S4** | Worker does not verify AssignTask cryptographic signature — malicious Leader can tamper with prompt_hash | Plan assumes signature verification exists, but **code only checks sender address** | **Need to implement AssignTask signature verification**, otherwise test cannot pass |
 
 ### P1 Blockers — Need Implementation

@@ -8,16 +8,16 @@ Sources: [FunAI V52 Final Design Spec](../docs/FunAI_V52_Final.md), [Per-Token B
 
 ## Settlement Module
 
-Parameters governing the [settlement state machine](settlement.md), fee distribution, [verification](verification.md), and audit behavior.
+Parameters governing the [settlement state machine](settlement.md), fee distribution, [verification](verification.md), and second verification behavior.
 
 ### Fee Distribution
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `executor_fee_ratio` | 950 | permille (95.0%) | Worker's share of the task fee on SUCCESS |
-| `verifier_fee_ratio` | 45 | permille (4.5%) | Combined share for 3 verifiers on SUCCESS (1.5% each) |
-| `audit_fund_ratio` | 5 | permille (0.5%) | Audit fund share on SUCCESS |
-| `fail_settlement_fee_ratio` | 50 | permille (5.0%) | Total fee charged to user on FAIL (verifiers + audit fund only) |
+| `executor_fee_ratio` | 850 | permille (85.0%) | Worker's share of the task fee on SUCCESS |
+| `verifier_fee_ratio` | 120 | permille (12.0%) | Combined share for 3 verifiers on SUCCESS (~4% each) |
+| `multi_verification_fund_ratio` | 30 | permille (3.0%) | Multi-verification fund share on SUCCESS — funds 2nd/3rd verifications |
+| `fail_settlement_fee_ratio` | 150 | permille (15.0%) | Total fee charged to user on FAIL: verifiers get 12% + multi-verification fund gets 3%, matching the non-worker share of a SUCCESS settlement |
 
 ### Task Lifecycle
 
@@ -30,25 +30,25 @@ Parameters governing the [settlement state machine](settlement.md), fee distribu
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `audit_verifier_count` | 3 | count | Number of [VRF-selected verifiers](vrf.md) per task (alpha = 0.5) |
-| `audit_match_threshold` | 2 | count | Minimum number of verifiers that must agree for a PASS |
+| `second_verifier_count` | 3 | count | Number of [VRF-selected verifiers](vrf.md) per task (alpha = 0.5) |
+| `second verification_match_threshold` | 2 | count | Minimum number of verifiers that must agree for a PASS |
 | `logits_sample_positions` | 5 | count | Number of VRF-selected token positions checked during [teacher forcing](verification.md) |
 | `logits_match_required` | 4 | count | Minimum positions that must match (within epsilon) for a logits PASS (4/5) |
 
-### Audit Rates
+### Second-Verification Rates
 
-Audit and re-audit rates are dynamic -- they adjust within their min/max bounds based on network conditions. See [Settlement](settlement.md) for the full state machine.
+Second verification and third-verification rates are dynamic -- they adjust within their min/max bounds based on network conditions. See [Settlement](settlement.md) for the full state machine.
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `audit_base_rate` | 100 | permille (10%) | Default probability a VERIFIED task enters PENDING_AUDIT |
-| `audit_rate_min` | 50 | permille (5%) | Minimum audit rate floor |
-| `audit_rate_max` | 300 | permille (30%) | Maximum audit rate ceiling |
-| `audit_timeout` | 8,640 | blocks (12 hours) | Timeout before an unresolved audit defaults to CLEARED |
-| `reaudit_base_rate` | 10 | permille (1%) | Default probability an audited task enters PENDING_REAUDIT |
-| `reaudit_rate_min` | 5 | permille (0.5%) | Minimum re-audit rate floor |
-| `reaudit_rate_max` | 50 | permille (5%) | Maximum re-audit rate ceiling |
-| `reaudit_timeout` | 17,280 | blocks (24 hours) | Timeout before an unresolved re-audit defaults to CLEARED |
+| `second_verification_base_rate` | 100 | permille (10%) | Default probability a VERIFIED task enters PENDING_AUDIT |
+| `second_verification_rate_min` | 50 | permille (5%) | Minimum second verification rate floor |
+| `second_verification_rate_max` | 300 | permille (30%) | Maximum second verification rate ceiling |
+| `second_verification_timeout` | 8,640 | blocks (12 hours) | Timeout before an unresolved second verification defaults to CLEARED |
+| `third_verification_base_rate` | 10 | permille (1%) | Default probability an second verificationed task enters PENDING_REAUDIT |
+| `third_verification_rate_min` | 5 | permille (0.5%) | Minimum third-verification rate floor |
+| `third_verification_rate_max` | 50 | permille (5%) | Maximum third-verification rate ceiling |
+| `third_verification_timeout` | 17,280 | blocks (24 hours) | Timeout before an unresolved third-verification defaults to CLEARED |
 
 ### Per-Token Billing
 
@@ -65,9 +65,9 @@ Per-token billing is disabled by default in V1. These parameters take effect whe
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
 | `dishonest_jail_threshold` | 3 | count | Number of dishonest detections before jail |
-| `token_mismatch_audit_weight` | 20 | weight | Weight applied to token mismatch signals when adjusting audit rates |
+| `token_mismatch_second verification_weight` | 20 | weight | Weight applied to token mismatch signals when adjusting second verification rates |
 | `token_mismatch_lookback` | 100 | tasks | Rolling window of recent tasks examined for mismatch patterns |
-| `token_mismatch_deviation_pct` | 20 | percent | Deviation threshold that triggers elevated audit rate |
+| `token_mismatch_deviation_pct` | 20 | percent | Deviation threshold that triggers elevated second verification rate |
 | `token_mismatch_pair_min_samples` | 5 | count | Minimum sample count for a Worker-User pair before mismatch analysis applies |
 
 ---
@@ -117,14 +117,15 @@ Parameters governing block reward distribution. See [Tokenomics](tokenomics.md) 
 
 ### Reward Distribution Weights
 
-When inference activity exists in the epoch, rewards are split between inference contributors and verification/audit contributors. When no inference occurs, 100% goes to the consensus committee by signed blocks.
+When inference activity exists in the epoch, the block-reward pool is split 85/12/3 — matching the inference-fee split — so incentives across fees and rewards are aligned. Inside each of the inference and verifier pools, rewards are distributed by 85% fee amount + 15% task count.
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `inference_weight` | 0.99 | ratio | Share of block rewards allocated to inference contributors (99%) |
-| `verification_weight` | 0.01 | ratio | Share of block rewards allocated to verification/audit contributors (1%) |
-| `fee_weight` | 0.8 | ratio | Within inference rewards, weight given to fee volume |
-| `count_weight` | 0.2 | ratio | Within inference rewards, weight given to task count |
+| `inference_weight` | 0.85 | ratio | Share of block rewards to inference workers (85%) |
+| `verification_weight` | 0.12 | ratio | Share to verifiers + 2nd + 3rd verifiers combined pool (12%) |
+| `multi_verification_fund_weight` | 0.03 | ratio | Share minted into settlement module as multi-verification fund (3%) |
+| `fee_weight` | 0.85 | ratio | Within each pool, weight given to fee amount earned |
+| `count_weight` | 0.15 | ratio | Within each pool, weight given to task / verification count |
 
 ---
 

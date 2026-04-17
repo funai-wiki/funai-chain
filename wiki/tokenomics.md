@@ -34,14 +34,15 @@ Rewards are calculated once per **epoch end** (every 100 blocks).
 
 ### With Inference Activity
 
-When the network is processing inference tasks:
+When the network is processing inference tasks, the block-reward pool is split with the same 85/12/3 ratio as the inference fee:
 
 | Split | Recipients | Calculation |
 |-------|-----------|-------------|
-| **99%** | Workers (by inference contribution) | `w_i = 0.8 * (fee_i / sum_fee) + 0.2 * (count_i / sum_count)` |
-| **1%** | Verifiers & Auditors (by verification/audit count) | Proportional to completed verifications and audits |
+| **85%** | Workers (inference pool) | `w_i = 0.85 * (fee_i / sum_fee) + 0.15 * (count_i / sum_count)` |
+| **12%** | Verifiers + 2nd verifiers + 3rd verifiers (combined verifier pool) | Same 85/15 formula, where `fee_i` is the fee each verifier earned this epoch from all verification roles |
+| **3%** | Multi-verification fund | Minted into settlement module account; distributed per-epoch to 2nd/3rd verifiers via `DistributeMultiVerificationFund` alongside the fee-based multi-verification fund accumulation |
 
-Only tasks in `CLEARED` status are counted toward reward distribution. See the [settlement state machine](../x/settlement/) for task lifecycle details.
+Only tasks in `CLEARED` status are counted toward reward distribution. See the [settlement state machine](settlement.md) for task lifecycle details.
 
 ### Without Inference Activity
 
@@ -51,21 +52,9 @@ When no inference has occurred during the epoch:
 |-------|-----------|-------------|
 | **100%** | Consensus committee (100 validators) | Proportional to signed blocks |
 
-### Why 1% for Verification?
+### Why align block-reward split with inference-fee split?
 
-Block rewards are approximately **69x larger** than inference fees. Without the 1% verification split:
-
-- Verification **loses money**: -0.033 FAI per verification task
-- Workers would avoid verification duty
-
-With the 1% split:
-
-| Role | Earnings |
-|------|----------|
-| Verification | 0.61 FAI/s |
-| Inference | 0.546 FAI/s |
-
-Verification becomes **12% more profitable** than inference, ensuring sufficient verifier participation.
+Matching both splits at 85/12/3 keeps the economic incentive of every role identical whether their revenue comes from fees or from block rewards. Verifiers and second/third verifiers don't need a separate subsidy to make verification work profitable — the 12% verifier pool + 3% multi-verification fund cover that explicitly.
 
 ## Fee Distribution per Task
 
@@ -73,21 +62,21 @@ Verification becomes **12% more profitable** than inference, ensuring sufficient
 
 | Recipient | Share | Notes |
 |-----------|-------|-------|
-| Worker | 95% | Executing worker |
-| 3 Verifiers | 4.5% (1.5% each) | [Verification protocol](verification.md) |
-| Audit fund | 0.5% | Funds random [audits](../x/settlement/) |
+| Worker | **85%** | Executing worker |
+| 3 Verifiers | **12%** (~4% each) | [Verification protocol](verification.md) |
+| Multi-verification fund | **3%** | Funds random 2nd/3rd verifications (formerly "audit fund") |
 
 The user pays 100% of the agreed fee.
 
-### FAIL (task fails verification)
+### FAIL (task fails verification, Worker caught cheating)
 
 | Recipient | Share | Notes |
 |-----------|-------|-------|
 | Worker | 0% | Worker is [jailed](jail-and-slashing.md) |
-| 3 Verifiers | 4.5% (1.5% each) | Compensated for verification work |
-| Audit fund | 0.5% | Funds random audits |
+| 3 Verifiers | **12%** (~4% each) | Compensated for verification work |
+| Multi-verification fund | **3%** | Funds second/third verifications |
 
-The user pays only **5%** of the original fee.
+The user pays **15%** of the original fee. This matches the non-worker share of a SUCCESS fee, so verification + multi-verification costs are fully covered regardless of outcome.
 
 ## User Deposits
 

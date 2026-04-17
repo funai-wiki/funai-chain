@@ -1,6 +1,6 @@
 # Per-Token Billing (S9)
 
-Per-token billing ensures that users never overpay (capped at `max_fee`), Workers are paid proportionally to actual token output, and token counts are unforgeable through cross-verification. The fee split remains unchanged from per-request mode: **95% Worker / 4.5% verifiers / 0.5% audit fund** (see [settlement](settlement.md)).
+Per-token billing ensures that users never overpay (capped at `max_fee`), Workers are paid proportionally to actual token output, and token counts are unforgeable through cross-verification. The fee split remains unchanged from per-request mode: **95% Worker / 4.5% verifiers / 0.5% multi-verification fund** (see [settlement](settlement.md)).
 
 Source: [S9 Per-Token Billing Supplement](../docs/S9_PerToken_Billing_Supplement.md)
 
@@ -78,7 +78,7 @@ Token counts are verified by comparing Worker self-reports against independent V
 | Code | Attack | Defense |
 |------|--------|---------|
 | C1 | Inflated token count | Verifier cross-check catches over-reporting via the two-party verification above |
-| C2 | Worker-Verifier collusion | Pair-level tracking with sliding window (lookback = 100 tasks); deviation > 20% = mismatch; audit rate boost up to +20 percentage points |
+| C2 | Worker-Verifier collusion | Pair-level tracking with sliding window (lookback = 100 tasks); deviation > 20% = mismatch; second verification rate boost up to +20 percentage points |
 | C3 | Output padding (junk tokens) | Market competition drives honest pricing; `max_tokens` and `max_fee` caps limit damage |
 
 ---
@@ -123,4 +123,4 @@ The refund is credited back to the user's on-chain balance during [batch settlem
 | `token_count_tolerance` | uint | `2` | Absolute minimum tolerance for token count mismatch |
 | `token_count_tolerance_pct` | uint | `2%` | Percentage-based tolerance for token count mismatch |
 | `dishonesty_jail_threshold` | uint | `3` | Number of dishonesty strikes before jailing |
-| `token_mismatch_audit_weight` | uint | `20` | Audit rate boost (percentage points) for collusion-suspected pairs |
+| `token_mismatch_second verification_weight` | uint | `20` | Second-verification rate boost (percentage points) for collusion-suspected pairs |

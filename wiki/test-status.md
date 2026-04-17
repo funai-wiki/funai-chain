@@ -11,10 +11,10 @@ Source: [FunAI_Integration_Test_Plan_V3.md](../docs/FunAI_Integration_Test_Plan_
 - User lifecycle (deposit, withdraw, balance)
 - Worker jail/unjail/tombstone
 - Settlement normal flow and anomaly paths
-- Audit and re-audit flows
+- Second verification and third-verification flows
 - FraudProof submission and slashing
 - Block reward distribution
-- Dynamic audit rates
+- Dynamic second verification rates
 - Overspend protection (3 layers)
 - Model registry (proposal, activation, running thresholds)
 - VRF unified formula
@@ -74,7 +74,7 @@ Source: [T4_E2E_Test_Plan.md](../docs/T4_E2E_Test_Plan.md)
 
 ## Related Pages
 
-- [Security Audit Findings](security-audit.md)
+- [Security Second verification Findings](security-second verification.md)
 - [Code vs Spec Compliance](code-review.md)
 - [Settlement](settlement.md)
 - [P2P Layer](p2p-layer.md)

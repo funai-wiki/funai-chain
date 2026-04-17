@@ -1,6 +1,6 @@
 # VRF Unified Formula
 
-FunAI Chain uses a single VRF formula for all ranking and selection across the system. Every use case -- dispatch, verification, audit, leader election, and validator committee selection -- is an instance of the same formula with different parameters.
+FunAI Chain uses a single VRF formula for all ranking and selection across the system. Every use case -- dispatch, verification, second verification, leader election, and validator committee selection -- is an instance of the same formula with different parameters.
 
 Source: [FunAI V52 Final Design Spec](../docs/FunAI_V52_Final.md)
 
@@ -26,8 +26,8 @@ score = hash(seed || pubkey) / stake^alpha
 |----------|-------|------|--------------------|
 | **Dispatch** | 1.0 | `task_id \|\| block_hash` | Proportional to stake |
 | **Verification** | 0.5 | `task_id \|\| result_hash` | Proportional to sqrt(stake) |
-| **Audit** | 0.0 | `task_id \|\| post_verification_block_hash` | Pure random |
-| **Re-audit** | 0.0 | `task_id \|\| post_audit_block_hash` | Pure random |
+| **Second verification** | 0.0 | `task_id \|\| post_verification_block_hash` | Pure random |
+| **Re-second verification** | 0.0 | `task_id \|\| post_second verification_block_hash` | Pure random |
 | **Leader election** | 1.0 | `model_id \|\| sub_topic_id \|\| epoch_block_hash` | Proportional to stake |
 | **Validator committee** | 1.0 | `epoch_block_hash` | Proportional to stake (100 members, 10 min rotation) |
 
@@ -47,15 +47,15 @@ Selection probability is proportional to the square root of stake. A participant
 
 **Why this works:** this reduces the ability of large stakeholders to dominate the verification pool. If a single entity controlled enough verifiers to collude with a dishonest Worker, the sqrt weighting makes that significantly more expensive -- they would need to quadruple their stake to double their chance of filling the 3 verifier slots.
 
-### Audit (alpha = 0.0) -- pure random
+### Second verification (alpha = 0.0) -- pure random
 
 Selection probability is completely independent of stake. Every eligible participant has an equal chance.
 
-**Why this works:** audits are the last line of defense. Pure randomness makes it approximately 3,400x harder for a large staking pool to control audit outcomes compared to stake-proportional selection. Even an entity controlling a majority of total stake cannot reliably predict or influence which auditor is selected.
+**Why this works:** second verifications are the last line of defense. Pure randomness makes it approximately 3,400x harder for a large staking pool to control second verification outcomes compared to stake-proportional selection. Even an entity controlling a majority of total stake cannot reliably predict or influence which second verifier is selected.
 
-### Re-audit (alpha = 0.0) -- pure random
+### Re-second verification (alpha = 0.0) -- pure random
 
-Same rationale as audit. The seed uses `post_audit_block_hash` (a future block hash unknown at audit time) to ensure the re-auditor cannot be predicted during the initial audit.
+Same rationale as second verification. The seed uses `post_second verification_block_hash` (a future block hash unknown at second verification time) to ensure the third-verifier cannot be predicted during the initial second verification.
 
 ### Leader election (alpha = 1.0) -- proportional to stake
 
@@ -101,5 +101,5 @@ The VRF library lives at `x/vrf/` in the repository. All ranking and selection i
 ## Related Pages
 
 - [Three-Layer Architecture](architecture.md) -- how VRF fits into the L1/L2 layers
-- [Settlement State Machine](settlement.md) -- how VRF determines audit selection rates and dispatch ranking
+- [Settlement State Machine](settlement.md) -- how VRF determines second verification selection rates and dispatch ranking
 - [Schema Reference](schema.md) -- protobuf definitions for VRF-related messages

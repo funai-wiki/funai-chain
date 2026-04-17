@@ -2,7 +2,7 @@
 
 > Date: 2026-03-25
 >
-> Source: Economic model validation + AI companion product requirement back-derivation + code audit cross-findings
+> Source: Economic model validation + AI companion product requirement back-derivation + code second verification cross-findings
 >
 > Corresponding baseline: FunAI V5.2 Final (commit 1da0b49)
 >
@@ -487,7 +487,7 @@ per-token billing involves extensive changes:
 | SDK auto-pricing (query network average price) | Medium |
 | FAIL scenario fee calculation (by completed token count or simplified approach) | Medium |
 
-Estimated total change size 150-200 lines, requires re-auditing settlement security.
+Estimated total change size 150-200 lines, requires third-verificationing settlement security.
 
 ### 10.3 Phased Approach
 

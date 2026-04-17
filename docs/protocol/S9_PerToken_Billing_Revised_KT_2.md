@@ -17,7 +17,7 @@ Switching the billing model from per-request fixed fees to per-token usage-based
 **Core Principles:**
 - Users never overpay (max_fee cap)
 - Workers are compensated based on volume (more work = more earnings)
-- Token counts cannot be forged (Verifier cross-validation + audit backstop)
+- Token counts cannot be forged (Verifier cross-validation + second verification backstop)
 - Distribution ratios remain unchanged (retaining V5.2's 95/4.5/0.5)
 - Implement all at once, no phased rollout
 
@@ -312,7 +312,7 @@ Token counting must use the model's bundled tokenizer (i.e., tokenizer.json
 or sentencepiece.model from the model repository); external libraries'
 default tokenizers must not be used.
 
-All nodes for the same model_id (Worker / Verifier / Auditor) use the same
+All nodes for the same model_id (Worker / Verifier / SecondVerifier) use the same
 model files, so the tokenizer is fully consistent. Token count differences
 can only come from:
   - Floating-point precision causing generation length differences of 1-2 tokens
@@ -353,7 +353,7 @@ Input tokens follow the same logic:
 | Falsely reporting output_token_count | Verifier | Token count from teacher forcing does not match |
 | Sending fake StreamTokens | Verifier | result_hash does not match |
 | Giving Verifier a tampered prompt | Verifier | SHA256(prompt) != prompt_hash, discarded |
-| Colluding with Verifier | Auditor | Auditors are VRF-randomly selected, perform independent teacher forcing to obtain true counts (see S9.D) |
+| Colluding with Verifier | SecondVerifier | SecondVerifiers are VRF-randomly selected, perform independent teacher forcing to obtain true counts (see S9.D) |
 
 ### 3.6 Protocol Fields
 
@@ -445,7 +445,7 @@ refund = max_fee - actual_fee  // Refund the difference
 SUCCESS:
   worker_reward   = actual_fee × 950 / 1000  (95%)
   verifier_reward = actual_fee × 45 / 1000   (4.5%, split equally among 3 verifiers)
-  audit_fund      = actual_fee × 5 / 1000    (0.5%)
+  multi_verification_fund      = actual_fee × 5 / 1000    (0.5%)
 
   refund_to_user  = max_fee - actual_fee
 ```
@@ -459,7 +459,7 @@ Verification FAIL (Worker output is incorrect):
   fail_fee = fail_base × FailSettlementFeeRatio / 1000  (default 50/1000 = 5%)
 
   verifier_reward = fail_fee × 45 / 1000
-  audit_fund      = fail_fee × 5 / 1000
+  multi_verification_fund      = fail_fee × 5 / 1000
   worker_reward   = 0
   Worker → jail
 
@@ -478,7 +478,7 @@ Worker timeout (InferReceipt not submitted before expire_block):
   Distribution:
     worker_reward    = 0             (Worker gets nothing)
     verifier_reward  = 0             (Verification did not occur)
-    audit_fund      += timeout_fee   (Full amount goes to audit fund, subsidizing network maintenance costs)
+    multi_verification_fund      += timeout_fee   (Full amount goes to multi-verification fund, subsidizing network maintenance costs)
 
   Refund:
     refund_to_user = max_fee - timeout_fee  (= 95%)
@@ -546,7 +546,7 @@ Per-token billing introduces 3 cheating incentives that do not exist in per-requ
 
 At settlement, Worker's self-reported token count vs 3 Verifiers' median is compared. If inconsistent, settle at Verifier count + dishonest_count++. See S9.B Section 3.4 for determination rules.
 
-### 5.2 C2 Defense — Worker+Verifier Pair-Level Tracking + Audit Backstop
+### 5.2 C2 Defense — Worker+Verifier Pair-Level Tracking + Second verification Backstop
 
 #### 5.2.1 Problem
 
@@ -590,10 +590,10 @@ func (k Keeper) updateTokenMismatchPair(ctx sdk.Context, workerAddr string, veri
 
 Determining "deviation": A Verifier's reported count deviates from the confirmed value (median) by more than `token_mismatch_deviation_pct`, and is marked as a mismatch.
 
-#### 5.2.4 Audit Rate Weighting
+#### 5.2.4 Second-Verification Rate Weighting
 
 ```go
-func (k Keeper) calculateWorkerAuditBoost(ctx sdk.Context, workerAddr string) uint32 {
+func (k Keeper) calculateWorkerSecond verificationBoost(ctx sdk.Context, workerAddr string) uint32 {
     pairs := k.GetAllTokenMismatchRecords(ctx, workerAddr)
 
     maxPairRatio := uint32(0)
@@ -608,48 +608,48 @@ func (k Keeper) calculateWorkerAuditBoost(ctx sdk.Context, workerAddr string) ui
     }
 
     if maxPairRatio > 50 {
-        return params.TokenMismatchAuditWeight  // Default 20, maximum weighting
+        return params.TokenMismatchSecond verificationWeight  // Default 20, maximum weighting
     } else if maxPairRatio > 30 {
-        return params.TokenMismatchAuditWeight / 2  // 10, medium weighting
+        return params.TokenMismatchSecond verificationWeight / 2  // 10, medium weighting
     }
     return 0
 }
 ```
 
-Audit rate formula (extending V5.2 Section 13.9):
+Second-verification rate formula (extending V5.2 Section 13.9):
 
 ```
-audit_rate = base_rate × (1 + 10 × recent_audit_overturn_ratio
-                            + 50 × recent_reaudit_overturn
-                            + worker_audit_boost / 10)
+second_verification_rate = base_rate × (1 + 10 × recent_second verification_overturn_ratio
+                            + 50 × recent_third_verification_overturn
+                            + worker_second verification_boost / 10)
 ```
 
-#### 5.2.5 Audit Layer Token Count Comparison
+#### 5.2.5 Second verification Layer Token Count Comparison
 
-Auditors independently perform teacher forcing to obtain the true token count. Audit determination adds token count comparison:
+SecondVerifiers independently perform teacher forcing to obtain the true token count. Second verification determination adds token count comparison:
 
 ```
 if PerTokenBillingEnabled:
     settled_output = output_token_count used at settlement
-    auditor_median_output = median of verified_output_tokens reported by 3 auditors
+    second verifier_median_output = median of verified_output_tokens reported by 3 second verifiers
     tolerance = max(token_count_tolerance, settled_output × token_count_tolerance_pct / 100)
 
-    if |settled_output - auditor_median_output| > tolerance:
+    if |settled_output - second verifier_median_output| > tolerance:
         → Token count fraud determination
         → Worker jail
-        → Verifiers whose reported counts deviate significantly from audit results → direct jail (collusion is deliberate malice, no three-strike chance)
-        → Re-settle based on auditor_median_output, refund excess to user
+        → Verifiers whose reported counts deviate significantly from second verification results → direct jail (collusion is deliberate malice, no three-strike chance)
+        → Re-settle based on second verifier_median_output, refund excess to user
 ```
 
-#### AuditResponse Field Definition
+#### SecondVerificationResponse Field Definition
 
 ```
-AuditResponse {
+SecondVerificationResponse {
     task_id:                bytes32   // Existing
     pass:                   bool      // Existing
-    auditor_addr:           bytes     // Existing
+    second verifier_addr:           bytes     // Existing
     logits_hash:            bytes32   // Existing
-    signature:              bytes65   // Existing (already required to be added in the dispatch audit fix KT)
+    signature:              bytes65   // Existing (already required to be added in the dispatch second verification fix KT)
     verified_input_tokens:  uint32    // New in S9
     verified_output_tokens: uint32    // New in S9
     // Both new fields are covered by the signature
@@ -659,7 +659,7 @@ AuditResponse {
 #### Re-settlement Logic
 
 ```go
-func resettleWithCorrectedTokenCount(apt AuditPendingTask, correctedOutputTokens uint32) {
+func resettleWithCorrectedTokenCount(apt SecondVerificationPendingTask, correctedOutputTokens uint32) {
     originalFee := apt.SettledFee
     correctedFee := uint64(apt.InputTokenCount) * apt.FeePerInputToken +
                     uint64(correctedOutputTokens) * apt.FeePerOutputToken
@@ -708,7 +708,7 @@ Worker falsely reports token count (S9.B Case B):
   dishonesty_count resets to 0 after jail
   Jail progression is shared with verification FAIL: 1st time 10 minutes, 2nd time 1 hour, 3rd time slash 5% + tombstone
 
-Verifier caught colluding by audit:
+Verifier caught colluding by second verification:
   → Direct jail, no three-strike chance (collusion is deliberate malice, not an innocent mistake)
 
 Upon 50 consecutive successes (SuccessResetThreshold):
@@ -771,21 +771,21 @@ Worker completes inference
   │       → Median 800 → settle at 800
   │       → Update pair records: Worker-C mismatch +1 (C is honest but marked as the minority)
   │       → But Worker-A/B pairs are frequently "consistent" with Worker at high numbers
-  │       → Pair-level audit rate increases → audit triggered
+  │       → Pair-level second verification rate increases → second verification triggered
   │
-  └── Audit (if triggered)
-      ├── Auditor ×3 perform teacher forcing
-      │   ├── Auditor A: { verified_output_tokens: 423 }
-      │   ├── Auditor B: { verified_output_tokens: 423 }
-      │   └── Auditor C: { verified_output_tokens: 423 }
+  └── Second verification (if triggered)
+      ├── SecondVerifier ×3 perform teacher forcing
+      │   ├── SecondVerifier A: { verified_output_tokens: 423 }
+      │   ├── SecondVerifier B: { verified_output_tokens: 423 }
+      │   └── SecondVerifier C: { verified_output_tokens: 423 }
       │
-      └── Audit determination
-          ├── settled=800, auditor median=423 → token count fraud
+      └── Second verification determination
+          ├── settled=800, second verifier median=423 → token count fraud
           │   → Worker jail
-          │   → Verifier A/B (reported counts deviate significantly from audit) → direct jail
+          │   → Verifier A/B (reported counts deviate significantly from second verification) → direct jail
           │   → Re-settle: bill at 423, refund difference to user
           │
-          └── settled=423, auditor median=423 → confirmed correct ✅
+          └── settled=423, second verifier median=423 → confirmed correct ✅
 ```
 
 ---
@@ -824,10 +824,10 @@ Users benefit significantly in short-reply scenarios, incentivizing frequent dai
 | token_count_tolerance             | uint32  | 2     | Absolute tolerance allowed for token count comparison                        |
 | token_count_tolerance_pct         | uint32  | 2     | Percentage tolerance allowed for token count comparison (%)                   |
 | dishonesty_jail_threshold         | uint32  | 3     | Number of cumulative false token reports to trigger jail                  |
-| token_mismatch_audit_weight       | uint32  | 20    | Maximum weighting coefficient for pair-level token deviation on audit rate            |
+| token_mismatch_second verification_weight       | uint32  | 20    | Maximum weighting coefficient for pair-level token deviation on second verification rate            |
 | token_mismatch_lookback           | uint32  | 100   | Pair statistics sliding window size (number of entries)                      |
 | token_mismatch_deviation_pct      | uint32  | 20    | Deviation from confirmed value exceeding this percentage counts as mismatch        |
-| token_mismatch_pair_min_samples   | uint32  | 5     | Pair records below this count are excluded from audit rate calculation               |
+| token_mismatch_pair_min_samples   | uint32  | 5     | Pair records below this count are excluded from second verification rate calculation               |
 ```
 
 ### New/Modified Message Fields
@@ -852,11 +852,11 @@ VerifyResult new fields:
 | verified_input_tokens  | uint32 | 8         | Input count confirmed by Verifier teacher forcing   |
 | verified_output_tokens | uint32 | 9         | Output count confirmed by Verifier teacher forcing  |
 
-AuditResponse new fields:
+SecondVerificationResponse new fields:
 | Field                    | Type   | protobuf # | Description                                    |
 |------------------------|--------|-----------|----------------------------------------|
-| verified_input_tokens  | uint32 | 6         | Input count confirmed by auditor teacher forcing      |
-| verified_output_tokens | uint32 | 7         | Output count confirmed by auditor teacher forcing     |
+| verified_input_tokens  | uint32 | 6         | Input count confirmed by second verifier teacher forcing      |
+| verified_output_tokens | uint32 | 7         | Output count confirmed by second verifier teacher forcing     |
 
 SettlementEntry new fields:
 | Field                  | Type   | protobuf # | Description                              |
@@ -892,19 +892,19 @@ Per-Token Settlement:
   PT4: per-token FAIL scenario (deduct actual × 5%, refund remainder)
   PT5: fee_per_input=0 fallback to max_fee
   PT6: uint64 overflow protection
-  PT7: Fee total conservation (user_debit == executor + verifier + audit_fund + refund)
-  PT8: Timeout scenario (deduct max_fee × 5% to audit fund, refund 95%, Worker jail)
+  PT7: Fee total conservation (user_debit == executor + verifier + multi_verification_fund + refund)
+  PT8: Timeout scenario (deduct max_fee × 5% to multi-verification fund, refund 95%, Worker jail)
 
 Anti-Cheating:
   AC1: Worker reports honestly → settle at Worker count
   AC2: Worker falsely reports → settle at Verifier median + dishonest_count++
   AC3: Cumulative 3 false reports → jail
-  AC4: Worker + 2 Verifiers collude → audit overturns + re-settle + refund
+  AC4: Worker + 2 Verifiers collude → second verification overturns + re-settle + refund
   AC5: Difference within tolerance → treated as consistent
   AC6: SuccessStreak resets dishonesty_count
   AC7: per-token disabled skips token count comparison
-  AC8: Pair-level tracking — fixed-partner collusion triggers higher audit rate
-  AC9: Colluding Verifier caught by audit → direct jail (no three strikes)
+  AC8: Pair-level tracking — fixed-partner collusion triggers higher second verification rate
+  AC9: Colluding Verifier caught by second verification → direct jail (no three strikes)
   AC10: Pair statistics sliding window compression
 
 Worker Truncation:
@@ -936,10 +936,10 @@ Shadow Balance:
 | S9.B tolerance | delta <= 2 | max(2, count × 2%) | Tokenizer version differences may exceed 2 |
 | S9.B tokenizer | Unconstrained | Must use model's bundled tokenizer | Ensures consistent counting for same model_id |
 | S9.C distribution | 95/3/1/1 (including burn) | 95/4.5/0.5 (V5.2 original ratios) | per-token only changes billing, not distribution |
-| S9.C FAIL | actual_fee all goes to audit + full refund to user | actual × 5% deducted + refund remainder | Original scheme created funds from nothing |
+| S9.C FAIL | actual_fee all goes to second verification + full refund to user | actual × 5% deducted + refund remainder | Original scheme created funds from nothing |
 | S9.C timeout | Partial settlement based on unverified token count | Deduct max_fee × 5% + refund 95% | No verified token count available, and prevents zero-cost attacks |
 | Anti-cheating stats | None / per-Worker | per-Worker+Verifier pair | per-Worker gets diluted and cannot detect collusion |
-| Anti-cheating Verifier | dishonest_count += 1 | Direct jail when audit discovers collusion | Collusion is deliberate malice |
+| Anti-cheating Verifier | dishonest_count += 1 | Direct jail when second verification discovers collusion | Collusion is deliberate malice |
 | Implementation | Phased (Phase 1/2) | All at once | Changing protocol after decentralized system launch is too painful |
 | EstimateFee | Contains scenario presets + buffer | Pure multiplication, developer sets max_tokens themselves | SDK does not guess scenarios |
 | Protobuf | fee rename not explained | Explicitly stated field #3 is a pure rename, binary compatible | Eliminates ambiguity |

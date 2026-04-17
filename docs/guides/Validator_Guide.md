@@ -69,7 +69,7 @@ block_reward(h) = base_reward × 0.5 ^ floor(h / halving_period)
 | Pool | Share | Distributed by |
 |------|-------|---------------|
 | Inference pool | 99% | Fee contribution (80%) + task count (20%) |
-| Verification pool | 1% | Verification + audit count |
+| Verification pool | 1% | Verification + second verification count |
 
 Validators earn from inference pool if they also perform inference/verification work.
 

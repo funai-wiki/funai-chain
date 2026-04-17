@@ -2,7 +2,7 @@
 
 > Date: 2026-03-31
 >
-> Baseline: commit 59a21cd (C1 BatchSettlement pipeline + C2 audit dispatch + TGI v3 top_n_tokens fix)
+> Baseline: commit 59a21cd (C1 BatchSettlement pipeline + C2 second verification dispatch + TGI v3 top_n_tokens fix)
 >
 > Total: 227 test scenarios (142 existing integration + 85 new)
 >
@@ -41,12 +41,12 @@ Phase 0: Build and smoke test (5 minutes)
     BuildBatch() were written but not wired into the dispatch loop, tasks accumulated in memory
     and were never settled on-chain.
     Now connected via startBatchLoop (5s ticker) -> doBatchSettlement -> BroadcastSettlement.
-  - C2: Audit dispatch same issue -- AuditDispatch returned by ProcessPending is now actually
+  - C2: Second verification dispatch same issue -- Second verificationDispatch returned by ProcessPending is now actually
     sent to P2P.
   - TGI v3 top_n_tokens 256->5 -- TGI 3.3.6 rejects >5, causing teacher forcing to silently
     fail, meaning all Verifier verification was previously non-functional.
   
-  This means all E2E tests before 59a21cd only got as far as verification; settlement and audit
+  This means all E2E tests before 59a21cd only got as far as verification; settlement and second verification
   never actually occurred.
   Phase 0 smoke test must confirm BatchSettlement tx successfully lands on-chain.
 
@@ -84,17 +84,17 @@ File: `x/settlement/keeper/s9_pertoken_test.go`
 | PT4 | TestPerToken_FailBilling | FAIL scenario -> actual x 5% | worker_reward == 0, refund == max_fee - fail_fee |
 | PT5 | TestPerToken_ZeroPriceFallback | fee_per_input=0 -> use per-request | Behavior unchanged |
 | PT6 | TestPerToken_OverflowProtection | fee_per_output = MaxUint64/2, count=3 | Overflow -> caps at max_fee |
-| PT7 | TestPerToken_FeeConservation | 1M random parameters | sum(worker+verifier+audit+refund) == sum(user_debit) deviation == 0 |
-| PT8 | TestPerToken_TimeoutFee | Worker timeout | Charge 5% to audit_fund, refund 95%, worker jail |
+| PT7 | TestPerToken_FeeConservation | 1M random parameters | sum(worker+verifier+second verification+refund) == sum(user_debit) deviation == 0 |
+| PT8 | TestPerToken_TimeoutFee | Worker timeout | Charge 5% to multi_verification_fund, refund 95%, worker jail |
 | AC1 | TestAntiCheat_HonestWorker | Worker reports 423, Verifier x3 report 423 | settled == 423 |
 | AC2 | TestAntiCheat_WorkerOverreport | Worker reports 800, Verifier median 423 | settled == 423, dishonest_count == 1 |
 | AC3 | TestAntiCheat_ThreeStrikesJail | 3 over-reports | Worker jailed |
-| AC4 | TestAntiCheat_CollusionAudit | Worker+2 Verifiers collude -> audit overturns | Re-settlement + refund + colluding Verifiers direct jail |
+| AC4 | TestAntiCheat_CollusionSecond verification | Worker+2 Verifiers collude -> second verification overturns | Re-settlement + refund + colluding Verifiers direct jail |
 | AC5 | TestAntiCheat_WithinTolerance | Worker reports 425, Verifier reports 423 | diff=2 <= tolerance -> settled == 425 |
 | AC6 | TestAntiCheat_StreakReset | 50 consecutive successes | dishonest_count resets to 0 |
 | AC7 | TestAntiCheat_DisabledNoCheck | PerTokenBillingEnabled=false | No token count comparison |
-| AC8 | TestAntiCheat_PairTracking | Same pair 8/10 deviations | Audit rate boost triggered |
-| AC9 | TestAntiCheat_VerifierDirectJail | Audit discovers Verifier collusion | Verifier direct jail (doesn't wait for 3 strikes) |
+| AC8 | TestAntiCheat_PairTracking | Same pair 8/10 deviations | Second-verification rate boost triggered |
+| AC9 | TestAntiCheat_VerifierDirectJail | Second verification discovers Verifier collusion | Verifier direct jail (doesn't wait for 3 strikes) |
 | TR4 | TestTruncation_MinBudget | max_fee=1 | At least generates 1 output token |
 
 ### L1-C: Economic Layer + Edge Cases + Batch Pipeline Tests (23, need to be added)
@@ -116,7 +116,7 @@ File: `x/settlement/keeper/economic_test.go`
 | E11 | TestVerifierInsufficient_0 | 0 Verifiers (all Workers are busy) | Task times out, follows timeout flow (charge 5% + jail Worker), doesn't deadlock |
 | E12 | TestExpireBlockTooShort | expire_block only 20 blocks (100 seconds), inference takes 60 seconds | If Worker completes normally it's not a timeout; if not, follows timeout flow; should not incorrectly jail |
 | E13 | TestDoubleSettlement | Same task_id submitted in two different batches | Entry in second batch skipped by SettledTask deduplication |
-| E14 | TestVerifierAllReturnZero | All 3 Verifiers' verified_output_tokens are 0 (TGI error) | medianUint32 returns 0 -> settles at 0 tokens -> actual_fee=input_cost only -> should not let Worker work for free at 0 tokens (need protection: when all Verifiers return 0, fallback to per-request or trigger audit) |
+| E14 | TestVerifierAllReturnZero | All 3 Verifiers' verified_output_tokens are 0 (TGI error) | medianUint32 returns 0 -> settles at 0 tokens -> actual_fee=input_cost only -> should not let Worker work for free at 0 tokens (need protection: when all Verifiers return 0, fallback to per-request or trigger second verification) |
 | E15 | TestEpochBoundary_ProposerRotation | Epoch transition + Proposer rotation happen simultaneously | Both settlement authority and reward attribution are correct |
 | E16 | TestBlockTimeVariance | Block time varies 3-8 seconds (not fixed 5 seconds) | Block-count-based timeout calculation still reasonable (expire_block tolerance sufficient) |
 | E17 | TestBatchGasLimit | Gas consumption of BatchSettlement with 10K entries | gas < block gas limit (default 100M gas), won't be rejected |
@@ -125,9 +125,9 @@ File: `x/settlement/keeper/economic_test.go`
 | E20 | TestBatchLoop_BroadcastFail | BatchSettlement broadcast failure | Entries retained in Proposer queue (not lost), retried on next tick |
 | E21 | TestBatchLoop_SequenceReset | sequence mismatch -> reset -> succeeds next time | First attempt fails + reset, second tick succeeds with new sequence |
 | E22 | TestBatchLoop_GasEstimate | Gas calculation for 1K/5K/10K entries | 200000 + len*2000 doesn't exceed block gas limit. Per-token settlement is more complex than per-request, observe whether actual gas exceeds estimate |
-| E23 | TestBatchLoop_AuditDispatch | ProcessPending returns AuditDispatch | doBatchSettlement correctly sends to settlement topic |
+| E23 | TestBatchLoop_Second verificationDispatch | ProcessPending returns Second verificationDispatch | doBatchSettlement correctly sends to settlement topic |
 
-> **E14 is especially important:** If all Verifiers return 0 (TGI crash or tokenizer error), the current medianUint32 returns 0, causing actual_fee to contain only input_cost, meaning the Worker completed full inference but earns almost no income. This is a design blind spot -- the test should verify current behavior, and if the behavior is unreasonable, protection logic should be added (e.g., fallback to per-request when all Verifiers return 0, or force audit).
+> **E14 is especially important:** If all Verifiers return 0 (TGI crash or tokenizer error), the current medianUint32 returns 0, causing actual_fee to contain only input_cost, meaning the Worker completed full inference but earns almost no income. This is a design blind spot -- the test should verify current behavior, and if the behavior is unreasonable, protection logic should be added (e.g., fallback to per-request when all Verifiers return 0, or force second verification).
 
 ### L1 Execution Commands
 
@@ -245,7 +245,7 @@ File: `p2p/security_test.go` + `x/settlement/keeper/security_test.go`
 
 | ID | Test Name | Attack Method | Expected Result |
 |----|--------|---------|---------|
-| S1 | TestForgedAuditResponse | Construct AuditResponse, sign with wrong private key | handleAuditResponse rejects, log "reject.*invalid signature" |
+| S1 | TestForgedSecondVerificationResponse | Construct SecondVerificationResponse, sign with wrong private key | handleSecondVerificationResponse rejects, log "reject.*invalid signature" |
 | S2 | TestReplayAttack | Resubmit BatchSettlement with same task_id | Second submission rejected by SettledTask deduplication |
 | S3 | TestCrossDenomAttack | Deposit uatom, settle inference with ufai | ValidateBasic rejects, returns "invalid denom" |
 | S4 | TestMaliciousLeaderAssignTask | Leader tampers with AssignTask's prompt_hash | Worker signature verification fails, refuses to execute |
@@ -275,7 +275,7 @@ go test ./x/settlement/keeper/... -v -run 'TestOverflow|TestBalanceDrain|TestUna
 | R4 | BatchSettlement large batch | 10K / 50K / 125K entries | Processing time | < 5 seconds (block time) |
 | R5 | Concurrent inference throughput | 1 / 10 / 100 / 1000 req/s | Leader processing latency | p99 < 500ms |
 | R6 | On-chain state growth | Run 1M settlements | DB size | < 10 GB |
-| R7 | Pair tracking query | 10000 pair records | calculateWorkerAuditBoost time | < 10ms |
+| R7 | Pair tracking query | 10000 pair records | calculateWorkerSecond verificationBoost time | < 10ms |
 
 ### R4 BatchSettlement Stress Test Script
 
@@ -520,7 +520,7 @@ echo "G9: check Worker did not hang"
 |------|------|---------|--------|
 | `x/settlement/keeper/s9_pertoken_test.go` | PT1-8 + AC1-10 + TR4 | ~400 lines | P0 |
 | `x/settlement/keeper/economic_test.go` | E1-E18 economic conservation, boundaries, insufficient Verifiers, timeout boundaries, double settlement | ~500 lines | P0 |
-| `p2p/dispatch_batch_test.go` | E19-E23 Batch pipeline (empty batch, broadcast failure, sequence reset, gas estimation, audit dispatch) | ~200 lines | P0 |
+| `p2p/dispatch_batch_test.go` | E19-E23 Batch pipeline (empty batch, broadcast failure, sequence reset, gas estimation, second verification dispatch) | ~200 lines | P0 |
 | `p2p/security_test.go` | S1-S5 forged message defense | ~200 lines | P0 |
 | `x/settlement/keeper/security_test.go` | S6-S10 on-chain security (S6 uses stake comparison method) | ~200 lines | P0 |
 | `p2p/privacy_test.go` | P1-P7 encryption and keys (P1 uses code-level hook verification) | ~200 lines | P1 |

@@ -2,7 +2,7 @@
 
 > Based on the `FunAI_V52_Final.md` spec and code implementation design
 > V3 revision: Added 20 edge/exception cases + 1 new partition (V) on top of V2 (117 cases), strengthened 4 existing cases
-> Roles covered: User, Worker, Verifier, Auditor, Leader, Proposer, Validator
+> Roles covered: User, Worker, Verifier, SecondVerifier, Leader, Proposer, Validator
 > Modules covered: x/settlement, x/worker, x/modelreg, x/vrf, x/reward, p2p/types
 
 ---
@@ -12,9 +12,9 @@
 | Role | On-Chain Module | Off-Chain (P2P) | Core Responsibility |
 |------|---------|-----------|---------|
 | User | settlement (deposit/withdraw) | InferRequest (signed request) | Initiate inference, pay fees |
-| Worker | worker (registration/staking/jail) | InferReceipt (inference proof) | Execute inference, be verified/audited |
+| Worker | worker (registration/staking/jail) | InferReceipt (inference proof) | Execute inference, be verified/second verificationed |
 | Verifier | settlement (verification count) | VerifyResult (verification result) | Teacher forcing verification |
-| Auditor | settlement (audit judgment) | AuditResponse (audit result) | Random re-examination |
+| SecondVerifier | settlement (second verification judgment) | SecondVerificationResponse (second verification result) | Random re-examination |
 | Leader | vrf (election/heartbeat) | AssignTask (dispatch) | Per-model dispatch scheduling |
 | Proposer | settlement (batch packaging) | — | Package settlement transactions |
 | Validator | vrf (committee) | — | Consensus signing and block production |
@@ -29,20 +29,20 @@
 | B | Worker jail/streak triggered via settlement | 2 | Worker, Proposer | x/settlement → x/worker |
 | C | Settlement (Proposer) Normal Flow | **8** | User, Worker, Verifier, Proposer | x/settlement |
 | D | Settlement Exception Flow | **11** | User, Worker, Proposer | x/settlement |
-| E | Audit (Auditor) Judgment | **9** | Auditor, Worker, Verifier | x/settlement |
-| F | Re-audit Four-Quadrant Judgment | **5** | Auditor, Worker, Verifier | x/settlement |
-| G | Audit/Re-audit Timeout | **4** | Auditor | x/settlement |
+| E | Second verification (SecondVerifier) Judgment | **9** | SecondVerifier, Worker, Verifier | x/settlement |
+| F | Re-second verification Four-Quadrant Judgment | **5** | SecondVerifier, Worker, Verifier | x/settlement |
+| G | Second verification/Re-second verification Timeout | **4** | SecondVerifier | x/settlement |
 | H | FraudProof | **5** | User, Worker | x/settlement |
-| I | Block Reward Contribution Counting | 3 | Verifier, Auditor, Worker | x/settlement, x/reward |
-| J | Dynamic Audit Rate | **5** | — | x/settlement |
-| K | Audit Fund Distribution | 2 | Auditor | x/settlement |
+| I | Block Reward Contribution Counting | 3 | Verifier, SecondVerifier, Worker | x/settlement, x/reward |
+| J | Dynamic Second-Verification Rate | **5** | — | x/settlement |
+| K | Second verification Fund Distribution | 2 | SecondVerifier | x/settlement |
 | L | Overspend Protection | **3** | User | x/settlement |
 | M | Task Cleanup | 1 | — | x/settlement |
 | N | End-to-End Full Pipeline (Settlement Module) | 4 | User, Worker, Verifier, Proposer, Validator | x/settlement |
 | O | Parameter Validation | 5 | — | x/settlement |
 | P | Model Registry Lifecycle | 14 | Worker, Proposer | x/modelreg |
-| Q | VRF Election | **15** | Leader, Worker, Verifier, Auditor, Validator | x/vrf |
-| R | P2P Inference Message Structure | 8 | User, Worker, Verifier, Auditor, Leader | p2p/types |
+| Q | VRF Election | **15** | Leader, Worker, Verifier, SecondVerifier, Validator | x/vrf |
+| R | P2P Inference Message Structure | 8 | User, Worker, Verifier, SecondVerifier, Leader | p2p/types |
 | S | Worker Full Lifecycle | **13** | Worker | x/worker |
 | T | Inference End-to-End (Cross-Module Integration) | **10** | All roles | Cross-module |
 | U | Multi-Node E2E (Real Nodes + CLI) | 5 | All roles | Cross-module |
@@ -89,9 +89,9 @@
 
 **Test objective**: Verify ProcessBatchSettlement normal fee deduction logic, fee distribution ratios, EpochStats, and BatchRecord.
 
-**Spec reference**: §11 Fee Distribution (SUCCESS: 95% Worker + 4.5% Verifier + 0.5% AuditFund; FAIL: 5% total charge), §12 Settlement flow.
+**Spec reference**: §11 Fee Distribution (SUCCESS: 95% Worker + 4.5% Verifier + 0.5% MultiVerificationFund; FAIL: 5% total charge), §12 Settlement flow.
 
-**Precondition**: setupWithDeposit(user, 100000 FAI), audit_rate=0.
+**Precondition**: setupWithDeposit(user, 100000 FAI), second_verification_rate=0.
 
 | ID | Test Name | Description | Precondition | Test Steps | Expected Result | Spec Clause |
 |------|--------|------|---------|---------|---------|-----------|
@@ -100,13 +100,13 @@
 | C3 | TestSettle_C3_MixedBatch | Mixed SUCCESS + FAIL | Deposit | 5 SUCCESS + 2 FAIL | balance = deposit - 5×fee - 2×(fee×5%) streak=5, jail=2 | §11.1, §11.2 |
 | C4 | TestSettle_C4_EpochStats | EpochStats correctly updated | Deposit | 8 SUCCESS + 2 FAIL | TotalSettled=10, FailSettled=2 | §12 |
 | C5 | TestSettle_C5_BatchRecord | BatchRecord correctly stored | Deposit | 3 SUCCESS entries | ResultCount=3, Proposer address correct | §12 |
-| C6 | TestSettle_C6_FeeDistribution_Exact | SUCCESS fee exact distribution verification | Deposit | 1 SUCCESS entry, fee=100000 ufai | Worker receives 95000, Verifier×3 receive 4500 total (1500 each), AuditFund increases by 500. **Additional assertion: user_debit == executor + verifiers + audit_fund** | §11.1 |
+| C6 | TestSettle_C6_FeeDistribution_Exact | SUCCESS fee exact distribution verification | Deposit | 1 SUCCESS entry, fee=100000 ufai | Worker receives 95000, Verifier×3 receive 4500 total (1500 each), MultiVerificationFund increases by 500. **Additional assertion: user_debit == executor + verifiers + multi_verification_fund** | §11.1 |
 | **C7** | **TestSettle_C7_DustFee_VerifierRemainder** | **Dust distribution with tiny fee** | Deposit | 1 SUCCESS entry, fee=10 ufai, 3 verifiers | **verifier_total = 10×45/1000=0 ufai; executor = 10-0-0 = 10 ufai. Verify no panic, amount conservation holds** | §11.1 boundary |
 | **C8** | **TestSettle_C8_SingleEntryBatch** | **Single-entry batch** | Deposit | 1 SUCCESS entry, batch size=1 | **Merkle tree single leaf node correct, ResultCount=1, BatchRecord correct** | §12 |
 
 > **New C7**: Economic conservation still holds when division truncation causes verifier allocation to be 0 with tiny amounts.
 > **New C8**: Single-entry batch is a merkle tree boundary (only 1 leaf).
-> **Strengthened C6**: Added `user_debit == executor + verifiers + audit_fund` total conservation assertion.
+> **Strengthened C6**: Added `user_debit == executor + verifiers + multi_verification_fund` total conservation assertion.
 
 ---
 
@@ -136,77 +136,77 @@
 
 ---
 
-### E. Audit (Auditor) Judgment
+### E. Second verification (SecondVerifier) Judgment
 
-**Test objective**: Verify audit result confirmation/reversal logic against original verification results, including majority decision and abnormal inputs.
+**Test objective**: Verify second verification result confirmation/reversal logic against original verification results, including majority decision and abnormal inputs.
 
-**Spec reference**: §13.6 Four audit judgment outcomes.
+**Spec reference**: §13.6 Four second verification judgment outcomes.
 
 ```
-              Audit Result
+              Second verification Result
               PASS         FAIL
 Original   SUCCESS   Confirm(CLEARED)   Overturn(FAILED) → Worker+PASS verifiers jail
 Result     FAIL      Overturn(SETTLED)   Confirm(FAIL_SETTLED) → Worker jail
 ```
 
-**Precondition**: setupWithDeposit, reaudit_rate=0, AuditPendingTask set up.
+**Precondition**: setupWithDeposit, third_verification_rate=0, SecondVerificationPendingTask set up.
 
-| ID | Test Name | Description | Original State | Audit Result | Expected Result | Spec Clause |
+| ID | Test Name | Description | Original State | Second verification Result | Expected Result | Spec Clause |
 |------|--------|------|---------|---------|---------|-----------|
-| E1 | TestAudit_E1_SuccessAuditPass | Confirm SUCCESS | SUCCESS | 3×PASS | TaskSettled, streak+1 | §13.6 Quadrant 1 |
-| E2 | TestAudit_E2_SuccessAuditFail_Overturn | Overturn SUCCESS→FAIL | SUCCESS | 3×FAIL | TaskFailed, Worker jail, PASS verifiers jail | §13.6 Quadrant 2 |
-| E3 | TestAudit_E3_FailAuditPass_Overturn | Overturn FAIL→SUCCESS | FAIL | 3×PASS | TaskSettled, FAIL verifiers jail | §13.6 Quadrant 3 |
-| E4 | TestAudit_E4_FailAuditFail_Confirm | Confirm FAIL | FAIL | 3×FAIL | TaskFailSettled, Worker jail | §13.6 Quadrant 4 |
-| E5 | TestAudit_E5_InsufficientResults | Insufficient audit results | SUCCESS | Only 2 submitted | Remains pending, judgment not triggered | §13.3 Requires 3 results |
-| E6 | TestAudit_E6_AuditorIsOriginalVerifier | Auditor = original verifier | SUCCESS | verifier1 submits audit | Rejected, returns error | §13.3 Exclusion rule |
-| E7 | TestAudit_E7_MajorityDecision_2Pass1Fail | Majority decision 2:1 | SUCCESS | 2×PASS + 1×FAIL | Majority PASS → CLEARED (confirms SUCCESS) | §13.6 Majority decision |
-| **E8** | **TestAudit_E8_ResultAfterTimeout** | **Audit result submitted after timeout** | SUCCESS | 3×PASS submitted after AuditTimeout expires | **Rejected, pending already removed, returns ErrAuditNotPending** | §13.7 No action after timeout |
-| **E9** | **TestAudit_E9_DuplicateAuditorSubmission** | **Same auditor submits twice** | SUCCESS | auditor1 submits PASS twice | **Second submission rejected, only counted once** | §13.3 Deduplication |
+| E1 | TestSecond verification_E1_SuccessSecond verificationPass | Confirm SUCCESS | SUCCESS | 3×PASS | TaskSettled, streak+1 | §13.6 Quadrant 1 |
+| E2 | TestSecond verification_E2_SuccessSecond verificationFail_Overturn | Overturn SUCCESS→FAIL | SUCCESS | 3×FAIL | TaskFailed, Worker jail, PASS verifiers jail | §13.6 Quadrant 2 |
+| E3 | TestSecond verification_E3_FailSecond verificationPass_Overturn | Overturn FAIL→SUCCESS | FAIL | 3×PASS | TaskSettled, FAIL verifiers jail | §13.6 Quadrant 3 |
+| E4 | TestSecond verification_E4_FailSecond verificationFail_Confirm | Confirm FAIL | FAIL | 3×FAIL | TaskFailSettled, Worker jail | §13.6 Quadrant 4 |
+| E5 | TestSecond verification_E5_InsufficientResults | Insufficient second verification results | SUCCESS | Only 2 submitted | Remains pending, judgment not triggered | §13.3 Requires 3 results |
+| E6 | TestSecond verification_E6_SecondVerifierIsOriginalVerifier | SecondVerifier = original verifier | SUCCESS | verifier1 submits second verification | Rejected, returns error | §13.3 Exclusion rule |
+| E7 | TestSecond verification_E7_MajorityDecision_2Pass1Fail | Majority decision 2:1 | SUCCESS | 2×PASS + 1×FAIL | Majority PASS → CLEARED (confirms SUCCESS) | §13.6 Majority decision |
+| **E8** | **TestSecond verification_E8_ResultAfterTimeout** | **Second verification result submitted after timeout** | SUCCESS | 3×PASS submitted after SecondVerificationTimeout expires | **Rejected, pending already removed, returns ErrSecond verificationNotPending** | §13.7 No action after timeout |
+| **E9** | **TestSecond verification_E9_DuplicateSecondVerifierSubmission** | **Same second verifier submits twice** | SUCCESS | second verifier1 submits PASS twice | **Second submission rejected, only counted once** | §13.3 Deduplication |
 
-> **New E8**: G1 tests timeout cleanup, but doesn't test whether audit results arriving after timeout are correctly rejected. This is a timing race scenario.
-> **New E9**: Same auditor submitting multiple times for the same task could cause vote counting errors or reward overpayment.
+> **New E8**: G1 tests timeout cleanup, but doesn't test whether second verification results arriving after timeout are correctly rejected. This is a timing race scenario.
+> **New E9**: Same second verifier submitting multiple times for the same task could cause vote counting errors or reward overpayment.
 
 ---
 
-### F. Re-audit Four-Quadrant Judgment
+### F. Re-second verification Four-Quadrant Judgment
 
-**Test objective**: Verify re-audit confirmation/reversal logic against original audit results, and majority decision.
+**Test objective**: Verify third-verification confirmation/reversal logic against original second verification results, and majority decision.
 
-**Spec reference**: §14.2 Four re-audit judgment outcomes.
+**Spec reference**: §14.2 Four third-verification judgment outcomes.
 
 ```
-                Re-audit Result
+                Re-second verification Result
                 PASS               FAIL
-Original   Audit PASS   Confirm→settle per original verification    Overturn→FAILED + original PASS auditors jail
-Audit      Audit FAIL   Overturn→settle per original verification + original FAIL auditors jail    Confirm→maintain audit judgment
+Original   Second verification PASS   Confirm→settle per original verification    Overturn→FAILED + original PASS second verifiers jail
+Second verification      Second verification FAIL   Overturn→settle per original verification + original FAIL second verifiers jail    Confirm→maintain second verification judgment
 ```
 
-**Precondition**: setupWithDeposit, reaudit_rate=0, AuditPendingTask with IsReaudit=true + AuditRecord set up.
+**Precondition**: setupWithDeposit, third_verification_rate=0, SecondVerificationPendingTask with IsThird verification=true + SecondVerificationRecord set up.
 
-| ID | Test Name | Description | Original Audit | Re-audit Result | Expected Result | Spec Clause |
+| ID | Test Name | Description | Original Second verification | Re-second verification Result | Expected Result | Spec Clause |
 |------|--------|------|---------|---------|---------|-----------|
-| F1 | TestReaudit_F1_AuditPassReauditPass | Confirm audit PASS | PASS | 3×PASS | TaskSettled | §14.2 Quadrant 1 |
-| F2 | TestReaudit_F2_AuditPassReauditFail | Overturn audit PASS | PASS | 3×FAIL | TaskFailed + auditors+Worker+verifiers jail | §14.2 Quadrant 2 |
-| F3 | TestReaudit_F3_AuditFailReauditPass | Overturn audit FAIL | FAIL | 3×PASS | TaskSettled + original FAIL auditors jail | §14.2 Quadrant 3 |
-| F4 | TestReaudit_F4_AuditFailReauditFail | Confirm audit FAIL | FAIL | 3×FAIL | TaskFailed + Worker jail | §14.2 Quadrant 4 |
-| **F5** | **TestReaudit_F5_MajorityDecision_2Pass1Fail** | **Re-audit majority decision 2:1** | FAIL | **2×PASS + 1×FAIL** | **Majority PASS → overturn audit FAIL → TaskSettled + original FAIL auditors jail** | §14.2 Majority decision |
+| F1 | TestThird verification_F1_Second verificationPassThird verificationPass | Confirm second verification PASS | PASS | 3×PASS | TaskSettled | §14.2 Quadrant 1 |
+| F2 | TestThird verification_F2_Second verificationPassThird verificationFail | Overturn second verification PASS | PASS | 3×FAIL | TaskFailed + second verifiers+Worker+verifiers jail | §14.2 Quadrant 2 |
+| F3 | TestThird verification_F3_Second verificationFailThird verificationPass | Overturn second verification FAIL | FAIL | 3×PASS | TaskSettled + original FAIL second verifiers jail | §14.2 Quadrant 3 |
+| F4 | TestThird verification_F4_Second verificationFailThird verificationFail | Confirm second verification FAIL | FAIL | 3×FAIL | TaskFailed + Worker jail | §14.2 Quadrant 4 |
+| **F5** | **TestThird verification_F5_MajorityDecision_2Pass1Fail** | **Re-second verification majority decision 2:1** | FAIL | **2×PASS + 1×FAIL** | **Majority PASS → overturn second verification FAIL → TaskSettled + original FAIL second verifiers jail** | §14.2 Majority decision |
 
-> **New F5**: E7 covers audit majority decision but F1-F4 are all unanimous votes; re-audit also has majority decision logic that needs coverage.
+> **New F5**: E7 covers second verification majority decision but F1-F4 are all unanimous votes; third-verification also has majority decision logic that needs coverage.
 
 ---
 
-### G. Audit/Re-audit Timeout
+### G. Second verification/Re-second verification Timeout
 
 **Test objective**: Verify that original result takes effect after timeout, pending cleanup, and precise boundaries.
 
-**Spec reference**: §13.7 Audit timeout (12h/8640 blocks), §14.3 Re-audit timeout (24h/17280 blocks).
+**Spec reference**: §13.7 Second verification timeout (12h/8640 blocks), §14.3 Re-second verification timeout (24h/17280 blocks).
 
 | ID | Test Name | Description | Precondition | Test Steps | Expected Result | Spec Clause |
 |------|--------|------|---------|---------|---------|-----------|
-| G1 | TestTimeout_G1_AuditTimeout_OriginalSuccess | Audit timeout (original SUCCESS) | AuditTimeout=10, submitted=1 | blockHeight=15 | Original SUCCESS takes effect, pending removed | §13.7 |
-| G2 | TestTimeout_G2_AuditTimeout_OriginalFail | Audit timeout (original FAIL) | AuditTimeout=10, submitted=1 | blockHeight=15 | Original FAIL takes effect, pending removed | §13.7 |
-| G3 | TestTimeout_G3_ReauditTimeout | Re-audit timeout | ReauditTimeout=20, submitted=1 | blockHeight=25 | Original audit result takes effect, pending removed | §14.3 |
-| **G4** | **TestTimeout_G4_ExactBoundary** | **Precise timeout boundary** | AuditTimeout=10, submitted=1 | **1. height=10: HandleAuditTimeouts → 0 (not timed out) 2. height=11: HandleAuditTimeouts → 1 (just timed out)** | **height=submitted+timeout is the precise boundary** | §13.7 boundary |
+| G1 | TestTimeout_G1_SecondVerificationTimeout_OriginalSuccess | Second verification timeout (original SUCCESS) | SecondVerificationTimeout=10, submitted=1 | blockHeight=15 | Original SUCCESS takes effect, pending removed | §13.7 |
+| G2 | TestTimeout_G2_SecondVerificationTimeout_OriginalFail | Second verification timeout (original FAIL) | SecondVerificationTimeout=10, submitted=1 | blockHeight=15 | Original FAIL takes effect, pending removed | §13.7 |
+| G3 | TestTimeout_G3_Third verificationTimeout | Re-second verification timeout | Third verificationTimeout=20, submitted=1 | blockHeight=25 | Original second verification result takes effect, pending removed | §14.3 |
+| **G4** | **TestTimeout_G4_ExactBoundary** | **Precise timeout boundary** | SecondVerificationTimeout=10, submitted=1 | **1. height=10: HandleSecondVerificationTimeouts → 0 (not timed out) 2. height=11: HandleSecondVerificationTimeouts → 1 (just timed out)** | **height=submitted+timeout is the precise boundary** | §13.7 boundary |
 
 > **New G4**: G1 uses height=15 which is far beyond the timeout point, does not test the precise boundary at submitted+timeout.
 
@@ -224,9 +224,9 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 | H2 | TestFraud_H2_AfterSettlement | FraudProof arrives after | Settlement before fraud | 1. ProcessBatchSettlement 2. ProcessFraudProof | State changes to FRAUD, Worker slashed, 95% executor fee clawed back | §15.2 |
 | H3 | TestFraud_H3_DuplicateFraudProof | Duplicate FraudProof | — | Same task_id submitted twice | Second one rejected | §15 |
 | H4 | TestFraud_H4_InvalidWorkerSig | FraudProof with invalid Worker signature | — | Submit FraudProof with forged WorkerContentSig | Rejected, Worker not slashed | §15 signature verification |
-| **H5** | **TestFraud_H5_FraudOnPendingAuditTask** | **FraudProof submitted for task under audit** | Audit in progress | 1. Batch settlement triggers audit (PENDING_AUDIT) 2. Submit FraudProof for same task | **FRAUD marking overrides audit state, pending cleared, Worker slashed** | §15 vs §13 priority |
+| **H5** | **TestFraud_H5_FraudOnPendingSecond verificationTask** | **FraudProof submitted for task under second verification** | Second verification in progress | 1. Batch settlement triggers second verification (PENDING_AUDIT) 2. Submit FraudProof for same task | **FRAUD marking overrides second verification state, pending cleared, Worker slashed** | §15 vs §13 priority |
 
-> **New H5**: Timing race between FraudProof and audit. Fraud should take priority over audit (conclusive evidence vs random re-examination), but V2 did not cover this.
+> **New H5**: Timing race between FraudProof and second verification. Fraud should take priority over second verification (conclusive evidence vs random re-examination), but V2 did not cover this.
 
 ---
 
@@ -236,25 +236,25 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 
 ---
 
-### J. Dynamic Audit Rate
+### J. Dynamic Second-Verification Rate
 
-**Test objective**: Verify dynamic calculation formula and boundary protection for audit rate and re-audit rate.
+**Test objective**: Verify dynamic calculation formula and boundary protection for second verification rate and third-verification rate.
 
-**Spec reference**: §13.5 audit_rate = base × (1 + 10 × fail_ratio), clamped to [min, max].
+**Spec reference**: §13.5 second_verification_rate = base × (1 + 10 × fail_ratio), clamped to [min, max].
 
 | ID | Test Name | Description | Input | Expected Rate | Spec Clause |
 |------|--------|------|------|----------|-----------|
-| J1 | TestAuditRate_J1_Normal | 0% failure rate | total=1000, fail=0 | 100 (10%) | §13.5 base=100 |
-| J2 | TestAuditRate_J2_HighFailRate | 10% failure rate | total=100, fail=10 | 200 (20%) = 100×(1+10×0.1) | §13.5 |
-| J3 | TestAuditRate_J3_ClampMax | 50% failure rate | total=100, fail=50 | 300 (30%, max clamped) | §13.5 AuditRateMax=300 |
-| J4 | TestAuditRate_J4_ReauditNormal | 0% overturn rate | audit_total=100, overturn=0 | 10 (1%) | §14.1 ReauditBaseRate=10 |
-| **J5** | **TestAuditRate_J5_ZeroTotalTasks** | **Zero tasks division-by-zero protection** | **total=0, fail=0** | **100 (base rate, no division-by-zero panic)** | §13.5 division-by-zero protection |
+| J1 | TestSecondVerificationRate_J1_Normal | 0% failure rate | total=1000, fail=0 | 100 (10%) | §13.5 base=100 |
+| J2 | TestSecondVerificationRate_J2_HighFailRate | 10% failure rate | total=100, fail=10 | 200 (20%) = 100×(1+10×0.1) | §13.5 |
+| J3 | TestSecondVerificationRate_J3_ClampMax | 50% failure rate | total=100, fail=50 | 300 (30%, max clamped) | §13.5 SecondVerificationRateMax=300 |
+| J4 | TestSecondVerificationRate_J4_Third verificationNormal | 0% overturn rate | second verification_total=100, overturn=0 | 10 (1%) | §14.1 Third verificationBaseRate=10 |
+| **J5** | **TestSecondVerificationRate_J5_ZeroTotalTasks** | **Zero tasks division-by-zero protection** | **total=0, fail=0** | **100 (base rate, no division-by-zero panic)** | §13.5 division-by-zero protection |
 
 > **New J5**: In the first epoch or idle epoch where total=0, `fail_ratio = fail/total` would divide by zero. This is a P1 security issue.
 
 ---
 
-### K. Audit Fund Distribution
+### K. Second verification Fund Distribution
 
 (Unchanged from V2, K1-K2 total 2 cases)
 
@@ -309,13 +309,13 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 |------|--------|------|------|---------|-----------|
 | Q1 | TestVRF_Q1_Deterministic | Same input produces same score | Same seed+pubkey+stake+alpha | score1 == score2 | §6.1 |
 | Q2 | TestVRF_Q2_AlphaDispatch_StakeWeighted | α=1.0 higher stake produces lower score | stake=1000 vs 100000 | scoreLarge < scoreSmall | §6.1 |
-| Q3 | TestVRF_Q3_AlphaAudit_StakeIgnored | α=0.0 stake has no effect | Different stakes, α=0.0 | Scores are identical | §6.1 |
+| Q3 | TestVRF_Q3_AlphaSecond verification_StakeIgnored | α=0.0 stake has no effect | Different stakes, α=0.0 | Scores are identical | §6.1 |
 | Q4 | TestVRF_Q4_AlphaVerification_SqrtWeight | α=0.5 between the two extremes | Compare dispatch ratio vs verification ratio | dispatch separation > verification separation | §6.1 |
 | Q5 | TestVRF_Q5_SelectLeader_Normal | Normal election | Register 3 Workers | Returns leader addr, LeaderInfo written | §6.2 |
 | Q6 | TestVRF_Q6_SelectLeader_NoWorkers | No available Workers | Empty list | Returns ErrNoEligibleWorkers | §6.2 |
 | Q7 | TestVRF_Q7_SelectWorkerForTask | Select inference Worker | Register online Workers | Returns Worker with lowest score, α=1.0 | §6.2 |
 | Q8 | TestVRF_Q8_SelectVerifiers_ExcludeExecutor | Select verifiers | Register 5 Workers, 1 is executor | Returns 3, does not include executor, α=0.5 | §9.1 |
-| Q9 | TestVRF_Q9_SelectAuditors_ExcludeAll | Select auditors | Register 10 Workers, exclude Worker+3 Verifiers | Returns 3, does not include Worker and Verifiers, α=0.0 | §13.3 |
+| Q9 | TestVRF_Q9_SelectSecondVerifiers_ExcludeAll | Select second verifiers | Register 10 Workers, exclude Worker+3 Verifiers | Returns 3, does not include Worker and Verifiers, α=0.0 | §13.3 |
 | Q10 | TestVRF_Q10_CommitteeRotation | Committee rotation | Initial committee | New committee generated after CommitteeRotation period | §6.2 |
 | Q11 | TestVRF_Q11_LeaderHeartbeatTimeout | Leader heartbeat timeout | LeaderInfo.LastHeartbeat expired | Triggers re-election | §6.2 |
 | Q12 | TestVRF_Q12_RankWorkers_TieBreaking | Ranking tie-breaking | Construct two Workers with same score | By address lexicographic order (deterministic) | §6.1 |
@@ -361,14 +361,14 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 
 | ID | Test Name | Description | Modules Involved | Verification Points | Spec Clause |
 |------|--------|------|---------|---------|-----------|
-| T1 | TestInferE2E_T1_FullSuccessPath | Full success path (no audit) | modelreg→vrf→settlement | Model ACTIVE, VRF selects Worker, fee distribution exact, BatchRecord + EpochStats intermediate states | §7.1 |
-| T2 | TestInferE2E_T2_FullAuditPath | Full audit path (audit PASS) | modelreg→vrf→settlement | Audit triggered, VRF selects auditors (excludes original roles), 3×PASS → CLEARED | §13 |
-| T3 | TestInferE2E_T3_AuditOverturn | Audit overturn path | modelreg→vrf→settlement→worker | Original SUCCESS + audit 3×FAIL, Worker jail, PASS verifiers jail, user refund | §13.6 Quadrant 2 |
+| T1 | TestInferE2E_T1_FullSuccessPath | Full success path (no second verification) | modelreg→vrf→settlement | Model ACTIVE, VRF selects Worker, fee distribution exact, BatchRecord + EpochStats intermediate states | §7.1 |
+| T2 | TestInferE2E_T2_FullSecond verificationPath | Full second verification path (second verification PASS) | modelreg→vrf→settlement | Second verification triggered, VRF selects second verifiers (excludes original roles), 3×PASS → CLEARED | §13 |
+| T3 | TestInferE2E_T3_Second verificationOverturn | Second verification overturn path | modelreg→vrf→settlement→worker | Original SUCCESS + second verification 3×FAIL, Worker jail, PASS verifiers jail, user refund | §13.6 Quadrant 2 |
 | T4 | TestInferE2E_T4_WorkerTimeout_SDKRetry | Worker acceptance timeout, SDK resends | vrf→settlement | Worker A doesn't execute, SDK resends, Worker B completes, task_id deduplicated | §7.2 |
 | T5 | TestInferE2E_T5_LeaderFailover | Leader failover | vrf | Leader heartbeat timeout, rank#2 takes over, new LeaderInfo | §6.2 |
 | T6 | TestInferE2E_T6_ModelServicePause | Model service pause and resume | modelreg→worker | 10→8 Workers (pause) → 10 Workers (resume) | §5.2 |
 | T7 | TestInferE2E_T7_Temperature0_ArgmaxPath | Temperature=0 uses argmax without ChaCha20 | vrf→settlement | When temp=0, verification uses logits-only (4/5 match), no sampling verification. Worker and Verifier results match | §8.3 temp=0 → argmax |
-| T8 | TestInferE2E_T8_VerificationFail_DirectSettle | Verification phase FAIL → direct FAIL settlement | vrf→settlement→worker | 2 of 3 verifiers vote FAIL → verification fails → Worker jail, user charged only 5%, does not enter audit flow | §9.2 majority FAIL |
+| T8 | TestInferE2E_T8_VerificationFail_DirectSettle | Verification phase FAIL → direct FAIL settlement | vrf→settlement→worker | 2 of 3 verifiers vote FAIL → verification fails → Worker jail, user charged only 5%, does not enter second verification flow | §9.2 majority FAIL |
 | **T9** | **TestInferE2E_T9_EpochBoundarySettlement** | **Epoch boundary settlement** | settlement→reward | **Batch settlement at epoch's last block (height=200), EpochStats attributed to epoch=2 not epoch=3** | §12+§16 epoch calculation |
 | **T10** | **TestInferE2E_T10_RewardHalvingBoundary** | **Reward halving boundary** | reward | **Epoch spans halving boundary (block 26249999→26250000). Verify CalculateEpochReward accumulates block by block: first half of blocks use original rate, second half use rate/2** | §16.1 halving precision |
 
@@ -391,7 +391,7 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 
 | ID | Test Name | Description | Modules Involved | Test Steps | Expected Result | Spec Clause |
 |------|--------|------|---------|---------|---------|-----------|
-| **V1** | **TestConservation_V1_FeeConservation** | **Fee total conservation** | x/settlement | Deposit→10 SUCCESS+2 FAIL batch settlement | **user_debit(SUCCESS) == executor_received + verifier_received + audit_fund; user_debit(FAIL) == verifier_fail_received + audit_fail_fund. Total equation holds, error≤0** | §11 |
+| **V1** | **TestConservation_V1_FeeConservation** | **Fee total conservation** | x/settlement | Deposit→10 SUCCESS+2 FAIL batch settlement | **user_debit(SUCCESS) == executor_received + verifier_received + multi_verification_fund; user_debit(FAIL) == verifier_fail_received + second verification_fail_fund. Total equation holds, error≤0** | §11 |
 | **V2** | **TestConservation_V2_RewardMintConservation** | **Reward minting conservation** | x/reward | DistributeRewards(2 workers, 3 verifiers) | **total_minted == sum(all RewardRecord amounts). No dust leakage (error≤1 ufai per participant)** | §16 |
 | **V3** | **TestGenesis_V3_SettlementRoundTrip** | **Settlement Genesis round-trip** | x/settlement | Deposit+settlement→ExportGenesis→InitGenesis→verify state | **All InferenceAccount, SettledTask, BatchRecord, EpochStats, Params fully restored** | Chain stability |
 | **V4** | **TestConservation_V4_SameBlockDuplicateBatch** | **Two batches in same block referencing same task** | x/settlement | Construct two batches each containing task-1, execute sequentially | **First batch settles task-1, second batch skips task-1. User charged only once** | §3.4 task_id uniqueness |
@@ -406,8 +406,8 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 |------|---------|---------|---------|
 | **User** | A, C, D, H, L, N, R, T, U, V | Deposit, withdraw, pay, initiate inference | Excess withdrawal, insufficient balance, overspend, **zero deposit, wrong denom, exact balance, FAIL overspend** |
 | **Worker** | B, C, E, F, H, S, T, U | Register, stake, execute inference, streak++ | Progressive jail, slash, tombstone, re-registration rejected, accept task but don't execute, **insufficient stake, slash to zero** |
-| **Verifier** | C, E, F, I, Q, R, T | Verification count, epoch count | Wrong vote results in jail, audit overturn implicates, FAIL majority decision |
-| **Auditor** | E, F, G, I, K, Q, R, T | Four-quadrant judgment, majority decision, timeout, fund distribution | Auditor=verifier rejected, insufficient results, **submission after timeout, duplicate submission** |
+| **Verifier** | C, E, F, I, Q, R, T | Verification count, epoch count | Wrong vote results in jail, second verification overturn implicates, FAIL majority decision |
+| **SecondVerifier** | E, F, G, I, K, Q, R, T | Four-quadrant judgment, majority decision, timeout, fund distribution | SecondVerifier=verifier rejected, insufficient results, **submission after timeout, duplicate submission** |
 | **Leader** | Q, R, T | VRF election, dispatch, heartbeat | Heartbeat timeout failover, no Workers, **all busy** |
 | **Proposer** | C, D, N, P, T, V | Package batch, propose model | Merkle mismatch jail, ResultCount mismatch jail, unauthorized Proposer, **empty batch, tampered signature, all-skipped batch** |
 | **Validator** | N, Q, T, U | Committee election, block production consistency | Committee rotation |
@@ -418,14 +418,14 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 
 **Spec §11 Frozen Parameters**:
 
-| Scenario | User Charge | Worker | Verifier (3 people) | Audit Fund |
+| Scenario | User Charge | Worker | Verifier (3 people) | Second verification Fund |
 |------|---------|--------|--------------|---------|
-| SUCCESS (no audit) | 100% fee | 95% (950/1000) | 4.5% (45/1000) | 0.5% (5/1000) |
+| SUCCESS (no second verification) | 100% fee | 95% (950/1000) | 4.5% (45/1000) | 0.5% (5/1000) |
 | FAIL | 5% fee | 0% | 4.5% of 5% | 0.5% of 5% |
 | FraudProof (already settled) | Claw back 95% executor fee | -slash 5% stake | — | — |
 | **Dust (fee=10 ufai)** | **100% fee** | **~10 (remainder)** | **0 (truncated)** | **0 (truncated)** |
 
-**Tests that should cover this**: C1 (SUCCESS 100%), C2 (FAIL 5%), C6 (exact amounts+conservation), **C7 (dust truncation)**, H2 (FraudProof clawback), K1 (audit fund weighted by count), T1 (full pipeline distribution), **V1 (total conservation)**
+**Tests that should cover this**: C1 (SUCCESS 100%), C2 (FAIL 5%), C6 (exact amounts+conservation), **C7 (dust truncation)**, H2 (FraudProof clawback), K1 (multi-verification fund weighted by count), T1 (full pipeline distribution), **V1 (total conservation)**
 
 ---
 
@@ -443,11 +443,11 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 | D9 | Empty batch | Empty input | P2 |
 | D10 | Tampered ProposerSig | Signature security | P2 |
 | D11 | All entries skipped | Deduplication boundary | P3 |
-| E8 | Audit result submitted after timeout | Timing race | P2 |
-| E9 | Same auditor duplicate submission | Deduplication security | P2 |
-| F5 | Re-audit majority decision 2:1 | Critical logic | P2 |
+| E8 | Second verification result submitted after timeout | Timing race | P2 |
+| E9 | Same second verifier duplicate submission | Deduplication security | P2 |
+| F5 | Re-second verification majority decision 2:1 | Critical logic | P2 |
 | G4 | Precise timeout boundary | Precise boundary | P3 |
-| H5 | FraudProof on task under audit | State race | P2 |
+| H5 | FraudProof on task under second verification | State race | P2 |
 | J5 | Zero tasks division-by-zero protection | Division-by-zero safety | P1 |
 | L2 | Balance exactly equals fee | Precise boundary | P3 |
 | L3 | FAIL scenario overspend | Overspend boundary | P2 |
@@ -469,7 +469,7 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 
 | ID | Before | After |
 |------|------|------|
-| C6 | Amount received by each party | Added **user_debit == executor + verifiers + audit_fund** total conservation assertion |
+| C6 | Amount received by each party | Added **user_debit == executor + verifiers + multi_verification_fund** total conservation assertion |
 
 ### Priority Distribution
 
@@ -486,7 +486,7 @@ Audit      Audit FAIL   Overturn→settle per original verification + original F
 | Tier | Included Partitions | Case Count | Execution Method | Who Is Responsible |
 |----|---------|--------|---------|--------|
 | **L1 Unit Tests** | A-O, P, Q, R, S, V | ~110 | `go test ./...` automated run | Engineer daily CI |
-| **L2 Cross-Module Integration** | N, T, V | ~16 | Requires `setupCrossModuleEnv()` | Engineer + Auditor |
+| **L2 Cross-Module Integration** | N, T, V | ~16 | Requires `setupCrossModuleEnv()` | Engineer + SecondVerifier |
 | **L3 Multi-Node E2E** | U | 5 | Real nodes + Docker + GPU | Jms's 5090 machine |
 
 ---
