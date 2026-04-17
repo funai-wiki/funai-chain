@@ -213,12 +213,12 @@ func TestGenesis_InvalidParams_Panics(t *testing.T) {
 
 	gs := types.GenesisState{
 		Params: types.Params{
-			BaseBlockReward: math.NewInt(-1), // invalid
-			HalvingPeriod:   1,
-			EpochBlocks:     1,
-			FeeWeight:       math.LegacyZeroDec(),
-			CountWeight:     math.LegacyZeroDec(),
-			InferenceWeight: math.LegacyZeroDec(),
+			BaseBlockReward:    math.NewInt(-1), // invalid
+			HalvingPeriod:      1,
+			EpochBlocks:        1,
+			FeeWeight:          math.LegacyZeroDec(),
+			CountWeight:        math.LegacyZeroDec(),
+			InferenceWeight:    math.LegacyZeroDec(),
 			VerificationWeight: math.LegacyZeroDec(),
 		},
 	}

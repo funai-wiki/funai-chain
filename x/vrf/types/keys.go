@@ -9,12 +9,12 @@ const (
 	StoreKey   = ModuleName
 	RouterKey  = ModuleName
 
-	ParamsKey           = "Params"
-	VRFSeedKey          = "VRFSeed"
-	LeaderInfoPrefix    = "LeaderInfo/value/"
-	CommitteeInfoKey    = "CommitteeInfo"
-	VRFProofPrefix      = "VRFProof/value/"
-	WorkerStatusPrefix  = "WorkerStatus/value/"
+	ParamsKey          = "Params"
+	VRFSeedKey         = "VRFSeed"
+	LeaderInfoPrefix   = "LeaderInfo/value/"
+	CommitteeInfoKey   = "CommitteeInfo"
+	VRFProofPrefix     = "VRFProof/value/"
+	WorkerStatusPrefix = "WorkerStatus/value/"
 )
 
 func uint64ToBytes(v uint64) []byte {

@@ -52,7 +52,7 @@ func integrationBatchMsg(proposer string, entries []types.SettlementEntry) *type
 // deposit → SUCCESS settle → FAIL settle → fraud proof → duplicate protection → merkle mismatch
 func TestIntegration_FullSettlementLifecycle(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("int-user")
 	workerAddr := makeAddr("int-worker")
@@ -162,11 +162,11 @@ func TestIntegration_FullSettlementLifecycle(t *testing.T) {
 	t.Log("\n=== FULL SETTLEMENT LIFECYCLE: ALL PASSED ===")
 }
 
-// TestIntegration_AuditTimeout verifies audit timeout handling.
-func TestIntegration_AuditTimeout(t *testing.T) {
+// TestIntegration_SecondVerificationTimeout verifies audit timeout handling.
+func TestIntegration_SecondVerificationTimeout(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
 
-	apt := types.AuditPendingTask{
+	apt := types.SecondVerificationPendingTask{
 		TaskId:            integrationTaskId(900),
 		OriginalStatus:    types.SettlementSuccess,
 		SubmittedAt:       1,
@@ -176,19 +176,19 @@ func TestIntegration_AuditTimeout(t *testing.T) {
 		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
 		ExpireBlock:       100000,
 	}
-	k.SetAuditPending(ctx, apt)
+	k.SetSecondVerificationPending(ctx, apt)
 
 	params := k.GetParams(ctx)
-	params.AuditTimeout = 10
+	params.SecondVerificationTimeout = 10
 	k.SetParams(ctx, params)
 
 	ctx = ctx.WithBlockHeight(15)
-	timeouts := k.HandleAuditTimeouts(ctx)
+	timeouts := k.HandleSecondVerificationTimeouts(ctx)
 	if timeouts != 1 {
 		t.Fatalf("Timeouts: want 1, got %d", timeouts)
 	}
 
-	_, found := k.GetAuditPending(ctx, apt.TaskId)
+	_, found := k.GetSecondVerificationPending(ctx, apt.TaskId)
 	if found {
 		t.Fatal("Pending task should be removed after timeout")
 	}
@@ -214,14 +214,14 @@ func TestIntegration_DynamicAuditRate(t *testing.T) {
 
 	for i, tt := range tests {
 		stats := types.EpochStats{
-			Epoch:        int64(i),
-			TotalSettled: tt.total,
-			FailSettled:  tt.fail,
-			AuditTotal:   10,
-			TotalFees:    math.NewInt(100_000_000),
+			Epoch:                   int64(i),
+			TotalSettled:            tt.total,
+			FailSettled:             tt.fail,
+			SecondVerificationTotal: 10,
+			TotalFees:               math.NewInt(100_000_000),
 		}
 		k.SetEpochStats(ctx, stats)
-		rate := k.CalculateAuditRate(ctx, int64(i))
+		rate := k.CalculateSecondVerificationRate(ctx, int64(i))
 		if rate != tt.wantRate {
 			t.Fatalf("%s: rate want %d, got %d", tt.name, tt.wantRate, rate)
 		}
@@ -229,15 +229,15 @@ func TestIntegration_DynamicAuditRate(t *testing.T) {
 	}
 }
 
-// TestIntegration_AuditResult_AfterTimeout (E8) verifies that audit results
+// TestIntegration_SecondVerificationResult_AfterTimeout (E8) verifies that audit results
 // submitted after timeout are effectively no-ops: the pending task was already
-// cleared by HandleAuditTimeouts, so processAuditJudgment finds no pending
+// cleared by HandleSecondVerificationTimeouts, so processAuditJudgment finds no pending
 // task and returns early. No jails or settlements occur.
-func TestIntegration_AuditResult_AfterTimeout(t *testing.T) {
+func TestIntegration_SecondVerificationResult_AfterTimeout(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
 
 	params := k.GetParams(ctx)
-	params.AuditTimeout = 10
+	params.SecondVerificationTimeout = 10
 	k.SetParams(ctx, params)
 
 	taskId := integrationTaskId(800)
@@ -253,7 +253,7 @@ func TestIntegration_AuditResult_AfterTimeout(t *testing.T) {
 		t.Fatalf("Deposit: %v", err)
 	}
 
-	apt := types.AuditPendingTask{
+	apt := types.SecondVerificationPendingTask{
 		TaskId:            taskId,
 		OriginalStatus:    types.SettlementSuccess,
 		SubmittedAt:       1,
@@ -263,51 +263,51 @@ func TestIntegration_AuditResult_AfterTimeout(t *testing.T) {
 		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
 		ExpireBlock:       100000,
 	}
-	k.SetAuditPending(ctx, apt)
+	k.SetSecondVerificationPending(ctx, apt)
 
 	// Advance past timeout: submittedAt=1, timeout=10, height=15 → expired
 	ctx = ctx.WithBlockHeight(15)
-	timeouts := k.HandleAuditTimeouts(ctx)
+	timeouts := k.HandleSecondVerificationTimeouts(ctx)
 	if timeouts != 1 {
 		t.Fatalf("Expected 1 timeout, got %d", timeouts)
 	}
 
 	// Confirm pending task is gone
-	_, found := k.GetAuditPending(ctx, taskId)
+	_, found := k.GetSecondVerificationPending(ctx, taskId)
 	if found {
 		t.Fatal("Pending task should be cleared after timeout")
 	}
-	t.Log("[PASS] HandleAuditTimeouts cleared the pending task")
+	t.Log("[PASS] HandleSecondVerificationTimeouts cleared the pending task")
 
 	// Now submit 3 audit results for the same task — they arrive too late
 	jailsBefore := len(wk.jailCalls)
-	auditors := []string{
+	second_verifiers := []string{
 		makeAddr("e8-aud1").String(),
 		makeAddr("e8-aud2").String(),
 		makeAddr("e8-aud3").String(),
 	}
-	for _, aud := range auditors {
-		err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    aud,
-			TaskId:     taskId,
-			Epoch:      0,
-			Pass:       true,
-			LogitsHash: []byte("logits-hash"),
+	for _, aud := range second_verifiers {
+		err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: aud,
+			TaskId:         taskId,
+			Epoch:          0,
+			Pass:           true,
+			LogitsHash:     []byte("logits-hash"),
 		})
 		if err != nil {
-			t.Fatalf("ProcessAuditResult from %s: %v", aud, err)
+			t.Fatalf("ProcessSecondVerificationResult from %s: %v", aud, err)
 		}
 	}
 
-	// AuditRecord should exist with 3 results (they were recorded)
-	ar, arFound := k.GetAuditRecord(ctx, taskId)
+	// SecondVerificationRecord should exist with 3 results (they were recorded)
+	ar, arFound := k.GetSecondVerificationRecord(ctx, taskId)
 	if !arFound {
-		t.Fatal("AuditRecord should exist after 3 submissions")
+		t.Fatal("SecondVerificationRecord should exist after 3 submissions")
 	}
 	if len(ar.Results) != 3 {
-		t.Fatalf("AuditRecord results: want 3, got %d", len(ar.Results))
+		t.Fatalf("SecondVerificationRecord results: want 3, got %d", len(ar.Results))
 	}
-	t.Log("[PASS] AuditRecord created with 3 results")
+	t.Log("[PASS] SecondVerificationRecord created with 3 results")
 
 	// Key check: no jail calls occurred — processAuditJudgment found no pending task
 	if len(wk.jailCalls) != jailsBefore {
@@ -322,14 +322,14 @@ func TestIntegration_AuditResult_AfterTimeout(t *testing.T) {
 	t.Logf("[PASS] Task settled by timeout with status=%d, no jails from late audit results", st.Status)
 }
 
-// TestIntegration_DuplicateAuditorSubmission (E9) documents that the current
-// code does NOT deduplicate auditor addresses. The same auditor can submit
-// multiple times, and each submission is appended to the AuditRecord.
-// After AuditVerifierCount (3) results are collected, judgment triggers.
-func TestIntegration_DuplicateAuditorSubmission(t *testing.T) {
+// TestIntegration_DuplicateSecondVerifierSubmission (E9) documents that the current
+// code does NOT deduplicate second_verifier addresses. The same second_verifier can submit
+// multiple times, and each submission is appended to the SecondVerificationRecord.
+// After SecondVerifierCount (3) results are collected, judgment triggers.
+func TestIntegration_DuplicateSecondVerifierSubmission(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
-	k.SetCurrentReauditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
+	k.SetCurrentThirdVerificationRate(ctx, 0)
 
 	taskId := integrationTaskId(810)
 	userAddr := makeAddr("e9-user")
@@ -345,7 +345,7 @@ func TestIntegration_DuplicateAuditorSubmission(t *testing.T) {
 	}
 
 	// Create audit pending task
-	apt := types.AuditPendingTask{
+	apt := types.SecondVerificationPendingTask{
 		TaskId:            taskId,
 		OriginalStatus:    types.SettlementSuccess,
 		SubmittedAt:       ctx.BlockHeight(),
@@ -355,59 +355,59 @@ func TestIntegration_DuplicateAuditorSubmission(t *testing.T) {
 		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
 		ExpireBlock:       100000,
 	}
-	k.SetAuditPending(ctx, apt)
+	k.SetSecondVerificationPending(ctx, apt)
 
 	aud1 := makeAddr("e9-aud1").String()
 	aud2 := makeAddr("e9-aud2").String()
 
 	// First submission from aud1
-	err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-		Auditor: aud1, TaskId: taskId, Epoch: 0, Pass: true, LogitsHash: []byte("lh"),
+	err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+		SecondVerifier: aud1, TaskId: taskId, Epoch: 0, Pass: true, LogitsHash: []byte("lh"),
 	})
 	if err != nil {
 		t.Fatalf("First aud1 submission: %v", err)
 	}
 
 	// Second submission from aud1 (duplicate — current code accepts it)
-	err = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-		Auditor: aud1, TaskId: taskId, Epoch: 0, Pass: true, LogitsHash: []byte("lh"),
+	err = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+		SecondVerifier: aud1, TaskId: taskId, Epoch: 0, Pass: true, LogitsHash: []byte("lh"),
 	})
 	if err != nil {
 		t.Fatalf("Second aud1 submission: %v", err)
 	}
 
 	// Check record after 2 submissions — should have 2 entries, both from aud1
-	ar, found := k.GetAuditRecord(ctx, taskId)
+	ar, found := k.GetSecondVerificationRecord(ctx, taskId)
 	if !found {
-		t.Fatal("AuditRecord not found after 2 submissions")
+		t.Fatal("SecondVerificationRecord not found after 2 submissions")
 	}
-	if len(ar.AuditorAddresses) != 2 {
-		t.Fatalf("After 2 submissions: want 2 auditor entries, got %d", len(ar.AuditorAddresses))
+	if len(ar.SecondVerifierAddresses) != 2 {
+		t.Fatalf("After 2 submissions: want 2 second_verifier entries, got %d", len(ar.SecondVerifierAddresses))
 	}
-	if ar.AuditorAddresses[0] != aud1 || ar.AuditorAddresses[1] != aud1 {
-		t.Fatalf("Expected both entries from aud1, got %v", ar.AuditorAddresses)
+	if ar.SecondVerifierAddresses[0] != aud1 || ar.SecondVerifierAddresses[1] != aud1 {
+		t.Fatalf("Expected both entries from aud1, got %v", ar.SecondVerifierAddresses)
 	}
-	t.Log("[PASS] Duplicate auditor submission accepted (no deduplication)")
+	t.Log("[PASS] Duplicate second_verifier submission accepted (no deduplication)")
 
 	// Third submission from aud2 — triggers judgment (3 results collected)
 	jailsBefore := len(wk.jailCalls)
-	err = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-		Auditor: aud2, TaskId: taskId, Epoch: 0, Pass: true, LogitsHash: []byte("lh"),
+	err = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+		SecondVerifier: aud2, TaskId: taskId, Epoch: 0, Pass: true, LogitsHash: []byte("lh"),
 	})
 	if err != nil {
 		t.Fatalf("aud2 submission: %v", err)
 	}
 
 	// After 3 results (all PASS), judgment triggers: SUCCESS + audit PASS → settle as success
-	ar, _ = k.GetAuditRecord(ctx, taskId)
-	if len(ar.AuditorAddresses) != 3 {
-		t.Fatalf("Final record: want 3 entries, got %d", len(ar.AuditorAddresses))
+	ar, _ = k.GetSecondVerificationRecord(ctx, taskId)
+	if len(ar.SecondVerifierAddresses) != 3 {
+		t.Fatalf("Final record: want 3 entries, got %d", len(ar.SecondVerifierAddresses))
 	}
 	// Entries are: aud1, aud1, aud2 — documenting that duplicates are stored
-	if ar.AuditorAddresses[0] != aud1 || ar.AuditorAddresses[1] != aud1 || ar.AuditorAddresses[2] != aud2 {
-		t.Fatalf("Expected [aud1, aud1, aud2], got %v", ar.AuditorAddresses)
+	if ar.SecondVerifierAddresses[0] != aud1 || ar.SecondVerifierAddresses[1] != aud1 || ar.SecondVerifierAddresses[2] != aud2 {
+		t.Fatalf("Expected [aud1, aud1, aud2], got %v", ar.SecondVerifierAddresses)
 	}
-	t.Log("[PASS] AuditRecord has 3 entries: [aud1, aud1, aud2]")
+	t.Log("[PASS] SecondVerificationRecord has 3 entries: [aud1, aud1, aud2]")
 
 	// Judgment should have settled the task as success (no jails for SUCCESS + audit PASS)
 	if len(wk.jailCalls) != jailsBefore {
@@ -424,18 +424,18 @@ func TestIntegration_DuplicateAuditorSubmission(t *testing.T) {
 	t.Log("[PASS] Judgment triggered after 3 results, task settled as success")
 }
 
-// TestIntegration_ReauditFourQuadrants (F1-F5) is a table-driven test for audit
+// TestIntegration_ThirdVerificationFourQuadrants (F1-F5) is a table-driven test for audit
 // judgment scenarios. It exercises the four combinations of original verification
 // status (SUCCESS/FAIL) and audit vote outcome (PASS/FAIL), plus a majority
 // decision case.
 //
-// Note on implementation: the reaudit code path in processAuditJudgment is
-// unreachable through ProcessAuditResult because GetAuditPending only checks
-// AuditPendingKey, while reaudit tasks are stored at ReauditPendingKey.
-// Therefore this test exercises the non-reaudit judgment branch (which has
-// equivalent logic for the four quadrants) by storing tasks with IsReaudit=false.
-// SetCurrentReauditRate=0 prevents VRF from triggering actual reaudit.
-func TestIntegration_ReauditFourQuadrants(t *testing.T) {
+// Note on implementation: the third_verification code path in processAuditJudgment is
+// unreachable through ProcessSecondVerificationResult because GetSecondVerificationPending only checks
+// SecondVerificationPendingKey, while third_verification tasks are stored at ThirdVerificationPendingKey.
+// Therefore this test exercises the non-third_verification judgment branch (which has
+// equivalent logic for the four quadrants) by storing tasks with IsThirdVerification=false.
+// SetCurrentThirdVerificationRate=0 prevents VRF from triggering actual third_verification.
+func TestIntegration_ThirdVerificationFourQuadrants(t *testing.T) {
 	tests := []struct {
 		name          string
 		origStatus    types.SettlementStatus
@@ -458,10 +458,10 @@ func TestIntegration_ReauditFourQuadrants(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			k, ctx, _, wk := setupKeeper(t)
-			k.SetCurrentAuditRate(ctx, 0)
-			k.SetCurrentReauditRate(ctx, 0)
+			k.SetCurrentSecondVerificationRate(ctx, 0)
+			k.SetCurrentThirdVerificationRate(ctx, 0)
 
-			taskId := []byte(fmt.Sprintf("reaudit-quad-%s", tt.name))
+			taskId := []byte(fmt.Sprintf("third_verification-quad-%s", tt.name))
 			userAddr := makeAddr("rq-user-" + tt.name[:2])
 			workerAddr := makeAddr("rq-work-" + tt.name[:2])
 			v1 := makeAddr("rq-v1-" + tt.name[:2])
@@ -474,34 +474,34 @@ func TestIntegration_ReauditFourQuadrants(t *testing.T) {
 				t.Fatalf("Deposit: %v", err)
 			}
 
-			// Create audit pending task (IsReaudit=false so it is stored at
-			// AuditPendingKey where processAuditJudgment can find it)
-			apt := types.AuditPendingTask{
-				TaskId:            taskId,
-				OriginalStatus:    tt.origStatus,
-				SubmittedAt:       ctx.BlockHeight(),
-				UserAddress:       userAddr.String(),
-				WorkerAddress:     workerAddr.String(),
-				VerifierAddresses: []string{v1.String(), v2.String(), v3.String()},
-				Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
-				ExpireBlock:       100000,
-				IsReaudit:         false,
+			// Create audit pending task (IsThirdVerification=false so it is stored at
+			// SecondVerificationPendingKey where processAuditJudgment can find it)
+			apt := types.SecondVerificationPendingTask{
+				TaskId:              taskId,
+				OriginalStatus:      tt.origStatus,
+				SubmittedAt:         ctx.BlockHeight(),
+				UserAddress:         userAddr.String(),
+				WorkerAddress:       workerAddr.String(),
+				VerifierAddresses:   []string{v1.String(), v2.String(), v3.String()},
+				Fee:                 sdk.NewCoin("ufai", math.NewInt(1_000_000)),
+				ExpireBlock:         100000,
+				IsThirdVerification: false,
 			}
-			k.SetAuditPending(ctx, apt)
+			k.SetSecondVerificationPending(ctx, apt)
 
 			// Submit 3 audit results with the specified votes
-			auditors := []string{
+			second_verifiers := []string{
 				makeAddr("rq-a1-" + tt.name[:2]).String(),
 				makeAddr("rq-a2-" + tt.name[:2]).String(),
 				makeAddr("rq-a3-" + tt.name[:2]).String(),
 			}
-			for i, aud := range auditors {
-				err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-					Auditor:    aud,
-					TaskId:     taskId,
-					Epoch:      0,
-					Pass:       tt.auditVotes[i],
-					LogitsHash: []byte("logits"),
+			for i, aud := range second_verifiers {
+				err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+					SecondVerifier: aud,
+					TaskId:         taskId,
+					Epoch:          0,
+					Pass:           tt.auditVotes[i],
+					LogitsHash:     []byte("logits"),
 				})
 				if err != nil {
 					t.Fatalf("Audit result %d from %s: %v", i, aud, err)

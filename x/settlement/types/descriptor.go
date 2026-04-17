@@ -15,12 +15,12 @@ func init() {
 			{Name: "MsgWithdraw", Instance: MsgWithdraw{}},
 			{Name: "MsgBatchSettlement", Instance: MsgBatchSettlement{}},
 			{Name: "MsgFraudProof", Instance: MsgFraudProof{}},
-			{Name: "MsgAuditResult", Instance: MsgAuditResult{}},
+			{Name: "MsgSecondVerificationResult", Instance: MsgSecondVerificationResult{}},
 			{Name: "MsgDepositResponse", Instance: MsgDepositResponse{}},
 			{Name: "MsgWithdrawResponse", Instance: MsgWithdrawResponse{}},
 			{Name: "MsgBatchSettlementResponse", Instance: MsgBatchSettlementResponse{}},
 			{Name: "MsgFraudProofResponse", Instance: MsgFraudProofResponse{}},
-			{Name: "MsgAuditResultResponse", Instance: MsgAuditResultResponse{}},
+			{Name: "MsgSecondVerificationResultResponse", Instance: MsgSecondVerificationResultResponse{}},
 			{Name: "SettlementEntry", Instance: SettlementEntry{}},
 			{Name: "VerifierResult", Instance: VerifierResult{}},
 			{Name: "InferenceAccount", Instance: InferenceAccount{}},
@@ -40,7 +40,7 @@ func init() {
 					{Name: "Withdraw", InputType: ".funai.settlement.MsgWithdraw", OutputType: ".funai.settlement.MsgWithdrawResponse"},
 					{Name: "BatchSettle", InputType: ".funai.settlement.MsgBatchSettlement", OutputType: ".funai.settlement.MsgBatchSettlementResponse"},
 					{Name: "SubmitFraudProof", InputType: ".funai.settlement.MsgFraudProof", OutputType: ".funai.settlement.MsgFraudProofResponse"},
-					{Name: "SubmitAuditResult", InputType: ".funai.settlement.MsgAuditResult", OutputType: ".funai.settlement.MsgAuditResultResponse"},
+					{Name: "SubmitSecondVerificationResult", InputType: ".funai.settlement.MsgSecondVerificationResult", OutputType: ".funai.settlement.MsgSecondVerificationResultResponse"},
 				},
 			},
 			{
@@ -55,23 +55,29 @@ func init() {
 	})
 }
 
-func (m *MsgDeposit) Descriptor() ([]byte, []int)                 { return settlementDescGz, []int{0} }
-func (m *MsgWithdraw) Descriptor() ([]byte, []int)                { return settlementDescGz, []int{1} }
+func (m *MsgDeposit) Descriptor() ([]byte, []int)                  { return settlementDescGz, []int{0} }
+func (m *MsgWithdraw) Descriptor() ([]byte, []int)                 { return settlementDescGz, []int{1} }
 func (m *MsgBatchSettlement) Descriptor() ([]byte, []int)          { return settlementDescGz, []int{2} }
-func (m *MsgFraudProof) Descriptor() ([]byte, []int)              { return settlementDescGz, []int{3} }
-func (m *MsgAuditResult) Descriptor() ([]byte, []int)             { return settlementDescGz, []int{4} }
-func (m *MsgDepositResponse) Descriptor() ([]byte, []int)         { return settlementDescGz, []int{5} }
-func (m *MsgWithdrawResponse) Descriptor() ([]byte, []int)        { return settlementDescGz, []int{6} }
-func (m *MsgBatchSettlementResponse) Descriptor() ([]byte, []int) { return settlementDescGz, []int{7} }
-func (m *MsgFraudProofResponse) Descriptor() ([]byte, []int)      { return settlementDescGz, []int{8} }
-func (m *MsgAuditResultResponse) Descriptor() ([]byte, []int)     { return settlementDescGz, []int{9} }
-func (m *SettlementEntry) Descriptor() ([]byte, []int)            { return settlementDescGz, []int{10} }
-func (m *VerifierResult) Descriptor() ([]byte, []int)             { return settlementDescGz, []int{11} }
-func (m *InferenceAccount) Descriptor() ([]byte, []int)           { return settlementDescGz, []int{12} }
-func (m *BatchRecord) Descriptor() ([]byte, []int)                { return settlementDescGz, []int{13} }
-func (m *QueryInferenceAccountRequest) Descriptor() ([]byte, []int)  { return settlementDescGz, []int{14} }
-func (m *QueryInferenceAccountResponse) Descriptor() ([]byte, []int) { return settlementDescGz, []int{15} }
-func (m *QueryBatchRequest) Descriptor() ([]byte, []int)             { return settlementDescGz, []int{16} }
-func (m *QueryBatchResponse) Descriptor() ([]byte, []int)            { return settlementDescGz, []int{17} }
-func (m *QueryParamsRequest) Descriptor() ([]byte, []int)            { return settlementDescGz, []int{18} }
-func (m *QueryParamsResponse) Descriptor() ([]byte, []int)           { return settlementDescGz, []int{19} }
+func (m *MsgFraudProof) Descriptor() ([]byte, []int)               { return settlementDescGz, []int{3} }
+func (m *MsgSecondVerificationResult) Descriptor() ([]byte, []int) { return settlementDescGz, []int{4} }
+func (m *MsgDepositResponse) Descriptor() ([]byte, []int)          { return settlementDescGz, []int{5} }
+func (m *MsgWithdrawResponse) Descriptor() ([]byte, []int)         { return settlementDescGz, []int{6} }
+func (m *MsgBatchSettlementResponse) Descriptor() ([]byte, []int)  { return settlementDescGz, []int{7} }
+func (m *MsgFraudProofResponse) Descriptor() ([]byte, []int)       { return settlementDescGz, []int{8} }
+func (m *MsgSecondVerificationResultResponse) Descriptor() ([]byte, []int) {
+	return settlementDescGz, []int{9}
+}
+func (m *SettlementEntry) Descriptor() ([]byte, []int)  { return settlementDescGz, []int{10} }
+func (m *VerifierResult) Descriptor() ([]byte, []int)   { return settlementDescGz, []int{11} }
+func (m *InferenceAccount) Descriptor() ([]byte, []int) { return settlementDescGz, []int{12} }
+func (m *BatchRecord) Descriptor() ([]byte, []int)      { return settlementDescGz, []int{13} }
+func (m *QueryInferenceAccountRequest) Descriptor() ([]byte, []int) {
+	return settlementDescGz, []int{14}
+}
+func (m *QueryInferenceAccountResponse) Descriptor() ([]byte, []int) {
+	return settlementDescGz, []int{15}
+}
+func (m *QueryBatchRequest) Descriptor() ([]byte, []int)   { return settlementDescGz, []int{16} }
+func (m *QueryBatchResponse) Descriptor() ([]byte, []int)  { return settlementDescGz, []int{17} }
+func (m *QueryParamsRequest) Descriptor() ([]byte, []int)  { return settlementDescGz, []int{18} }
+func (m *QueryParamsResponse) Descriptor() ([]byte, []int) { return settlementDescGz, []int{19} }

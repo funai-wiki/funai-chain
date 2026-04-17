@@ -146,8 +146,8 @@ func NewMsgDeclareInstalled(creator, modelId string) *MsgDeclareInstalled {
 	return &MsgDeclareInstalled{Creator: creator, ModelId: modelId}
 }
 
-func (msg *MsgDeclareInstalled) ProtoMessage()  {}
-func (msg *MsgDeclareInstalled) Reset()         { *msg = MsgDeclareInstalled{} }
+func (msg *MsgDeclareInstalled) ProtoMessage() {}
+func (msg *MsgDeclareInstalled) Reset()        { *msg = MsgDeclareInstalled{} }
 func (msg *MsgDeclareInstalled) String() string {
 	return fmt.Sprintf("MsgDeclareInstalled{%s,%s}", msg.Creator, msg.ModelId)
 }

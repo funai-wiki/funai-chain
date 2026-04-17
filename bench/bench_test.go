@@ -22,8 +22,8 @@ import (
 	"cosmossdk.io/store"
 	storemetrics "cosmossdk.io/store/metrics"
 	storetypes "cosmossdk.io/store/types"
-	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/crypto/secp256k1"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -53,19 +53,19 @@ func (nopBankKeeper) SendCoinsFromModuleToAccount(_ context.Context, _ string, _
 
 type nopWorkerKeeper struct{}
 
-func (nopWorkerKeeper) JailWorker(_ sdk.Context, _ sdk.AccAddress, _ int64)             {}
-func (nopWorkerKeeper) SlashWorker(_ sdk.Context, _ sdk.AccAddress, _ uint32)           {}
+func (nopWorkerKeeper) JailWorker(_ sdk.Context, _ sdk.AccAddress, _ int64)   {}
+func (nopWorkerKeeper) SlashWorker(_ sdk.Context, _ sdk.AccAddress, _ uint32) {}
 func (nopWorkerKeeper) SlashWorkerTo(_ sdk.Context, _ sdk.AccAddress, _ uint32, _ sdk.AccAddress) {
 }
-func (nopWorkerKeeper) IncrementSuccessStreak(_ sdk.Context, _ sdk.AccAddress)           {}
-func (nopWorkerKeeper) GetSuccessStreak(_ sdk.Context, _ sdk.AccAddress) uint32         { return 0 }
-func (nopWorkerKeeper) UpdateWorkerStats(_ sdk.Context, _ sdk.AccAddress, _ sdk.Coin)   {}
+func (nopWorkerKeeper) IncrementSuccessStreak(_ sdk.Context, _ sdk.AccAddress)        {}
+func (nopWorkerKeeper) GetSuccessStreak(_ sdk.Context, _ sdk.AccAddress) uint32       { return 0 }
+func (nopWorkerKeeper) UpdateWorkerStats(_ sdk.Context, _ sdk.AccAddress, _ sdk.Coin) {}
 func (nopWorkerKeeper) GetWorkerPubkey(_ sdk.Context, _ sdk.AccAddress) (string, bool) {
 	return string(benchProposerKey.PubKey().Bytes()), true
 }
-func (nopWorkerKeeper) TombstoneWorker(_ sdk.Context, _ sdk.AccAddress)                  {}
-func (nopWorkerKeeper) ReputationOnAccept(_ sdk.Context, _ sdk.AccAddress)               {}
-func (nopWorkerKeeper) UpdateAvgLatency(_ sdk.Context, _ sdk.AccAddress, _ uint32)       {}
+func (nopWorkerKeeper) TombstoneWorker(_ sdk.Context, _ sdk.AccAddress)            {}
+func (nopWorkerKeeper) ReputationOnAccept(_ sdk.Context, _ sdk.AccAddress)         {}
+func (nopWorkerKeeper) UpdateAvgLatency(_ sdk.Context, _ sdk.AccAddress, _ uint32) {}
 
 // ── Setup helpers ─────────────────────────────────────────────────────────────
 

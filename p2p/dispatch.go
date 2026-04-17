@@ -53,7 +53,7 @@ func (n *Node) startDispatchLoops(ctx context.Context) error {
 		go n.dispatchVerifyPayloads(ctx, verifySub)
 	}
 
-	// Settlement topic: AuditRequest / AuditResponse
+	// Settlement topic: AuditRequest / SecondVerificationResponse
 	settleSub, err := n.Host.Subscribe(p2phost.SettlementTopic)
 	if err != nil {
 		return fmt.Errorf("subscribe settlement: %w", err)
@@ -169,7 +169,7 @@ func (n *Node) dispatchVerifyResults(ctx context.Context, sub *pubsub.Subscripti
 	}
 }
 
-// dispatchSettlementMessages reads AuditRequest/AuditResponse from the settlement topic.
+// dispatchSettlementMessages reads AuditRequest/SecondVerificationResponse from the settlement topic.
 func (n *Node) dispatchSettlementMessages(ctx context.Context, sub *pubsub.Subscription) {
 	for {
 		msg, err := sub.Next(ctx)
@@ -192,10 +192,10 @@ func (n *Node) dispatchSettlementMessages(ctx context.Context, sub *pubsub.Subsc
 			continue
 		}
 
-		if _, ok := raw["auditor_addr"]; ok {
-			var resp p2ptypes.AuditResponse
+		if _, ok := raw["second_verifier_addr"]; ok {
+			var resp p2ptypes.SecondVerificationResponse
 			if json.Unmarshal(data, &resp) == nil {
-				n.handleAuditResponse(&resp)
+				n.handleSecondVerificationResponse(&resp)
 			}
 		} else if _, ok := raw["proposer_sig"]; ok {
 			var req p2ptypes.AuditRequest
@@ -313,16 +313,16 @@ func (n *Node) handleAuditRequest(ctx context.Context, req *p2ptypes.AuditReques
 
 	// Re-use verifier's teacher forcing logic for audit
 	payload := &worker.VerifyPayload{
-		TaskId:       req.TaskId,
-		Prompt:       req.Prompt,
-		Output:       req.Output,
-		WorkerLogits: req.WorkerLogits,
-		Temperature:  float32(req.Temperature) / 10000.0,
-		FinalSeed:    req.FinalSeed,
-		SampledTokens: req.SampledTokens,
-		InputTokenCount: req.InputTokenCount,
+		TaskId:           req.TaskId,
+		Prompt:           req.Prompt,
+		Output:           req.Output,
+		WorkerLogits:     req.WorkerLogits,
+		Temperature:      float32(req.Temperature) / 10000.0,
+		FinalSeed:        req.FinalSeed,
+		SampledTokens:    req.SampledTokens,
+		InputTokenCount:  req.InputTokenCount,
 		OutputTokenCount: req.OutputTokenCount,
-		WorkerPubkey: req.WorkerPubkey,
+		WorkerPubkey:     req.WorkerPubkey,
 	}
 
 	result, err := n.Verifier.HandleVerifyRequest(ctx, payload)
@@ -331,15 +331,15 @@ func (n *Node) handleAuditRequest(ctx context.Context, req *p2ptypes.AuditReques
 		return
 	}
 
-	resp := p2ptypes.AuditResponse{
+	resp := p2ptypes.SecondVerificationResponse{
 		TaskId:               req.TaskId,
 		Pass:                 result.Pass,
-		AuditorAddr:          n.Verifier.Pubkey,
+		SecondVerifierAddr:   n.Verifier.Pubkey,
 		LogitsHash:           result.LogitsHash,
 		VerifiedInputTokens:  result.VerifiedInputTokens,
 		VerifiedOutputTokens: result.VerifiedOutputTokens,
 	}
-	// KT: sign AuditResponse to prevent forgery
+	// KT: sign SecondVerificationResponse to prevent forgery
 	if len(n.Config.WorkerPrivKey) == 32 {
 		msgHash := sha256.Sum256(resp.SignBytes())
 		privKey := secp256k1.PrivKey(n.Config.WorkerPrivKey)
@@ -353,25 +353,25 @@ func (n *Node) handleAuditRequest(ctx context.Context, req *p2ptypes.AuditReques
 	log.Printf("dispatch: audit response for task %s pass=%v", shortHex(req.TaskId), result.Pass)
 }
 
-func (n *Node) handleAuditResponse(resp *p2ptypes.AuditResponse) {
-	// KT: verify auditor signature to prevent forged audit results
-	if len(resp.Signature) == 0 || len(resp.AuditorAddr) == 0 {
+func (n *Node) handleSecondVerificationResponse(resp *p2ptypes.SecondVerificationResponse) {
+	// KT: verify second_verifier signature to prevent forged audit results
+	if len(resp.Signature) == 0 || len(resp.SecondVerifierAddr) == 0 {
 		log.Printf("dispatch: reject unsigned audit response for task %s", shortHex(resp.TaskId))
 		return
 	}
-	auditorPubkey, err := n.Chain.GetWorkerPubkey(string(resp.AuditorAddr))
-	if err != nil || len(auditorPubkey) != 33 {
-		log.Printf("dispatch: reject audit response, cannot verify auditor %s: %v", shortHex(resp.AuditorAddr), err)
+	second_verifierPubkey, err := n.Chain.GetWorkerPubkey(string(resp.SecondVerifierAddr))
+	if err != nil || len(second_verifierPubkey) != 33 {
+		log.Printf("dispatch: reject audit response, cannot verify second_verifier %s: %v", shortHex(resp.SecondVerifierAddr), err)
 		return
 	}
 	msgHash := sha256.Sum256(resp.SignBytes())
-	pk := secp256k1.PubKey(auditorPubkey)
+	pk := secp256k1.PubKey(second_verifierPubkey)
 	if !pk.VerifySignature(msgHash[:], resp.Signature) {
 		log.Printf("dispatch: reject audit response with invalid signature for task %s", shortHex(resp.TaskId))
 		return
 	}
 
-	complete, pass := n.Proposer.CollectAuditResponse(resp)
+	complete, pass := n.Proposer.CollectSecondVerificationResponse(resp)
 	if complete {
 		log.Printf("dispatch: audit complete for task %s pass=%v", shortHex(resp.TaskId), pass)
 	}

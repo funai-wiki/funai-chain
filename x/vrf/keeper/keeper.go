@@ -271,9 +271,9 @@ func (k Keeper) SelectCommittee(ctx sdk.Context, eligibleWorkers []string) (type
 	return committee, nil
 }
 
-// SelectAuditorsForTask selects auditors using the unified VRF formula with α=0.0 (pure random).
+// SelectSecondVerifiersForTask selects second_verifiers using the unified VRF formula with α=0.0 (pure random).
 // V5.2 §13.3: 15-20 candidates, exclude original worker and verifiers, first 3 results count.
-func (k Keeper) SelectAuditorsForTask(ctx sdk.Context, taskId string, modelId string, excludeAddrs []string, count int) ([]string, error) {
+func (k Keeper) SelectSecondVerifiersForTask(ctx sdk.Context, taskId string, modelId string, excludeAddrs []string, count int) ([]string, error) {
 	workers := k.getOnlineWorkers(ctx, modelId)
 	if len(workers) == 0 {
 		return nil, fmt.Errorf("no online workers for model %s", modelId)
@@ -314,7 +314,7 @@ func (k Keeper) SelectAuditorsForTask(ctx sdk.Context, taskId string, modelId st
 		count = len(ranked)
 	}
 	if count == 0 {
-		return nil, fmt.Errorf("not enough auditors for model %s", modelId)
+		return nil, fmt.Errorf("not enough second_verifiers for model %s", modelId)
 	}
 
 	ranked = types.RankWorkers(taskSeed, ranked, types.AlphaAudit)

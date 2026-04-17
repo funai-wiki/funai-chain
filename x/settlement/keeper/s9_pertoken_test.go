@@ -27,13 +27,13 @@ func makePerTokenEntry(
 ) types.SettlementEntry {
 	v1, v2, v3 := makeAddr("ptv1"), makeAddr("ptv2"), makeAddr("ptv3")
 	return types.SettlementEntry{
-		TaskId:        []byte(fmt.Sprintf("%-20s", taskId)),
-		UserAddress:   user.String(),
-		WorkerAddress: worker.String(),
-		Fee:           sdk.NewCoin("ufai", cosmosmath.ZeroInt()),
-		MaxFee:        sdk.NewCoin("ufai", cosmosmath.NewInt(maxFee)),
-		ExpireBlock:   10000,
-		Status:        status,
+		TaskId:             []byte(fmt.Sprintf("%-20s", taskId)),
+		UserAddress:        user.String(),
+		WorkerAddress:      worker.String(),
+		Fee:                sdk.NewCoin("ufai", cosmosmath.ZeroInt()),
+		MaxFee:             sdk.NewCoin("ufai", cosmosmath.NewInt(maxFee)),
+		ExpireBlock:        10000,
+		Status:             status,
 		FeePerInputToken:   feePerInput,
 		FeePerOutputToken:  feePerOutput,
 		WorkerInputTokens:  workerIn,
@@ -57,7 +57,7 @@ func enablePerToken(k keeper.Keeper, ctx sdk.Context) {
 // ================================================================
 func TestPerToken_NormalBilling(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("pt1-user")
@@ -85,7 +85,7 @@ func TestPerToken_NormalBilling(t *testing.T) {
 // ================================================================
 func TestPerToken_MaxFeeCap(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("pt2-user")
@@ -112,7 +112,7 @@ func TestPerToken_MaxFeeCap(t *testing.T) {
 // ================================================================
 func TestPerToken_DisabledFallback(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	// Do NOT enable per-token billing
 
 	user := makeAddr("pt3-user")
@@ -139,7 +139,7 @@ func TestPerToken_DisabledFallback(t *testing.T) {
 // ================================================================
 func TestPerToken_FailBilling(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("pt4-user")
@@ -177,7 +177,7 @@ func TestPerToken_FailBilling(t *testing.T) {
 // ================================================================
 func TestPerToken_ZeroPriceFallback(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("pt5-user")
@@ -186,16 +186,16 @@ func TestPerToken_ZeroPriceFallback(t *testing.T) {
 
 	// FeePerInputToken=0 → IsPerToken()=false → use Fee as per-request
 	entry := types.SettlementEntry{
-		TaskId:            []byte("pt5-task-00000000001"),
-		UserAddress:       user.String(),
-		WorkerAddress:     worker.String(),
-		Fee:               sdk.NewCoin("ufai", cosmosmath.NewInt(500_000)),
-		MaxFee:            sdk.NewCoin("ufai", cosmosmath.NewInt(1_000_000)),
-		ExpireBlock:       10000,
-		Status:            types.SettlementSuccess,
-		FeePerInputToken:  0,
-		FeePerOutputToken: 200,
-		WorkerInputTokens: 100,
+		TaskId:             []byte("pt5-task-00000000001"),
+		UserAddress:        user.String(),
+		WorkerAddress:      worker.String(),
+		Fee:                sdk.NewCoin("ufai", cosmosmath.NewInt(500_000)),
+		MaxFee:             sdk.NewCoin("ufai", cosmosmath.NewInt(1_000_000)),
+		ExpireBlock:        10000,
+		Status:             types.SettlementSuccess,
+		FeePerInputToken:   0,
+		FeePerOutputToken:  200,
+		WorkerInputTokens:  100,
 		WorkerOutputTokens: 200,
 		VerifierResults: []types.VerifierResult{
 			{Address: makeAddr("pt5v1").String(), Pass: true},
@@ -223,7 +223,7 @@ func TestPerToken_ZeroPriceFallback(t *testing.T) {
 // ================================================================
 func TestPerToken_OverflowProtection(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("pt6-user")
@@ -270,11 +270,11 @@ func TestPerToken_FeeConservation(t *testing.T) {
 		// Fee split: executor 850 + verifier 120 + audit 30 = 1000
 		executorFee := actualFee * 850 / 1000
 		verifierFee := actualFee * 120 / 1000
-		auditFee := actualFee * 30 / 1000
-		remainder := actualFee - executorFee - verifierFee - auditFee
+		fundFee := actualFee * 30 / 1000
+		remainder := actualFee - executorFee - verifierFee - fundFee
 
 		// Remainder goes to executor, so total must equal actualFee
-		total := executorFee + remainder + verifierFee + auditFee
+		total := executorFee + remainder + verifierFee + fundFee
 		if total != actualFee {
 			t.Fatalf("iteration %d: fee split %d != actualFee %d", i, total, actualFee)
 		}
@@ -329,7 +329,7 @@ func TestPerToken_TimeoutFee(t *testing.T) {
 // ================================================================
 func TestAntiCheat_HonestWorker(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("ac1-user")
@@ -363,7 +363,7 @@ func TestAntiCheat_HonestWorker(t *testing.T) {
 // ================================================================
 func TestAntiCheat_WorkerOverreport(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("ac2-user")
@@ -396,7 +396,7 @@ func TestAntiCheat_WorkerOverreport(t *testing.T) {
 // ================================================================
 func TestAntiCheat_ThreeStrikesJail(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("ac3-user")
@@ -436,7 +436,7 @@ func TestAntiCheat_ThreeStrikesJail(t *testing.T) {
 // ================================================================
 func TestAntiCheat_WithinTolerance(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("ac5-user")
@@ -469,7 +469,7 @@ func TestAntiCheat_WithinTolerance(t *testing.T) {
 // ================================================================
 func TestAntiCheat_StreakReset(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	worker := makeAddr("ac6-worker")
@@ -495,7 +495,7 @@ func TestAntiCheat_StreakReset(t *testing.T) {
 // ================================================================
 func TestAntiCheat_DisabledNoCheck(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	// Billing DISABLED
 
 	user := makeAddr("ac7-user")
@@ -529,7 +529,7 @@ func TestAntiCheat_DisabledNoCheck(t *testing.T) {
 // ================================================================
 func TestAntiCheat_PairTracking(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("ac8-user")

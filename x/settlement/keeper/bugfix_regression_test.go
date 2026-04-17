@@ -90,109 +90,109 @@ func setupTrackingKeeper(t *testing.T) (keeper.Keeper, sdk.Context, *trackingBan
 
 // ============================================================
 // Fix 1: Audit fund deduplication
-// Spec: "per_person_fee = pool / audit person-count" — each unique auditor gets one payment.
+// Spec: "per_person_fee = pool / audit person-count" — each unique second_verifier gets one payment.
 // ============================================================
 
-func TestAuditFundDistribution_DeduplicatesAuditors(t *testing.T) {
+func TestMultiVerificationFundDistribution_DeduplicatesSecondVerifiers(t *testing.T) {
 	k, ctx, bk, _ := setupTrackingKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
-	auditorA := makeAddr("auditor-a")
-	auditorB := makeAddr("auditor-b")
+	second_verifierA := makeAddr("second_verifier-a")
+	second_verifierB := makeAddr("second_verifier-b")
 
-	// Create 3 AuditPendingTasks in the same epoch, auditor A appears in ALL of them
+	// Create 3 SecondVerificationPendingTasks in the same epoch, second_verifier A appears in ALL of them
 	epoch := ctx.BlockHeight() / 100
 	for i := 0; i < 3; i++ {
 		taskId := []byte(fmt.Sprintf("dedup-audit-task-%02d", i))
-		k.SetAuditPending(ctx, types.AuditPendingTask{
+		k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 			TaskId:            taskId,
 			OriginalStatus:    types.SettlementSuccess,
 			SubmittedAt:       epoch * 100, // same epoch
 			UserAddress:       makeAddr("user").String(),
 			WorkerAddress:     makeAddr("worker").String(),
-			VerifierAddresses: []string{auditorA.String(), auditorB.String()},
+			VerifierAddresses: []string{second_verifierA.String(), second_verifierB.String()},
 			Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
 			ExpireBlock:       10000,
 		})
-		// P1-9: DistributeAuditFund now reads from AuditRecord, not AuditPendingTask
-		k.SetAuditRecord(ctx, types.AuditRecord{
-			TaskId:           taskId,
-			Epoch:            epoch,
-			AuditorAddresses: []string{auditorA.String(), auditorB.String()},
-			Results:          []bool{true, true},
-			ProcessedAt:      epoch * 100,
+		// P1-9: DistributeMultiVerificationFund now reads from SecondVerificationRecord, not SecondVerificationPendingTask
+		k.SetSecondVerificationRecord(ctx, types.SecondVerificationRecord{
+			TaskId:                  taskId,
+			Epoch:                   epoch,
+			SecondVerifierAddresses: []string{second_verifierA.String(), second_verifierB.String()},
+			Results:                 []bool{true, true},
+			ProcessedAt:             epoch * 100,
 		})
 	}
 
-	// Set epoch stats: 2 unique auditors, total fees 10M
+	// Set epoch stats: 2 unique second_verifiers, total fees 10M
 	stats := types.EpochStats{
-		Epoch:            epoch,
-		TotalFees:        math.NewInt(10_000_000),
-		AuditPersonCount: 2,
+		Epoch:                         epoch,
+		TotalFees:                     math.NewInt(10_000_000),
+		SecondVerificationPersonCount: 2,
 	}
 	k.SetEpochStats(ctx, stats)
 
-	k.DistributeAuditFund(ctx, epoch)
+	k.DistributeMultiVerificationFund(ctx, epoch)
 
 	// Audit KT §8: per-person-time fee = pool / total_person_times.
-	// audit_pool = 10M * 30/1000 = 300_000. totalPersonTimes = 6 (each auditor × 3 records).
-	// perPersonTime = 300_000 / 6 = 50_000. Each auditor gets 50_000 × 3 = 150_000.
-	wantPerAuditor := math.NewInt(150_000)
+	// audit_pool = 10M * 30/1000 = 300_000. totalPersonTimes = 6 (each second_verifier × 3 records).
+	// perPersonTime = 300_000 / 6 = 50_000. Each second_verifier gets 50_000 × 3 = 150_000.
+	wantPerSecondVerifier := math.NewInt(150_000)
 
-	gotA := bk.receivedBy(auditorA)
-	gotB := bk.receivedBy(auditorB)
+	gotA := bk.receivedBy(second_verifierA)
+	gotB := bk.receivedBy(second_verifierB)
 
-	if !gotA.Equal(wantPerAuditor) {
-		t.Fatalf("auditorA: want %s, got %s", wantPerAuditor, gotA)
+	if !gotA.Equal(wantPerSecondVerifier) {
+		t.Fatalf("second_verifierA: want %s, got %s", wantPerSecondVerifier, gotA)
 	}
-	if !gotB.Equal(wantPerAuditor) {
-		t.Fatalf("auditorB: want %s, got %s", wantPerAuditor, gotB)
+	if !gotB.Equal(wantPerSecondVerifier) {
+		t.Fatalf("second_verifierB: want %s, got %s", wantPerSecondVerifier, gotB)
 	}
 }
 
-func TestAuditFundDistribution_SingleAuditorMultipleTasks(t *testing.T) {
+func TestMultiVerificationFundDistribution_SingleSecondVerifierMultipleTasks(t *testing.T) {
 	k, ctx, bk, _ := setupTrackingKeeper(t)
 
-	auditor := makeAddr("sole-auditor")
+	second_verifier := makeAddr("sole-second_verifier")
 	epoch := ctx.BlockHeight() / 100
 
-	// Same auditor in 5 different tasks
+	// Same second_verifier in 5 different tasks
 	for i := 0; i < 5; i++ {
 		taskId := []byte(fmt.Sprintf("sole-audit-task-%02d", i))
-		k.SetAuditPending(ctx, types.AuditPendingTask{
+		k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 			TaskId:            taskId,
 			OriginalStatus:    types.SettlementSuccess,
 			SubmittedAt:       epoch * 100,
 			UserAddress:       makeAddr("user").String(),
 			WorkerAddress:     makeAddr("worker").String(),
-			VerifierAddresses: []string{auditor.String()},
+			VerifierAddresses: []string{second_verifier.String()},
 			Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
 			ExpireBlock:       10000,
 		})
-		// P1-9: DistributeAuditFund now reads from AuditRecord, not AuditPendingTask
-		k.SetAuditRecord(ctx, types.AuditRecord{
-			TaskId:           taskId,
-			Epoch:            epoch,
-			AuditorAddresses: []string{auditor.String()},
-			Results:          []bool{true},
-			ProcessedAt:      epoch * 100,
+		// P1-9: DistributeMultiVerificationFund now reads from SecondVerificationRecord, not SecondVerificationPendingTask
+		k.SetSecondVerificationRecord(ctx, types.SecondVerificationRecord{
+			TaskId:                  taskId,
+			Epoch:                   epoch,
+			SecondVerifierAddresses: []string{second_verifier.String()},
+			Results:                 []bool{true},
+			ProcessedAt:             epoch * 100,
 		})
 	}
 
 	stats := types.EpochStats{
-		Epoch:            epoch,
-		TotalFees:        math.NewInt(10_000_000),
-		AuditPersonCount: 1,
+		Epoch:                         epoch,
+		TotalFees:                     math.NewInt(10_000_000),
+		SecondVerificationPersonCount: 1,
 	}
 	k.SetEpochStats(ctx, stats)
 
-	k.DistributeAuditFund(ctx, epoch)
+	k.DistributeMultiVerificationFund(ctx, epoch)
 
 	// pool = 10M * 30/1000 = 300_000. Only 1 person → gets 300_000 once.
 	want := math.NewInt(300_000)
-	got := bk.receivedBy(auditor)
+	got := bk.receivedBy(second_verifier)
 	if !got.Equal(want) {
-		t.Fatalf("sole auditor: want %s, got %s (got %sx if bug exists)", want, got, got.Quo(want))
+		t.Fatalf("sole second_verifier: want %s, got %s (got %sx if bug exists)", want, got, got.Quo(want))
 	}
 }
 
@@ -219,7 +219,7 @@ func TestAuditOverturn_FailToSuccess_UserNotDoubleCharged(t *testing.T) {
 	// the code did `continue` — NO fee was collected. Task goes directly to PENDING_AUDIT.
 	// Simulate this by directly setting audit pending (no initial settlement).
 	taskId := []byte("overturn-task-00001")
-	k.SetAuditPending(ctx, types.AuditPendingTask{
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 		TaskId:            taskId,
 		OriginalStatus:    types.SettlementFail,
 		SubmittedAt:       ctx.BlockHeight(),
@@ -238,12 +238,12 @@ func TestAuditOverturn_FailToSuccess_UserNotDoubleCharged(t *testing.T) {
 
 	// Submit 3 PASS audit results → overturns FAIL to SUCCESS
 	for i := 0; i < 3; i++ {
-		_ = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    makeAddr(fmt.Sprintf("ov-aud%d", i)).String(),
-			TaskId:     taskId,
-			Epoch:      1,
-			Pass:       true,
-			LogitsHash: []byte("hash"),
+		_ = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: makeAddr(fmt.Sprintf("ov-aud%d", i)).String(),
+			TaskId:         taskId,
+			Epoch:          1,
+			Pass:           true,
+			LogitsHash:     []byte("hash"),
 		})
 	}
 
@@ -264,23 +264,23 @@ func TestAuditOverturn_FailToSuccess_UserNotDoubleCharged(t *testing.T) {
 
 func TestDistributeSuccessFee_NoDustLoss(t *testing.T) {
 	tests := []struct {
-		name       string
-		feeAmount  int64
-		verifiers  int
-		wantTotal  int64 // 12% of fee (verifier_fee_ratio = 120‰)
+		name      string
+		feeAmount int64
+		verifiers int
+		wantTotal int64 // 12% of fee (verifier_fee_ratio = 120‰)
 	}{
 		{"divisible_by_3", 1_000_000, 3, 120_000},
 		{"not_divisible_by_3", 1_000_001, 3, 120_000},      // 1_000_001 * 120 / 1000 = 120_000
-		{"remainder_in_per_verifier", 999_999, 3, 119_999},  // 999_999 * 120 / 1000 = 119_999
+		{"remainder_in_per_verifier", 999_999, 3, 119_999}, // 999_999 * 120 / 1000 = 119_999
 		{"single_verifier", 1_000_000, 1, 120_000},
 		{"large_fee", 999_999_999, 3, 119_999_999},
-		{"tiny_fee_rounds_to_zero", 10, 3, 1},               // 10 * 120 / 1000 = 1
+		{"tiny_fee_rounds_to_zero", 10, 3, 1}, // 10 * 120 / 1000 = 1
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			k, ctx, bk, _ := setupTrackingKeeper(t)
-			k.SetCurrentAuditRate(ctx, 0)
+			k.SetCurrentSecondVerificationRate(ctx, 0)
 
 			userAddr := makeAddr("dust-user")
 			workerAddr := makeAddr("dust-worker")
@@ -329,7 +329,7 @@ func TestDistributeSuccessFee_NoDustLoss(t *testing.T) {
 
 func TestDistributeSuccessFee_ExecutorGets95Percent(t *testing.T) {
 	k, ctx, bk, _ := setupTrackingKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("exec-user")
 	workerAddr := makeAddr("exec-worker")
@@ -364,7 +364,7 @@ func TestDistributeSuccessFee_ExecutorGets95Percent(t *testing.T) {
 
 func TestDistributeFailFee_VerifiersPaidFromFailFee(t *testing.T) {
 	k, ctx, bk, _ := setupTrackingKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("failfee-user")
 	workerAddr := makeAddr("failfee-worker")
@@ -414,18 +414,18 @@ func TestDistributeFailFee_VerifiersPaidFromFailFee(t *testing.T) {
 // Verify that only timed-out tasks are processed, not all pending.
 // ============================================================
 
-func TestHandleAuditTimeouts_OnlyProcessesTimedOut(t *testing.T) {
+func TestHandleSecondVerificationTimeouts_OnlyProcessesTimedOut(t *testing.T) {
 	k, ctx, _, _ := setupTrackingKeeper(t)
 
 	params := k.GetParams(ctx)
-	params.AuditTimeout = 100
-	params.ReauditTimeout = 200
+	params.SecondVerificationTimeout = 100
+	params.ThirdVerificationTimeout = 200
 	k.SetParams(ctx, params)
 
 	// Create tasks at different heights
 	heights := []int64{10, 50, 90, 150, 200}
 	for i, h := range heights {
-		k.SetAuditPending(ctx, types.AuditPendingTask{
+		k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 			TaskId:            []byte(fmt.Sprintf("timeout-test-task%02d", i)),
 			OriginalStatus:    types.SettlementSuccess,
 			SubmittedAt:       h,
@@ -442,79 +442,79 @@ func TestHandleAuditTimeouts_OnlyProcessesTimedOut(t *testing.T) {
 	// But height 10: 200-10=190>100 ✓, height 50: 200-50=150>100 ✓, height 90: 200-90=110>100 ✓
 	// height 150: 200-150=50<=100 ✗, height 200: 200-200=0<=100 ✗
 	ctx = ctx.WithBlockHeight(200)
-	timedOut := k.HandleAuditTimeouts(ctx)
+	timedOut := k.HandleSecondVerificationTimeouts(ctx)
 	if timedOut != 3 {
 		t.Fatalf("want 3 timed-out tasks, got %d", timedOut)
 	}
 
 	// Tasks at heights 150 and 200 should still be pending
-	_, found := k.GetAuditPending(ctx, []byte("timeout-test-task03"))
+	_, found := k.GetSecondVerificationPending(ctx, []byte("timeout-test-task03"))
 	if !found {
 		t.Fatal("task at height 150 should still be pending")
 	}
-	_, found = k.GetAuditPending(ctx, []byte("timeout-test-task04"))
+	_, found = k.GetSecondVerificationPending(ctx, []byte("timeout-test-task04"))
 	if !found {
 		t.Fatal("task at height 200 should still be pending")
 	}
 }
 
-func TestHandleAuditTimeouts_EmptySet(t *testing.T) {
+func TestHandleSecondVerificationTimeouts_EmptySet(t *testing.T) {
 	k, ctx, _, _ := setupTrackingKeeper(t)
 
 	ctx = ctx.WithBlockHeight(10000)
-	timedOut := k.HandleAuditTimeouts(ctx)
+	timedOut := k.HandleSecondVerificationTimeouts(ctx)
 	if timedOut != 0 {
 		t.Fatalf("want 0, got %d", timedOut)
 	}
 }
 
-func TestHandleAuditTimeouts_ReauditSeparateFromAudit(t *testing.T) {
+func TestHandleSecondVerificationTimeouts_ThirdVerificationSeparateFromAudit(t *testing.T) {
 	k, ctx, _, _ := setupTrackingKeeper(t)
 
 	params := k.GetParams(ctx)
-	params.AuditTimeout = 50
-	params.ReauditTimeout = 100
+	params.SecondVerificationTimeout = 50
+	params.ThirdVerificationTimeout = 100
 	k.SetParams(ctx, params)
 
 	// Audit task at height 10
-	k.SetAuditPending(ctx, types.AuditPendingTask{
-		TaskId:            []byte("reaudit-sep-audit01"),
-		OriginalStatus:    types.SettlementSuccess,
-		SubmittedAt:       10,
-		UserAddress:       makeAddr("rs-user").String(),
-		WorkerAddress:     makeAddr("rs-worker").String(),
-		VerifierAddresses: []string{makeAddr("rs-v").String()},
-		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
-		ExpireBlock:       10000,
-		IsReaudit:         false,
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
+		TaskId:              []byte("third_verification-sep-audit01"),
+		OriginalStatus:      types.SettlementSuccess,
+		SubmittedAt:         10,
+		UserAddress:         makeAddr("rs-user").String(),
+		WorkerAddress:       makeAddr("rs-worker").String(),
+		VerifierAddresses:   []string{makeAddr("rs-v").String()},
+		Fee:                 sdk.NewCoin("ufai", math.NewInt(1_000_000)),
+		ExpireBlock:         10000,
+		IsThirdVerification: false,
 	})
 
-	// Reaudit task at height 10
-	k.SetAuditPending(ctx, types.AuditPendingTask{
-		TaskId:            []byte("reaudit-sep-reaud01"),
-		OriginalStatus:    types.SettlementSuccess,
-		SubmittedAt:       10,
-		UserAddress:       makeAddr("rs-user").String(),
-		WorkerAddress:     makeAddr("rs-worker").String(),
-		VerifierAddresses: []string{makeAddr("rs-v").String()},
-		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
-		ExpireBlock:       10000,
-		IsReaudit:         true,
+	// ThirdVerification task at height 10
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
+		TaskId:              []byte("third_verification-sep-reaud01"),
+		OriginalStatus:      types.SettlementSuccess,
+		SubmittedAt:         10,
+		UserAddress:         makeAddr("rs-user").String(),
+		WorkerAddress:       makeAddr("rs-worker").String(),
+		VerifierAddresses:   []string{makeAddr("rs-v").String()},
+		Fee:                 sdk.NewCoin("ufai", math.NewInt(1_000_000)),
+		ExpireBlock:         10000,
+		IsThirdVerification: true,
 	})
 
 	// At height 80: audit cutoff=30 → audit task (submitted at 10) times out
-	// reaudit cutoff=-20 → negative, no reaudit timeout
+	// third_verification cutoff=-20 → negative, no third_verification timeout
 	ctx = ctx.WithBlockHeight(80)
-	timedOut := k.HandleAuditTimeouts(ctx)
+	timedOut := k.HandleSecondVerificationTimeouts(ctx)
 	if timedOut != 1 {
 		t.Fatalf("at height 80: want 1 (only audit), got %d", timedOut)
 	}
 
-	// At height 120: reaudit cutoff=20 → reaudit task (submitted at 10) times out
+	// At height 120: third_verification cutoff=20 → third_verification task (submitted at 10) times out
 	ctx = ctx.WithBlockHeight(120)
-	timedOut = k.HandleAuditTimeouts(ctx)
+	timedOut = k.HandleSecondVerificationTimeouts(ctx)
 	if timedOut != 1 {
-		t.Fatalf("at height 120: want 1 (only reaudit), got %d", timedOut)
+		t.Fatalf("at height 120: want 1 (only third_verification), got %d", timedOut)
 	}
 }
 
@@ -538,7 +538,7 @@ func TestParams_ZeroFeeRatios_Rejected(t *testing.T) {
 			p := types.DefaultParams()
 			p.ExecutorFeeRatio = tt.executor
 			p.VerifierFeeRatio = tt.verifier
-			p.AuditFundRatio = tt.audit
+			p.MultiVerificationFundRatio = tt.audit
 			if err := p.Validate(); err == nil {
 				t.Fatalf("should reject params with %s", tt.name)
 			}
@@ -563,7 +563,7 @@ func TestParams_ValidRatios_Accepted(t *testing.T) {
 			p := types.DefaultParams()
 			p.ExecutorFeeRatio = tt.executor
 			p.VerifierFeeRatio = tt.verifier
-			p.AuditFundRatio = tt.audit
+			p.MultiVerificationFundRatio = tt.audit
 			if err := p.Validate(); err != nil {
 				t.Fatalf("should accept valid params: %v", err)
 			}
@@ -592,7 +592,7 @@ func TestBatchSettlement_MissingSigs_Skipped(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			k, ctx, _, _ := setupTrackingKeeper(t)
-			k.SetCurrentAuditRate(ctx, 0)
+			k.SetCurrentSecondVerificationRate(ctx, 0)
 
 			userAddr := makeAddr("sig-user")
 			_ = k.ProcessDeposit(ctx, userAddr, sdk.NewCoin("ufai", math.NewInt(10_000_000)))
@@ -641,7 +641,7 @@ func TestBatchSettlement_MissingSigs_Skipped(t *testing.T) {
 
 func TestBatchSettlement_MixedEntries_OnlyValidProcessed(t *testing.T) {
 	k, ctx, bk, _ := setupTrackingKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("mix-user")
 	workerAddr := makeAddr("mix-worker")
@@ -721,7 +721,7 @@ func TestBatchSettlement_MixedEntries_OnlyValidProcessed(t *testing.T) {
 
 func TestEpochStats_BoundaryExact(t *testing.T) {
 	k, ctx, _, _ := setupTrackingKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("epoch-user")
 	workerAddr := makeAddr("epoch-worker")
@@ -773,7 +773,7 @@ func TestEpochStats_BoundaryExact(t *testing.T) {
 
 func TestBatchSettlement_AllSkipped_ZeroBatchResult(t *testing.T) {
 	k, ctx, _, _ := setupTrackingKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("skip-user")
 	// No deposit → balance = 0 → all entries skipped
@@ -919,4 +919,3 @@ func setupContext(t *testing.T, storeKey storetypes.StoreKey) sdk.Context {
 	}
 	return sdk.NewContext(stateStore, cmtproto.Header{Height: 100}, false, log.NewNopLogger())
 }
-

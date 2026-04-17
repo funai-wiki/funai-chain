@@ -68,7 +68,7 @@ func MakeEncodingConfig() EncodingConfig {
 		"funai.settlement.MsgWithdraw",
 		"funai.settlement.MsgBatchSettlement",
 		"funai.settlement.MsgFraudProof",
-		"funai.settlement.MsgAuditResult",
+		"funai.settlement.MsgSecondVerificationResult",
 		"funai.worker.MsgRegisterWorker",
 		"funai.worker.MsgExitWorker",
 		"funai.worker.MsgUpdateModels",

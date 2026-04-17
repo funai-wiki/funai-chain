@@ -66,20 +66,20 @@ type Leader struct {
 	// S1: per-worker inference concurrency tracking (replaces BusyWorkers boolean)
 	activeInferenceTasks map[string]uint32
 	// S2: per-worker verification concurrency tracking (independent of inference)
-	activeVerifyTasks    map[string]uint32
-	mu                   sync.RWMutex
+	activeVerifyTasks map[string]uint32
+	mu                sync.RWMutex
 
 	// S9: per-task shadow balance tracking with expiry
 	pendingFees map[string][]PendingEntry // userAddr → per-task entries
 
 	// S8: rate limiter
-	rateCounts   map[string]int
-	rateResetAt  time.Time
+	rateCounts  map[string]int
+	rateResetAt time.Time
 
 	// P2-2: mempool for batching incoming requests
-	mempool  chan mempoolRequest
-	stopCh   chan struct{}
-	stopped  atomic.Bool
+	mempool chan mempoolRequest
+	stopCh  chan struct{}
+	stopped atomic.Bool
 
 	// P2-3: TPS tracking for auto-split
 	requestTimestamps []time.Time
@@ -121,12 +121,12 @@ func New(modelId string, privKey []byte, address string, pubkey []byte, host *p2
 		activeInferenceTasks: make(map[string]uint32),
 		activeVerifyTasks:    make(map[string]uint32),
 		pendingFees:          make(map[string][]PendingEntry),
-		rateCounts:  make(map[string]int),
-		rateResetAt: time.Now().Add(rateLimitResetSecs * time.Second),
-		mempool:     make(chan mempoolRequest, 4096),
-		stopCh:      make(chan struct{}),
-		splitN:      1,
-		epochStart:  time.Now(),
+		rateCounts:           make(map[string]int),
+		rateResetAt:          time.Now().Add(rateLimitResetSecs * time.Second),
+		mempool:              make(chan mempoolRequest, 4096),
+		stopCh:               make(chan struct{}),
+		splitN:               1,
+		epochStart:           time.Now(),
 	}
 	go l.mempoolLoop()
 	return l

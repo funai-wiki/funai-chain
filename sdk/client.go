@@ -31,14 +31,14 @@ type Config struct {
 	ChainREST   string   // chain REST URL
 
 	// P3-3: Privacy options (§19: sanitization defaults ON; set DisableSanitization=true to opt out)
-	DisableSanitization    bool   // set true to skip PII sanitization (default: sanitization ON)
-	EnableTLS              bool   // enforce TLS for P2P connections (deprecated, use PrivacyMode)
-	PrivacyMode            string // "plain", "tls", "tor", "full"
-	TorSocksAddr           string // Tor SOCKS5 proxy address (default "127.0.0.1:9050")
-	EncryptionPubkey       []byte // X25519 public key for message encryption (auto-generated if empty)
-	EncryptionPrivkey      []byte // X25519 private key (auto-generated if empty)
-	RecipientEncryptionKey []byte         // X25519 public key of recipient (Leader) for TLS encryption
-	InferTimeout           time.Duration  // KT: inference retry timeout (default 30s, range [5s, 120s])
+	DisableSanitization    bool          // set true to skip PII sanitization (default: sanitization ON)
+	EnableTLS              bool          // enforce TLS for P2P connections (deprecated, use PrivacyMode)
+	PrivacyMode            string        // "plain", "tls", "tor", "full"
+	TorSocksAddr           string        // Tor SOCKS5 proxy address (default "127.0.0.1:9050")
+	EncryptionPubkey       []byte        // X25519 public key for message encryption (auto-generated if empty)
+	EncryptionPrivkey      []byte        // X25519 private key (auto-generated if empty)
+	RecipientEncryptionKey []byte        // X25519 public key of recipient (Leader) for TLS encryption
+	InferTimeout           time.Duration // KT: inference retry timeout (default 30s, range [5s, 120s])
 }
 
 // ModelSize categorizes model sizes for tiered expire (P3-5).
@@ -64,8 +64,8 @@ type Client struct {
 	chainClient         *chain.Client
 	transport           privacy.Transport
 	privacyMode         privacy.Mode
-	recipientEncryptKey []byte         // cached Leader X25519 pubkey for TLS encryption
-	InferTimeout        time.Duration  // KT: configurable retry timeout (default 30s)
+	recipientEncryptKey []byte        // cached Leader X25519 pubkey for TLS encryption
+	InferTimeout        time.Duration // KT: configurable retry timeout (default 30s)
 }
 
 // NewClient creates a new SDK client with its own libp2p host.
@@ -148,15 +148,15 @@ func NewClient(cfg Config) (*Client, error) {
 
 // InferParams holds parameters for an inference request.
 type InferParams struct {
-	ModelId     string
-	Prompt      string
-	Fee         uint64 // in ufai
-	Temperature uint16 // 0=argmax, 10000=1.0
-	TopP        uint16 // 0 or 10000=disabled, 1-9999=nucleus sampling (10000=1.0)
-	MaxExpire      uint64 // max blocks for signature validity
-	MaxTokens      uint32 // expected max output tokens (for tiered expire)
-	MaxLatencyMs   uint32 // max first-token latency in ms (0=no constraint)
-	StreamMode     bool   // whether to request streaming response
+	ModelId      string
+	Prompt       string
+	Fee          uint64 // in ufai
+	Temperature  uint16 // 0=argmax, 10000=1.0
+	TopP         uint16 // 0 or 10000=disabled, 1-9999=nucleus sampling (10000=1.0)
+	MaxExpire    uint64 // max blocks for signature validity
+	MaxTokens    uint32 // expected max output tokens (for tiered expire)
+	MaxLatencyMs uint32 // max first-token latency in ms (0=no constraint)
+	StreamMode   bool   // whether to request streaming response
 }
 
 // InferResult holds the final inference result.
@@ -217,19 +217,19 @@ func (c *Client) Infer(ctx context.Context, params InferParams) (*InferResult, e
 	}
 
 	req := &p2ptypes.InferRequest{
-		ModelId:     []byte(params.ModelId),
-		PromptHash:  promptHash[:],
-		MaxFee:      params.Fee,
-		ExpireBlock: expireBlock,
-		Temperature: params.Temperature,
-		TopP:        params.TopP,
-		Timestamp:   timestamp,
-		UserPubkey:  c.config.UserPubkey,
-		Prompt:      prompt,
-		UserSeed:      userSeed,
-		MaxTokens:     params.MaxTokens,
-		MaxLatencyMs:  params.MaxLatencyMs,
-		StreamMode:    params.StreamMode,
+		ModelId:      []byte(params.ModelId),
+		PromptHash:   promptHash[:],
+		MaxFee:       params.Fee,
+		ExpireBlock:  expireBlock,
+		Temperature:  params.Temperature,
+		TopP:         params.TopP,
+		Timestamp:    timestamp,
+		UserPubkey:   c.config.UserPubkey,
+		Prompt:       prompt,
+		UserSeed:     userSeed,
+		MaxTokens:    params.MaxTokens,
+		MaxLatencyMs: params.MaxLatencyMs,
+		StreamMode:   params.StreamMode,
 	}
 
 	// P0-1: Sign the InferRequest with user's secp256k1 private key.
@@ -438,12 +438,12 @@ func (c *Client) submitFraudProof(ctx context.Context, taskId []byte, receipt *p
 // NOTE: Go's regexp/syntax does not support Perl lookaheads (?!...).
 // Patterns use broader matches; false positives are acceptable for privacy-first sanitization.
 var piiPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),                              // email
-	regexp.MustCompile(`\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b`),                                                  // SSN (US): 3-2-4 digit pattern
-	regexp.MustCompile(`\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6011)\d{4,}\b`),                                   // credit card: major issuer prefixes
-	regexp.MustCompile(`\b1[3-9]\d{9}\b`),                                                                    // China mobile phone
-	regexp.MustCompile(`\b[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b`),   // China ID card
-	regexp.MustCompile(`\b[2-9]\d{2}[-.\s]?[2-9]\d{2}[-.\s]?\d{4}\b`),                                        // US phone: NANP
+	regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),                            // email
+	regexp.MustCompile(`\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b`),                                               // SSN (US): 3-2-4 digit pattern
+	regexp.MustCompile(`\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6011)\d{4,}\b`),                                // credit card: major issuer prefixes
+	regexp.MustCompile(`\b1[3-9]\d{9}\b`),                                                                 // China mobile phone
+	regexp.MustCompile(`\b[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b`), // China ID card
+	regexp.MustCompile(`\b[2-9]\d{2}[-.\s]?[2-9]\d{2}[-.\s]?\d{4}\b`),                                     // US phone: NANP
 }
 
 // SanitizeResult holds a sanitized prompt and the mapping needed to restore PII in outputs.

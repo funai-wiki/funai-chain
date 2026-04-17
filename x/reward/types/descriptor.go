@@ -36,9 +36,9 @@ func init() {
 	})
 }
 
-func (m *MsgUpdateParams) Descriptor() ([]byte, []int)             { return rewardDescGz, []int{0} }
-func (m *MsgUpdateParamsResponse) Descriptor() ([]byte, []int)     { return rewardDescGz, []int{1} }
-func (m *QueryParamsRequest) Descriptor() ([]byte, []int)          { return rewardDescGz, []int{2} }
-func (m *QueryParamsResponse) Descriptor() ([]byte, []int)         { return rewardDescGz, []int{3} }
-func (m *QueryRewardHistoryRequest) Descriptor() ([]byte, []int)   { return rewardDescGz, []int{4} }
-func (m *QueryRewardHistoryResponse) Descriptor() ([]byte, []int)  { return rewardDescGz, []int{5} }
+func (m *MsgUpdateParams) Descriptor() ([]byte, []int)            { return rewardDescGz, []int{0} }
+func (m *MsgUpdateParamsResponse) Descriptor() ([]byte, []int)    { return rewardDescGz, []int{1} }
+func (m *QueryParamsRequest) Descriptor() ([]byte, []int)         { return rewardDescGz, []int{2} }
+func (m *QueryParamsResponse) Descriptor() ([]byte, []int)        { return rewardDescGz, []int{3} }
+func (m *QueryRewardHistoryRequest) Descriptor() ([]byte, []int)  { return rewardDescGz, []int{4} }
+func (m *QueryRewardHistoryResponse) Descriptor() ([]byte, []int) { return rewardDescGz, []int{5} }

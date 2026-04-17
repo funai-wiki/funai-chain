@@ -101,20 +101,20 @@ func (m msgServer) SubmitFraudProof(goCtx context.Context, msg *types.MsgFraudPr
 	return &types.MsgFraudProofResponse{}, nil
 }
 
-func (m msgServer) SubmitAuditResult(goCtx context.Context, msg *types.MsgAuditResult) (*types.MsgAuditResultResponse, error) {
+func (m msgServer) SubmitSecondVerificationResult(goCtx context.Context, msg *types.MsgSecondVerificationResult) (*types.MsgSecondVerificationResultResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	if err := m.ProcessAuditResult(ctx, msg); err != nil {
+	if err := m.ProcessSecondVerificationResult(ctx, msg); err != nil {
 		return nil, err
 	}
 
 	ctx.EventManager().EmitEvent(sdk.NewEvent(
-		types.EventAuditResult,
-		sdk.NewAttribute(types.AttributeKeyAuditor, msg.Auditor),
+		types.EventSecondVerificationResult,
+		sdk.NewAttribute(types.AttributeKeySecondVerifier, msg.SecondVerifier),
 		sdk.NewAttribute(types.AttributeKeyTaskId, hex.EncodeToString(msg.TaskId)),
 		sdk.NewAttribute(types.AttributeKeyEpoch, strconv.FormatInt(msg.Epoch, 10)),
 		sdk.NewAttribute(types.AttributeKeyPass, strconv.FormatBool(msg.Pass)),
 	))
 
-	return &types.MsgAuditResultResponse{}, nil
+	return &types.MsgSecondVerificationResultResponse{}, nil
 }

@@ -55,21 +55,21 @@ func init() {
 	})
 }
 
-func (m *MsgRegisterWorker) Descriptor() ([]byte, []int)         { return workerDescGz, []int{0} }
-func (m *MsgExitWorker) Descriptor() ([]byte, []int)             { return workerDescGz, []int{1} }
-func (m *MsgUpdateModels) Descriptor() ([]byte, []int)           { return workerDescGz, []int{2} }
-func (m *MsgStake) Descriptor() ([]byte, []int)                  { return workerDescGz, []int{3} }
-func (m *MsgUnjail) Descriptor() ([]byte, []int)                 { return workerDescGz, []int{4} }
-func (m *MsgRegisterWorkerResponse) Descriptor() ([]byte, []int) { return workerDescGz, []int{5} }
-func (m *MsgExitWorkerResponse) Descriptor() ([]byte, []int)     { return workerDescGz, []int{6} }
-func (m *MsgUpdateModelsResponse) Descriptor() ([]byte, []int)   { return workerDescGz, []int{7} }
-func (m *MsgStakeResponse) Descriptor() ([]byte, []int)          { return workerDescGz, []int{8} }
-func (m *MsgUnjailResponse) Descriptor() ([]byte, []int)         { return workerDescGz, []int{9} }
-func (m *Worker) Descriptor() ([]byte, []int)                    { return workerDescGz, []int{10} }
-func (m *QueryWorkerRequest) Descriptor() ([]byte, []int)        { return workerDescGz, []int{11} }
-func (m *QueryWorkerResponse) Descriptor() ([]byte, []int)       { return workerDescGz, []int{12} }
-func (m *QueryWorkersRequest) Descriptor() ([]byte, []int)       { return workerDescGz, []int{13} }
-func (m *QueryWorkersResponse) Descriptor() ([]byte, []int)      { return workerDescGz, []int{14} }
+func (m *MsgRegisterWorker) Descriptor() ([]byte, []int)           { return workerDescGz, []int{0} }
+func (m *MsgExitWorker) Descriptor() ([]byte, []int)               { return workerDescGz, []int{1} }
+func (m *MsgUpdateModels) Descriptor() ([]byte, []int)             { return workerDescGz, []int{2} }
+func (m *MsgStake) Descriptor() ([]byte, []int)                    { return workerDescGz, []int{3} }
+func (m *MsgUnjail) Descriptor() ([]byte, []int)                   { return workerDescGz, []int{4} }
+func (m *MsgRegisterWorkerResponse) Descriptor() ([]byte, []int)   { return workerDescGz, []int{5} }
+func (m *MsgExitWorkerResponse) Descriptor() ([]byte, []int)       { return workerDescGz, []int{6} }
+func (m *MsgUpdateModelsResponse) Descriptor() ([]byte, []int)     { return workerDescGz, []int{7} }
+func (m *MsgStakeResponse) Descriptor() ([]byte, []int)            { return workerDescGz, []int{8} }
+func (m *MsgUnjailResponse) Descriptor() ([]byte, []int)           { return workerDescGz, []int{9} }
+func (m *Worker) Descriptor() ([]byte, []int)                      { return workerDescGz, []int{10} }
+func (m *QueryWorkerRequest) Descriptor() ([]byte, []int)          { return workerDescGz, []int{11} }
+func (m *QueryWorkerResponse) Descriptor() ([]byte, []int)         { return workerDescGz, []int{12} }
+func (m *QueryWorkersRequest) Descriptor() ([]byte, []int)         { return workerDescGz, []int{13} }
+func (m *QueryWorkersResponse) Descriptor() ([]byte, []int)        { return workerDescGz, []int{14} }
 func (m *QueryWorkersByModelRequest) Descriptor() ([]byte, []int)  { return workerDescGz, []int{15} }
 func (m *QueryWorkersByModelResponse) Descriptor() ([]byte, []int) { return workerDescGz, []int{16} }
 func (m *QueryParamsRequest) Descriptor() ([]byte, []int)          { return workerDescGz, []int{17} }

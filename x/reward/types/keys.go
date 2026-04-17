@@ -10,9 +10,9 @@ const (
 	RouterKey  = ModuleName
 
 	// Store key prefixes
-	ParamsKey                 = "Params"
-	RewardRecordKeyPrefix     = "RewardRecord/value/"
-	EpochRewardSummaryPrefix  = "EpochRewardSummary/value/"
+	ParamsKey                = "Params"
+	RewardRecordKeyPrefix    = "RewardRecord/value/"
+	EpochRewardSummaryPrefix = "EpochRewardSummary/value/"
 )
 
 // KeyRewardRecord returns the store key for a reward record using binary encoding for the epoch number.

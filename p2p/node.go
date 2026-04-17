@@ -29,26 +29,26 @@ import (
 
 // Config holds the P2P node configuration.
 type Config struct {
-	ListenAddr         string   `json:"listen_addr" toml:"listen_addr"`
-	BootPeers          []string `json:"boot_peers" toml:"boot_peers"`
-	ChainRPC           string   `json:"chain_rpc" toml:"chain_rpc"`
-	ChainREST          string   `json:"chain_rest" toml:"chain_rest"`
-	TGIEndpoint        string   `json:"tgi_endpoint" toml:"tgi_endpoint"`
-	TGIToken           string   `json:"tgi_token" toml:"tgi_token"`           // Bearer token for remote TGI auth
-	WorkerAddr         string   `json:"worker_addr" toml:"worker_addr"`
-	WorkerPubkey       []byte   `json:"worker_pubkey" toml:"worker_pubkey"`
-	WorkerPrivKey      []byte   `json:"worker_privkey" toml:"worker_privkey"` // S6: for signing receipts
-	ModelIds           []string `json:"model_ids" toml:"model_ids"`
-	Epsilon            float32  `json:"epsilon" toml:"epsilon"`
-	AuditRate          uint32   `json:"audit_rate" toml:"audit_rate"`
-	BatchSize          int      `json:"batch_size" toml:"batch_size"`
-	EncryptionPubkey   []byte        `json:"encryption_pubkey" toml:"encryption_pubkey"`   // X25519 pubkey for TLS (§19)
-	EncryptionPrivkey  []byte        `json:"encryption_privkey" toml:"encryption_privkey"` // X25519 privkey for TLS (§19)
-	ChainID            string        `json:"chain_id" toml:"chain_id"`                    // C1: chain ID for tx signing
-	BatchInterval      time.Duration `json:"batch_interval" toml:"batch_interval"`         // C1: batch settlement interval
+	ListenAddr         string        `json:"listen_addr" toml:"listen_addr"`
+	BootPeers          []string      `json:"boot_peers" toml:"boot_peers"`
+	ChainRPC           string        `json:"chain_rpc" toml:"chain_rpc"`
+	ChainREST          string        `json:"chain_rest" toml:"chain_rest"`
+	TGIEndpoint        string        `json:"tgi_endpoint" toml:"tgi_endpoint"`
+	TGIToken           string        `json:"tgi_token" toml:"tgi_token"` // Bearer token for remote TGI auth
+	WorkerAddr         string        `json:"worker_addr" toml:"worker_addr"`
+	WorkerPubkey       []byte        `json:"worker_pubkey" toml:"worker_pubkey"`
+	WorkerPrivKey      []byte        `json:"worker_privkey" toml:"worker_privkey"` // S6: for signing receipts
+	ModelIds           []string      `json:"model_ids" toml:"model_ids"`
+	Epsilon            float32       `json:"epsilon" toml:"epsilon"`
+	AuditRate          uint32        `json:"audit_rate" toml:"audit_rate"`
+	BatchSize          int           `json:"batch_size" toml:"batch_size"`
+	EncryptionPubkey   []byte        `json:"encryption_pubkey" toml:"encryption_pubkey"`       // X25519 pubkey for TLS (§19)
+	EncryptionPrivkey  []byte        `json:"encryption_privkey" toml:"encryption_privkey"`     // X25519 privkey for TLS (§19)
+	ChainID            string        `json:"chain_id" toml:"chain_id"`                         // C1: chain ID for tx signing
+	BatchInterval      time.Duration `json:"batch_interval" toml:"batch_interval"`             // C1: batch settlement interval
 	MaxConcurrentTasks uint32        `json:"max_concurrent_tasks" toml:"max_concurrent_tasks"` // G3: inference concurrency limit
-	InferenceBackend   string        `json:"inference_backend" toml:"inference_backend"`   // "tgi" (default), "openai", "ollama", "vllm", "sglang"
-	InferenceModel     string        `json:"inference_model" toml:"inference_model"`       // Model name for OpenAI-compatible backends
+	InferenceBackend   string        `json:"inference_backend" toml:"inference_backend"`       // "tgi" (default), "openai", "ollama", "vllm", "sglang"
+	InferenceModel     string        `json:"inference_model" toml:"inference_model"`           // Model name for OpenAI-compatible backends
 }
 
 func defaultChainID() string {
@@ -61,10 +61,10 @@ func defaultChainID() string {
 // DefaultConfig returns a development configuration.
 func DefaultConfig() Config {
 	return Config{
-		ListenAddr:  "/ip4/0.0.0.0/tcp/4001",
-		ChainRPC:    "http://localhost:26657",
-		ChainREST:   "http://localhost:1317",
-		TGIEndpoint: "http://localhost:8080",
+		ListenAddr:    "/ip4/0.0.0.0/tcp/4001",
+		ChainRPC:      "http://localhost:26657",
+		ChainREST:     "http://localhost:1317",
+		TGIEndpoint:   "http://localhost:8080",
 		Epsilon:       0.01,
 		AuditRate:     100, // 10%
 		BatchSize:     100,
@@ -75,19 +75,19 @@ func DefaultConfig() Config {
 
 // Node is the FunAI P2P node that runs all Layer 2 roles.
 type Node struct {
-	Config           Config
-	Host             *p2phost.Host
-	Chain            *chain.Client
-	TGI              *inference.TGIClient   // kept for backward compat; prefer Engine
-	Engine           inference.Engine       // unified inference engine
-	Leaders          map[string]*leader.Leader // per model_id
-	Worker           *worker.Worker
-	Verifier         *verifier.Verifier
-	Proposer         *proposer.Proposer
+	Config            Config
+	Host              *p2phost.Host
+	Chain             *chain.Client
+	TGI               *inference.TGIClient      // kept for backward compat; prefer Engine
+	Engine            inference.Engine          // unified inference engine
+	Leaders           map[string]*leader.Leader // per model_id
+	Worker            *worker.Worker
+	Verifier          *verifier.Verifier
+	Proposer          *proposer.Proposer
 	Store             *p2pstore.Store // P2-5: 7-day data retention
 	EncryptionPubkey  []byte
 	EncryptionPrivkey []byte
-	TLSTransport      privacy.Transport // S6: decryption layer for incoming encrypted messages
+	TLSTransport      privacy.Transport       // S6: decryption layer for incoming encrypted messages
 	cachedWorkers     []vrftypes.RankedWorker // cached worker list for VRF dispatch
 	cachedWorkersMu   sync.RWMutex
 }

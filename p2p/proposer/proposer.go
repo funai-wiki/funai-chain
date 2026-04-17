@@ -39,23 +39,23 @@ type Proposer struct {
 	AuditRate uint32 // per-mille (100 = 10%)
 	PrivKey   []byte // secp256k1 private key for signing batches
 
-	mu             sync.Mutex
-	pendingTasks   map[string]*TaskEvidence
-	pendingAudits  map[string]*AuditEvidence
-	clearedTasks   []settlementtypes.SettlementEntry
-	batchSize      int
-	activeWorkers  []vrftypes.RankedWorker
-	Store          *p2pstore.Store        // P2-1: persistent storage for audit trail
-	Rebroadcaster  RebroadcastStopper     // P2-2: stop rebroadcast when 3 results collected
+	mu            sync.Mutex
+	pendingTasks  map[string]*TaskEvidence
+	pendingAudits map[string]*AuditEvidence
+	clearedTasks  []settlementtypes.SettlementEntry
+	batchSize     int
+	activeWorkers []vrftypes.RankedWorker
+	Store         *p2pstore.Store    // P2-1: persistent storage for audit trail
+	Rebroadcaster RebroadcastStopper // P2-2: stop rebroadcast when 3 results collected
 }
 
 // TaskEvidence holds evidence for a single task.
 type TaskEvidence struct {
-	Receipt             *p2ptypes.InferReceipt
-	Verifiers           []*p2ptypes.VerifyResult
-	Request             *p2ptypes.InferRequest
-	Output              string // complete inference output text (from Worker stream)
-	ReceivedAt          uint64 // unix ms when receipt was received (for latency calculation)
+	Receipt    *p2ptypes.InferReceipt
+	Verifiers  []*p2ptypes.VerifyResult
+	Request    *p2ptypes.InferRequest
+	Output     string // complete inference output text (from Worker stream)
+	ReceivedAt uint64 // unix ms when receipt was received (for latency calculation)
 }
 
 const (
@@ -474,7 +474,7 @@ func (p *Proposer) signMerkleRoot(merkleRoot []byte) []byte {
 // AuditEvidence holds collected audit data for a pending audit task.
 type AuditEvidence struct {
 	Request   *p2ptypes.AuditRequest
-	Responses []p2ptypes.AuditResponse
+	Responses []p2ptypes.SecondVerificationResponse
 }
 
 // dispatchAuditLocked creates an AuditRequest (must be called under p.mu lock).
@@ -524,9 +524,9 @@ func (p *Proposer) buildAuditRequest(taskId []byte, ev *TaskEvidence) *p2ptypes.
 	return auditReq
 }
 
-// CollectAuditResponse adds an audit response from an auditor.
+// CollectSecondVerificationResponse adds an audit response from an second_verifier.
 // Returns true when enough responses (3) have been collected.
-func (p *Proposer) CollectAuditResponse(resp *p2ptypes.AuditResponse) (complete bool, pass bool) {
+func (p *Proposer) CollectSecondVerificationResponse(resp *p2ptypes.SecondVerificationResponse) (complete bool, pass bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

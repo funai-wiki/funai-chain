@@ -25,19 +25,19 @@ type ChatCompletionRequest struct {
 
 // ChatCompletionResponse mirrors the OpenAI chat completion response format.
 type ChatCompletionResponse struct {
-	ID      string                   `json:"id"`
-	Object  string                   `json:"object"`
-	Created int64                    `json:"created"`
-	Model   string                   `json:"model"`
-	Choices []ChatCompletionChoice   `json:"choices"`
-	Usage   *Usage                   `json:"usage,omitempty"`
+	ID      string                 `json:"id"`
+	Object  string                 `json:"object"`
+	Created int64                  `json:"created"`
+	Model   string                 `json:"model"`
+	Choices []ChatCompletionChoice `json:"choices"`
+	Usage   *Usage                 `json:"usage,omitempty"`
 }
 
 // ChatCompletionChoice is a single choice in the response.
 type ChatCompletionChoice struct {
-	Index        int      `json:"index"`
-	Message      Message  `json:"message"`
-	FinishReason string   `json:"finish_reason"`
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason string  `json:"finish_reason"`
 }
 
 // Usage tracks token usage.
@@ -49,10 +49,10 @@ type Usage struct {
 
 // ChatCompletionChunk is a streaming response chunk (SSE format).
 type ChatCompletionChunk struct {
-	ID      string                    `json:"id"`
-	Object  string                    `json:"object"`
-	Created int64                     `json:"created"`
-	Model   string                    `json:"model"`
+	ID      string                      `json:"id"`
+	Object  string                      `json:"object"`
+	Created int64                       `json:"created"`
+	Model   string                      `json:"model"`
 	Choices []ChatCompletionChunkChoice `json:"choices"`
 }
 

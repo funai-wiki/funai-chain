@@ -22,13 +22,13 @@ func (m *Params) String() string { return "vrf.Params" }
 
 func DefaultParams() Params {
 	return Params{
-		LeaderEpochDuration: 6,    // 6 blocks = 30s (V5.2: leader_epoch = 30 seconds)
-		HeartbeatInterval:   1,    // 1 block
-		LeaderTimeoutBlocks: 1,    // 1 block (closest to 3s at 5s/block)
-		CommitteeSize:       100,  // 100 workers
-		CommitteeRotation:   120,  // 120 blocks ≈ 10 minutes
-		ConsensusThreshold:  70,   // 70% of committee required
-		TimeoutProofPercent: 70,   // 70% timeout proofs for re-election
+		LeaderEpochDuration: 6,   // 6 blocks = 30s (V5.2: leader_epoch = 30 seconds)
+		HeartbeatInterval:   1,   // 1 block
+		LeaderTimeoutBlocks: 1,   // 1 block (closest to 3s at 5s/block)
+		CommitteeSize:       100, // 100 workers
+		CommitteeRotation:   120, // 120 blocks ≈ 10 minutes
+		ConsensusThreshold:  70,  // 70% of committee required
+		TimeoutProofPercent: 70,  // 70% timeout proofs for re-election
 	}
 }
 

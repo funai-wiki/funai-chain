@@ -65,11 +65,11 @@ func (AppModuleBasic) ValidateGenesis(_ codec.JSONCodec, _ client.TxEncodingConf
 
 type AppModule struct {
 	AppModuleBasic
-	keeper                 keeper.Keeper
-	getContribFn           func(ctx sdk.Context) []types.WorkerContribution
-	getVerifContribFn      func(ctx sdk.Context) []types.VerificationContribution
-	getConsensusSignersFn  func(ctx sdk.Context) []types.ConsensusSignerInfo
-	getOnlineWorkersFn     func(ctx sdk.Context) []types.OnlineWorkerStake
+	keeper                keeper.Keeper
+	getContribFn          func(ctx sdk.Context) []types.WorkerContribution
+	getVerifContribFn     func(ctx sdk.Context) []types.VerificationContribution
+	getConsensusSignersFn func(ctx sdk.Context) []types.ConsensusSignerInfo
+	getOnlineWorkersFn    func(ctx sdk.Context) []types.OnlineWorkerStake
 }
 
 func NewAppModule(

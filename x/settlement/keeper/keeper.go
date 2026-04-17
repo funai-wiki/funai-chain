@@ -46,13 +46,13 @@ type ModelRegKeeper interface {
 }
 
 type Keeper struct {
-	cdc             codec.BinaryCodec
-	storeKey        storetypes.StoreKey
-	bankKeeper      BankKeeper
-	workerKeeper    WorkerKeeper
-	modelRegKeeper  ModelRegKeeper
-	authority       string
-	logger          log.Logger
+	cdc            codec.BinaryCodec
+	storeKey       storetypes.StoreKey
+	bankKeeper     BankKeeper
+	workerKeeper   WorkerKeeper
+	modelRegKeeper ModelRegKeeper
+	authority      string
+	logger         log.Logger
 }
 
 func NewKeeper(
@@ -73,7 +73,7 @@ func NewKeeper(
 	}
 }
 
-func (k Keeper) Logger() log.Logger  { return k.logger }
+func (k Keeper) Logger() log.Logger   { return k.logger }
 func (k Keeper) GetAuthority() string { return k.authority }
 
 func (k *Keeper) SetModelRegKeeper(mrk ModelRegKeeper) {
@@ -193,36 +193,36 @@ func (k Keeper) HasFraudMark(ctx sdk.Context, taskID []byte) bool {
 	return store.Has(types.FraudMarkKey(taskID))
 }
 
-// -------- AuditRecord CRUD --------
+// -------- SecondVerificationRecord CRUD --------
 
-func (k Keeper) SetAuditRecord(ctx sdk.Context, ar types.AuditRecord) {
+func (k Keeper) SetSecondVerificationRecord(ctx sdk.Context, ar types.SecondVerificationRecord) {
 	store := ctx.KVStore(k.storeKey)
 	bz, _ := json.Marshal(ar)
-	store.Set(types.AuditRecordKey(ar.TaskId), bz)
+	store.Set(types.SecondVerificationRecordKey(ar.TaskId), bz)
 }
 
-func (k Keeper) GetAuditRecord(ctx sdk.Context, taskID []byte) (types.AuditRecord, bool) {
+func (k Keeper) GetSecondVerificationRecord(ctx sdk.Context, taskID []byte) (types.SecondVerificationRecord, bool) {
 	store := ctx.KVStore(k.storeKey)
-	bz := store.Get(types.AuditRecordKey(taskID))
+	bz := store.Get(types.SecondVerificationRecordKey(taskID))
 	if bz == nil {
-		return types.AuditRecord{}, false
+		return types.SecondVerificationRecord{}, false
 	}
-	var ar types.AuditRecord
+	var ar types.SecondVerificationRecord
 	if err := json.Unmarshal(bz, &ar); err != nil {
-		return types.AuditRecord{}, false
+		return types.SecondVerificationRecord{}, false
 	}
 	return ar, true
 }
 
-// GetAllAuditRecords returns all audit records (for P1-9 audit fund distribution).
-func (k Keeper) GetAllAuditRecords(ctx sdk.Context) []types.AuditRecord {
+// GetAllSecondVerificationRecords returns all audit records (for P1-9 audit fund distribution).
+func (k Keeper) GetAllSecondVerificationRecords(ctx sdk.Context) []types.SecondVerificationRecord {
 	store := ctx.KVStore(k.storeKey)
-	iter := storetypes.KVStorePrefixIterator(store, types.AuditRecordKeyPrefix)
+	iter := storetypes.KVStorePrefixIterator(store, types.SecondVerificationRecordKeyPrefix)
 	defer iter.Close()
 
-	var records []types.AuditRecord
+	var records []types.SecondVerificationRecord
 	for ; iter.Valid(); iter.Next() {
-		var ar types.AuditRecord
+		var ar types.SecondVerificationRecord
 		if err := json.Unmarshal(iter.Value(), &ar); err != nil {
 			continue
 		}
@@ -231,75 +231,75 @@ func (k Keeper) GetAllAuditRecords(ctx sdk.Context) []types.AuditRecord {
 	return records
 }
 
-// -------- AuditPendingTask CRUD --------
+// -------- SecondVerificationPendingTask CRUD --------
 
-func (k Keeper) SetAuditPending(ctx sdk.Context, apt types.AuditPendingTask) {
+func (k Keeper) SetSecondVerificationPending(ctx sdk.Context, apt types.SecondVerificationPendingTask) {
 	store := ctx.KVStore(k.storeKey)
 	bz, _ := json.Marshal(apt)
-	prefix := types.AuditPendingKeyPrefix
-	if apt.IsReaudit {
-		prefix = types.ReauditPendingKeyPrefix
+	prefix := types.SecondVerificationPendingKeyPrefix
+	if apt.IsThirdVerification {
+		prefix = types.ThirdVerificationPendingKeyPrefix
 	}
 	store.Set(append(prefix, apt.TaskId...), bz)
 
 	// Maintain height-indexed timeout key for efficient timeout scanning
-	if apt.IsReaudit {
-		store.Set(types.ReauditPendingTimeoutKey(apt.SubmittedAt, apt.TaskId), []byte{1})
+	if apt.IsThirdVerification {
+		store.Set(types.ThirdVerificationPendingTimeoutKey(apt.SubmittedAt, apt.TaskId), []byte{1})
 	} else {
-		store.Set(types.AuditPendingTimeoutKey(apt.SubmittedAt, apt.TaskId), []byte{1})
+		store.Set(types.SecondVerificationPendingTimeoutKey(apt.SubmittedAt, apt.TaskId), []byte{1})
 	}
 }
 
-func (k Keeper) GetAuditPending(ctx sdk.Context, taskID []byte) (types.AuditPendingTask, bool) {
+func (k Keeper) GetSecondVerificationPending(ctx sdk.Context, taskID []byte) (types.SecondVerificationPendingTask, bool) {
 	store := ctx.KVStore(k.storeKey)
-	bz := store.Get(types.AuditPendingKey(taskID))
+	bz := store.Get(types.SecondVerificationPendingKey(taskID))
 	if bz == nil {
-		return types.AuditPendingTask{}, false
+		return types.SecondVerificationPendingTask{}, false
 	}
-	var apt types.AuditPendingTask
+	var apt types.SecondVerificationPendingTask
 	if err := json.Unmarshal(bz, &apt); err != nil {
-		return types.AuditPendingTask{}, false
+		return types.SecondVerificationPendingTask{}, false
 	}
 	return apt, true
 }
 
-func (k Keeper) DeleteAuditPending(ctx sdk.Context, taskID []byte, isReaudit bool) {
+func (k Keeper) DeleteSecondVerificationPending(ctx sdk.Context, taskID []byte, isThirdVerification bool) {
 	store := ctx.KVStore(k.storeKey)
-	if isReaudit {
+	if isThirdVerification {
 		// Look up submittedAt from the pending task before deleting
-		if apt, found := k.getAuditPendingByKey(ctx, types.ReauditPendingKey(taskID)); found {
-			store.Delete(types.ReauditPendingTimeoutKey(apt.SubmittedAt, taskID))
+		if apt, found := k.getSecondVerificationPendingByKey(ctx, types.ThirdVerificationPendingKey(taskID)); found {
+			store.Delete(types.ThirdVerificationPendingTimeoutKey(apt.SubmittedAt, taskID))
 		}
-		store.Delete(types.ReauditPendingKey(taskID))
+		store.Delete(types.ThirdVerificationPendingKey(taskID))
 	} else {
-		if apt, found := k.getAuditPendingByKey(ctx, types.AuditPendingKey(taskID)); found {
-			store.Delete(types.AuditPendingTimeoutKey(apt.SubmittedAt, taskID))
+		if apt, found := k.getSecondVerificationPendingByKey(ctx, types.SecondVerificationPendingKey(taskID)); found {
+			store.Delete(types.SecondVerificationPendingTimeoutKey(apt.SubmittedAt, taskID))
 		}
-		store.Delete(types.AuditPendingKey(taskID))
+		store.Delete(types.SecondVerificationPendingKey(taskID))
 	}
 }
 
-func (k Keeper) getAuditPendingByKey(ctx sdk.Context, key []byte) (types.AuditPendingTask, bool) {
+func (k Keeper) getSecondVerificationPendingByKey(ctx sdk.Context, key []byte) (types.SecondVerificationPendingTask, bool) {
 	store := ctx.KVStore(k.storeKey)
 	bz := store.Get(key)
 	if bz == nil {
-		return types.AuditPendingTask{}, false
+		return types.SecondVerificationPendingTask{}, false
 	}
-	var apt types.AuditPendingTask
+	var apt types.SecondVerificationPendingTask
 	if err := json.Unmarshal(bz, &apt); err != nil {
-		return types.AuditPendingTask{}, false
+		return types.SecondVerificationPendingTask{}, false
 	}
 	return apt, true
 }
 
-func (k Keeper) GetAllAuditPending(ctx sdk.Context) []types.AuditPendingTask {
+func (k Keeper) GetAllSecondVerificationPending(ctx sdk.Context) []types.SecondVerificationPendingTask {
 	store := ctx.KVStore(k.storeKey)
-	iter := storetypes.KVStorePrefixIterator(store, types.AuditPendingKeyPrefix)
+	iter := storetypes.KVStorePrefixIterator(store, types.SecondVerificationPendingKeyPrefix)
 	defer iter.Close()
 
-	var tasks []types.AuditPendingTask
+	var tasks []types.SecondVerificationPendingTask
 	for ; iter.Valid(); iter.Next() {
-		var apt types.AuditPendingTask
+		var apt types.SecondVerificationPendingTask
 		if err := json.Unmarshal(iter.Value(), &apt); err != nil {
 			continue
 		}
@@ -308,14 +308,14 @@ func (k Keeper) GetAllAuditPending(ctx sdk.Context) []types.AuditPendingTask {
 	return tasks
 }
 
-func (k Keeper) GetAllReauditPending(ctx sdk.Context) []types.AuditPendingTask {
+func (k Keeper) GetAllThirdVerificationPending(ctx sdk.Context) []types.SecondVerificationPendingTask {
 	store := ctx.KVStore(k.storeKey)
-	iter := storetypes.KVStorePrefixIterator(store, types.ReauditPendingKeyPrefix)
+	iter := storetypes.KVStorePrefixIterator(store, types.ThirdVerificationPendingKeyPrefix)
 	defer iter.Close()
 
-	var tasks []types.AuditPendingTask
+	var tasks []types.SecondVerificationPendingTask
 	for ; iter.Valid(); iter.Next() {
-		var apt types.AuditPendingTask
+		var apt types.SecondVerificationPendingTask
 		if err := json.Unmarshal(iter.Value(), &apt); err != nil {
 			continue
 		}
@@ -421,13 +421,13 @@ func (k Keeper) IncrementVerifierEpochCount(ctx sdk.Context, verifierAddr string
 	store.Set(key, buf)
 }
 
-func (k Keeper) IncrementAuditorEpochCount(ctx sdk.Context, auditorAddr string) {
-	addr, err := sdk.AccAddressFromBech32(auditorAddr)
+func (k Keeper) IncrementSecondVerifierEpochCount(ctx sdk.Context, second_verifierAddr string) {
+	addr, err := sdk.AccAddressFromBech32(second_verifierAddr)
 	if err != nil {
 		return
 	}
 	store := ctx.KVStore(k.storeKey)
-	key := types.AuditorEpochCountKey(addr)
+	key := types.SecondVerifierEpochCountKey(addr)
 	count := uint64(0)
 	bz := store.Get(key)
 	if len(bz) == 8 {
@@ -461,17 +461,17 @@ func (k Keeper) IncrementVerifierEpochFee(ctx sdk.Context, verifierAddr string, 
 	}
 }
 
-// IncrementAuditorEpochFee adds to a 2nd/3rd-verifier's epoch fee total.
-func (k Keeper) IncrementAuditorEpochFee(ctx sdk.Context, auditorAddr string, amount math.Int) {
+// IncrementSecondVerifierEpochFee adds to a 2nd/3rd-verifier's epoch fee total.
+func (k Keeper) IncrementSecondVerifierEpochFee(ctx sdk.Context, second_verifierAddr string, amount math.Int) {
 	if amount.IsNil() || !amount.IsPositive() {
 		return
 	}
-	addr, err := sdk.AccAddressFromBech32(auditorAddr)
+	addr, err := sdk.AccAddressFromBech32(second_verifierAddr)
 	if err != nil {
 		return
 	}
 	store := ctx.KVStore(k.storeKey)
-	key := types.AuditorEpochFeeKey(addr)
+	key := types.SecondVerifierEpochFeeKey(addr)
 	total := math.ZeroInt()
 	if bz := store.Get(key); len(bz) > 0 {
 		_ = total.Unmarshal(bz)
@@ -482,10 +482,10 @@ func (k Keeper) IncrementAuditorEpochFee(ctx sdk.Context, auditorAddr string, am
 	}
 }
 
-// VerifierAuditorEpochCounts holds per-worker verification and 2nd/3rd-verification
+// VerifierSecondVerifierEpochCounts holds per-worker verification and 2nd/3rd-verification
 // counts AND fees for an epoch. Fees are used for the 85% amount-weight in block
 // reward distribution; counts for the 15% count-weight.
-type VerifierAuditorEpochCounts struct {
+type VerifierSecondVerifierEpochCounts struct {
 	Address           string
 	VerificationCount uint64
 	AuditCount        uint64
@@ -494,7 +494,7 @@ type VerifierAuditorEpochCounts struct {
 }
 
 // TotalFee returns total fees earned across verification + 2nd/3rd-verification roles.
-func (c VerifierAuditorEpochCounts) TotalFee() math.Int {
+func (c VerifierSecondVerifierEpochCounts) TotalFee() math.Int {
 	vFee := c.VerificationFee
 	if vFee.IsNil() {
 		vFee = math.ZeroInt()
@@ -506,12 +506,12 @@ func (c VerifierAuditorEpochCounts) TotalFee() math.Int {
 	return vFee.Add(aFee)
 }
 
-func (k Keeper) GetAllVerifierAuditorEpochCounts(ctx sdk.Context) []VerifierAuditorEpochCounts {
+func (k Keeper) GetAllVerifierSecondVerifierEpochCounts(ctx sdk.Context) []VerifierSecondVerifierEpochCounts {
 	store := ctx.KVStore(k.storeKey)
-	merged := make(map[string]*VerifierAuditorEpochCounts)
-	ensure := func(addr string) *VerifierAuditorEpochCounts {
+	merged := make(map[string]*VerifierSecondVerifierEpochCounts)
+	ensure := func(addr string) *VerifierSecondVerifierEpochCounts {
 		if _, ok := merged[addr]; !ok {
-			merged[addr] = &VerifierAuditorEpochCounts{
+			merged[addr] = &VerifierSecondVerifierEpochCounts{
 				Address:         addr,
 				VerificationFee: math.ZeroInt(),
 				AuditFee:        math.ZeroInt(),
@@ -530,9 +530,9 @@ func (k Keeper) GetAllVerifierAuditorEpochCounts(ctx sdk.Context) []VerifierAudi
 	vIter.Close()
 
 	// 2nd/3rd-verification counts
-	aIter := storetypes.KVStorePrefixIterator(store, types.AuditorEpochCountKeyPrefix)
+	aIter := storetypes.KVStorePrefixIterator(store, types.SecondVerifierEpochCountKeyPrefix)
 	for ; aIter.Valid(); aIter.Next() {
-		addr := sdk.AccAddress(aIter.Key()[len(types.AuditorEpochCountKeyPrefix):]).String()
+		addr := sdk.AccAddress(aIter.Key()[len(types.SecondVerifierEpochCountKeyPrefix):]).String()
 		count := binary.BigEndian.Uint64(aIter.Value())
 		ensure(addr).AuditCount = count
 	}
@@ -549,27 +549,27 @@ func (k Keeper) GetAllVerifierAuditorEpochCounts(ctx sdk.Context) []VerifierAudi
 	vfIter.Close()
 
 	// 2nd/3rd-verification fees
-	afIter := storetypes.KVStorePrefixIterator(store, types.AuditorEpochFeeKeyPrefix)
+	afIter := storetypes.KVStorePrefixIterator(store, types.SecondVerifierEpochFeeKeyPrefix)
 	for ; afIter.Valid(); afIter.Next() {
-		addr := sdk.AccAddress(afIter.Key()[len(types.AuditorEpochFeeKeyPrefix):]).String()
+		addr := sdk.AccAddress(afIter.Key()[len(types.SecondVerifierEpochFeeKeyPrefix):]).String()
 		amt := math.ZeroInt()
 		_ = amt.Unmarshal(afIter.Value())
 		ensure(addr).AuditFee = amt
 	}
 	afIter.Close()
 
-	var result []VerifierAuditorEpochCounts
+	var result []VerifierSecondVerifierEpochCounts
 	for _, v := range merged {
 		result = append(result, *v)
 	}
 	return result
 }
 
-func (k Keeper) ClearVerifierAuditorEpochCounts(ctx sdk.Context) {
+func (k Keeper) ClearVerifierSecondVerifierEpochCounts(ctx sdk.Context) {
 	store := ctx.KVStore(k.storeKey)
 	prefixes := [][]byte{
-		types.VerifierEpochCountKeyPrefix, types.AuditorEpochCountKeyPrefix,
-		types.VerifierEpochFeeKeyPrefix, types.AuditorEpochFeeKeyPrefix,
+		types.VerifierEpochCountKeyPrefix, types.SecondVerifierEpochCountKeyPrefix,
+		types.VerifierEpochFeeKeyPrefix, types.SecondVerifierEpochFeeKeyPrefix,
 	}
 	for _, prefix := range prefixes {
 		iter := storetypes.KVStorePrefixIterator(store, prefix)
@@ -697,34 +697,34 @@ func (k Keeper) GetAndClearBlockSignerCounts(ctx sdk.Context) map[string]uint64 
 
 // -------- Audit Rate Storage --------
 
-func (k Keeper) SetCurrentAuditRate(ctx sdk.Context, rate uint32) {
+func (k Keeper) SetCurrentSecondVerificationRate(ctx sdk.Context, rate uint32) {
 	store := ctx.KVStore(k.storeKey)
 	bz := make([]byte, 4)
 	binary.BigEndian.PutUint32(bz, rate)
-	store.Set(types.AuditRateKey, bz)
+	store.Set(types.SecondVerificationRateKey, bz)
 }
 
-func (k Keeper) GetCurrentAuditRate(ctx sdk.Context) uint32 {
+func (k Keeper) GetCurrentSecondVerificationRate(ctx sdk.Context) uint32 {
 	store := ctx.KVStore(k.storeKey)
-	bz := store.Get(types.AuditRateKey)
+	bz := store.Get(types.SecondVerificationRateKey)
 	if bz == nil {
-		return types.DefaultAuditBaseRate
+		return types.DefaultSecondVerificationBaseRate
 	}
 	return binary.BigEndian.Uint32(bz)
 }
 
-func (k Keeper) SetCurrentReauditRate(ctx sdk.Context, rate uint32) {
+func (k Keeper) SetCurrentThirdVerificationRate(ctx sdk.Context, rate uint32) {
 	store := ctx.KVStore(k.storeKey)
 	bz := make([]byte, 4)
 	binary.BigEndian.PutUint32(bz, rate)
-	store.Set(types.ReauditRateKey, bz)
+	store.Set(types.ThirdVerificationRateKey, bz)
 }
 
-func (k Keeper) GetCurrentReauditRate(ctx sdk.Context) uint32 {
+func (k Keeper) GetCurrentThirdVerificationRate(ctx sdk.Context) uint32 {
 	store := ctx.KVStore(k.storeKey)
-	bz := store.Get(types.ReauditRateKey)
+	bz := store.Get(types.ThirdVerificationRateKey)
 	if bz == nil {
-		return types.DefaultReauditBaseRate
+		return types.DefaultThirdVerificationBaseRate
 	}
 	return binary.BigEndian.Uint32(bz)
 }
@@ -893,20 +893,20 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 		}
 
 		// S1 fix: check audit VRF BEFORE settlement — audited tasks must NOT be settled yet
-		auditRate := k.GetCurrentAuditRate(ctx)
+		auditRate := k.GetCurrentSecondVerificationRate(ctx)
 		// S9 §5.2.4: boost audit rate for workers with suspicious pair-level mismatch history
 		if params.PerTokenBillingEnabled {
 			boost := k.CalculateWorkerAuditBoost(ctx, entry.WorkerAddress, params)
 			if boost > 0 {
-				auditRate += (boost * params.AuditBaseRate) / 10
+				auditRate += (boost * params.SecondVerificationBaseRate) / 10
 			}
-			if auditRate > params.AuditRateMax {
-				auditRate = params.AuditRateMax
+			if auditRate > params.SecondVerificationRateMax {
+				auditRate = params.SecondVerificationRateMax
 			}
 		}
 		// E14: per-token entry with no verifier token data → force audit.
 		// This catches TGI crashes where all verifiers return 0 output tokens.
-		forceAudit := false
+		forceSecondVerification := false
 		if entry.IsPerToken() && params.PerTokenBillingEnabled {
 			var hasVerifierTokenData bool
 			for _, v := range entry.VerifierResults {
@@ -916,14 +916,14 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 				}
 			}
 			if !hasVerifierTokenData && entry.WorkerOutputTokens > 0 {
-				forceAudit = true
+				forceSecondVerification = true
 				k.logger.Info("E14: forcing audit — no verifier token data available",
 					"task_id", fmt.Sprintf("%x", entry.TaskId),
 					"worker_output_tokens", entry.WorkerOutputTokens)
 			}
 		}
-		if forceAudit || k.shouldTriggerAudit(ctx, entry.TaskId, auditRate) {
-			auditPending := types.AuditPendingTask{
+		if forceSecondVerification || k.shouldTriggerSecondVerification(ctx, entry.TaskId, auditRate) {
+			secondVerificationPending := types.SecondVerificationPendingTask{
 				TaskId:            entry.TaskId,
 				OriginalStatus:    entry.Status,
 				SubmittedAt:       currentHeight,
@@ -936,16 +936,16 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 			}
 			// S9: preserve per-token data for audit re-settlement
 			if entry.IsPerToken() {
-				auditPending.FeePerInputToken = entry.FeePerInputToken
-				auditPending.FeePerOutputToken = entry.FeePerOutputToken
-				auditPending.MaxFee = entry.MaxFee
-				auditPending.SettledInputTokens = entry.WorkerInputTokens
-				auditPending.SettledOutputTokens = entry.WorkerOutputTokens
+				secondVerificationPending.FeePerInputToken = entry.FeePerInputToken
+				secondVerificationPending.FeePerOutputToken = entry.FeePerOutputToken
+				secondVerificationPending.MaxFee = entry.MaxFee
+				secondVerificationPending.SettledInputTokens = entry.WorkerInputTokens
+				secondVerificationPending.SettledOutputTokens = entry.WorkerOutputTokens
 			}
-			k.SetAuditPending(ctx, auditPending)
+			k.SetSecondVerificationPending(ctx, secondVerificationPending)
 			k.SetSettledTask(ctx, types.SettledTaskID{
 				TaskId:            entry.TaskId,
-				Status:            types.TaskPendingAudit,
+				Status:            types.TaskPendingSecondVerification,
 				ExpireBlock:       entry.ExpireBlock,
 				SettledAt:         currentHeight,
 				WorkerAddress:     entry.WorkerAddress,
@@ -1126,7 +1126,7 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 // Executor gets the remainder after verifiers + fund to prevent dust loss.
 func (k Keeper) distributeSuccessFee(ctx sdk.Context, fee sdk.Coin, workerAddr sdk.AccAddress, verifiers []types.VerifierResult, params types.Params) {
 	totalVerifierAmount := fee.Amount.MulRaw(int64(params.VerifierFeeRatio)).QuoRaw(1000)
-	auditFundAmount := fee.Amount.MulRaw(int64(params.AuditFundRatio)).QuoRaw(1000)
+	auditFundAmount := fee.Amount.MulRaw(int64(params.MultiVerificationFundRatio)).QuoRaw(1000)
 
 	verifierDistributed := math.ZeroInt()
 	if len(verifiers) > 0 {
@@ -1160,11 +1160,11 @@ func (k Keeper) distributeSuccessFee(ctx sdk.Context, fee sdk.Coin, workerAddr s
 
 // distributeFailFee distributes FAIL task fee (15% of original): verifiers 12% + multi-verification fund 3%.
 // Split ratio between verifiers and fund matches the non-executor portion of the success-fee split
-// (VerifierFeeRatio / (VerifierFeeRatio + AuditFundRatio)).
+// (VerifierFeeRatio / (VerifierFeeRatio + MultiVerificationFundRatio)).
 func (k Keeper) distributeFailFee(ctx sdk.Context, failFee sdk.Coin, verifiers []types.VerifierResult, params types.Params) {
 	if len(verifiers) > 0 {
 		totalVerifierRatio := params.VerifierFeeRatio
-		totalDistributable := params.VerifierFeeRatio + params.AuditFundRatio
+		totalDistributable := params.VerifierFeeRatio + params.MultiVerificationFundRatio
 		totalVerifierAmount := failFee.Amount.MulRaw(int64(totalVerifierRatio)).QuoRaw(int64(totalDistributable))
 		perVerifier := totalVerifierAmount.QuoRaw(int64(len(verifiers)))
 		distributed := math.ZeroInt()
@@ -1188,14 +1188,14 @@ func (k Keeper) distributeFailFee(ctx sdk.Context, failFee sdk.Coin, verifiers [
 		}
 	}
 	// Remaining (multi-verification-fund portion = 3/15 of failFee) stays in module account,
-	// distributed per-epoch via DistributeAuditFund in EndBlocker.
+	// distributed per-epoch via DistributeMultiVerificationFund in EndBlocker.
 }
 
-// DistributeAuditFund distributes accumulated audit fund to auditors at epoch boundary.
+// DistributeMultiVerificationFund distributes accumulated audit fund to second_verifiers at epoch boundary.
 // M9 §9.3: audit fund per-epoch clearing. Per-person fee = pool / audit person-count.
-func (k Keeper) DistributeAuditFund(ctx sdk.Context, epoch int64) {
+func (k Keeper) DistributeMultiVerificationFund(ctx sdk.Context, epoch int64) {
 	stats := k.GetEpochStats(ctx, epoch)
-	if stats.AuditPersonCount == 0 {
+	if stats.SecondVerificationPersonCount == 0 {
 		return
 	}
 
@@ -1205,23 +1205,23 @@ func (k Keeper) DistributeAuditFund(ctx sdk.Context, epoch int64) {
 		return
 	}
 
-	// audit_pool = total_fees * audit_fund_ratio / 1000
-	auditPool := totalFees.MulRaw(int64(params.AuditFundRatio)).QuoRaw(1000)
-	if auditPool.IsZero() {
+	// audit_pool = total_fees * multi_verification_fund_ratio / 1000
+	fundPool := totalFees.MulRaw(int64(params.MultiVerificationFundRatio)).QuoRaw(1000)
+	if fundPool.IsZero() {
 		return
 	}
 
 	// §9.3: per-person-time fee = pool / total audit person-times.
-	// Weight distribution by actual audit count per auditor.
-	allAuditRecords := k.GetAllAuditRecords(ctx)
-	auditorCounts := make(map[string]int64)
+	// Weight distribution by actual audit count per second_verifier.
+	allSecondVerificationRecords := k.GetAllSecondVerificationRecords(ctx)
+	second_verifierCounts := make(map[string]int64)
 	totalPersonTimes := int64(0)
-	for _, ar := range allAuditRecords {
+	for _, ar := range allSecondVerificationRecords {
 		if ar.ProcessedAt/100 != epoch {
 			continue
 		}
-		for _, aAddr := range ar.AuditorAddresses {
-			auditorCounts[aAddr]++
+		for _, aAddr := range ar.SecondVerifierAddresses {
+			second_verifierCounts[aAddr]++
 			totalPersonTimes++
 		}
 	}
@@ -1229,13 +1229,13 @@ func (k Keeper) DistributeAuditFund(ctx sdk.Context, epoch int64) {
 		return
 	}
 
-	perPersonTime := auditPool.QuoRaw(totalPersonTimes)
+	perPersonTime := fundPool.QuoRaw(totalPersonTimes)
 	if perPersonTime.IsZero() {
 		return
 	}
 
 	distributed := int64(0)
-	for vAddr, count := range auditorCounts {
+	for vAddr, count := range second_verifierCounts {
 		addr, err := sdk.AccAddressFromBech32(vAddr)
 		if err != nil {
 			continue
@@ -1244,16 +1244,16 @@ func (k Keeper) DistributeAuditFund(ctx sdk.Context, epoch int64) {
 		coin := sdk.NewCoin("ufai", amount)
 		if coin.IsPositive() {
 			_ = k.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleAccountName, addr, sdk.NewCoins(coin))
-			k.IncrementAuditorEpochFee(ctx, vAddr, amount)
+			k.IncrementSecondVerifierEpochFee(ctx, vAddr, amount)
 			distributed++
 		}
 	}
 
 	if distributed > 0 {
 		ctx.EventManager().EmitEvent(sdk.NewEvent(
-			"audit_fund_distributed",
+			"multi_verification_fund_distributed",
 			sdk.NewAttribute("epoch", fmt.Sprintf("%d", epoch)),
-			sdk.NewAttribute("pool", auditPool.String()),
+			sdk.NewAttribute("pool", fundPool.String()),
 			sdk.NewAttribute("per_person_time", perPersonTime.String()),
 			sdk.NewAttribute("recipients", fmt.Sprintf("%d", distributed)),
 		))
@@ -1341,55 +1341,55 @@ func (k Keeper) ProcessFraudProof(ctx sdk.Context, msg *types.MsgFraudProof) err
 	return nil
 }
 
-// ProcessAuditResult processes an audit result submission.
+// ProcessSecondVerificationResult processes an audit result submission.
 // V5.2: Handles all 4 scenarios (SUCCESS+PASS, SUCCESS+FAIL, FAIL+PASS, FAIL+FAIL).
 // P2-7: Original verifiers are excluded from auditing (conflict of interest).
-func (k Keeper) ProcessAuditResult(ctx sdk.Context, msg *types.MsgAuditResult) error {
+func (k Keeper) ProcessSecondVerificationResult(ctx sdk.Context, msg *types.MsgSecondVerificationResult) error {
 	params := k.GetParams(ctx)
 
 	// P2-7: reject audit results from original verifiers (conflict of interest)
-	if apt, found := k.GetAuditPending(ctx, msg.TaskId); found {
+	if apt, found := k.GetSecondVerificationPending(ctx, msg.TaskId); found {
 		for _, vAddr := range apt.VerifierAddresses {
-			if vAddr == msg.Auditor {
-				return fmt.Errorf("auditor %s is an original verifier for task %x, cannot audit", msg.Auditor, msg.TaskId)
+			if vAddr == msg.SecondVerifier {
+				return fmt.Errorf("second_verifier %s is an original verifier for task %x, cannot audit", msg.SecondVerifier, msg.TaskId)
 			}
 		}
 	}
 
-	ar, auditFound := k.GetAuditRecord(ctx, msg.TaskId)
+	ar, auditFound := k.GetSecondVerificationRecord(ctx, msg.TaskId)
 	if !auditFound {
-		ar = types.AuditRecord{
-			TaskId:              msg.TaskId,
-			Epoch:               msg.Epoch,
-			AuditorAddresses:    []string{msg.Auditor},
-			Results:             []bool{msg.Pass},
-			AuditorInputTokens:  []uint32{msg.VerifiedInputTokens},
-			AuditorOutputTokens: []uint32{msg.VerifiedOutputTokens},
-			ProcessedAt:         ctx.BlockHeight(),
+		ar = types.SecondVerificationRecord{
+			TaskId:                     msg.TaskId,
+			Epoch:                      msg.Epoch,
+			SecondVerifierAddresses:    []string{msg.SecondVerifier},
+			Results:                    []bool{msg.Pass},
+			SecondVerifierInputTokens:  []uint32{msg.VerifiedInputTokens},
+			SecondVerifierOutputTokens: []uint32{msg.VerifiedOutputTokens},
+			ProcessedAt:                ctx.BlockHeight(),
 		}
 	} else {
-		if uint32(len(ar.AuditorAddresses)) >= params.AuditVerifierCount {
+		if uint32(len(ar.SecondVerifierAddresses)) >= params.SecondVerifierCount {
 			return nil
 		}
-		ar.AuditorAddresses = append(ar.AuditorAddresses, msg.Auditor)
+		ar.SecondVerifierAddresses = append(ar.SecondVerifierAddresses, msg.SecondVerifier)
 		ar.Results = append(ar.Results, msg.Pass)
-		ar.AuditorInputTokens = append(ar.AuditorInputTokens, msg.VerifiedInputTokens)
-		ar.AuditorOutputTokens = append(ar.AuditorOutputTokens, msg.VerifiedOutputTokens)
+		ar.SecondVerifierInputTokens = append(ar.SecondVerifierInputTokens, msg.VerifiedInputTokens)
+		ar.SecondVerifierOutputTokens = append(ar.SecondVerifierOutputTokens, msg.VerifiedOutputTokens)
 		ar.ProcessedAt = ctx.BlockHeight()
 	}
 
-	k.SetAuditRecord(ctx, ar)
+	k.SetSecondVerificationRecord(ctx, ar)
 
 	// P1-9: track per-worker audit count for epoch reward distribution
-	k.IncrementAuditorEpochCount(ctx, msg.Auditor)
+	k.IncrementSecondVerifierEpochCount(ctx, msg.SecondVerifier)
 
 	// Update epoch stats
 	epoch := ctx.BlockHeight() / 100
 	stats := k.GetEpochStats(ctx, epoch)
-	stats.AuditPersonCount++
+	stats.SecondVerificationPersonCount++
 	k.SetEpochStats(ctx, stats)
 
-	if uint32(len(ar.Results)) >= params.AuditVerifierCount {
+	if uint32(len(ar.Results)) >= params.SecondVerifierCount {
 		k.processAuditJudgment(ctx, ar, params)
 	}
 
@@ -1397,7 +1397,7 @@ func (k Keeper) ProcessAuditResult(ctx sdk.Context, msg *types.MsgAuditResult) e
 }
 
 // processAuditJudgment handles the 4 audit judgment scenarios per V5.2 §13.6.
-func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, params types.Params) {
+func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.SecondVerificationRecord, params types.Params) {
 	var passCount uint32
 	for _, r := range ar.Results {
 		if r {
@@ -1405,24 +1405,24 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 		}
 	}
 
-	auditPass := passCount >= params.AuditMatchThreshold
+	auditPass := passCount >= params.SecondVerificationMatchThreshold
 
-	apt, pendingFound := k.GetAuditPending(ctx, ar.TaskId)
+	apt, pendingFound := k.GetSecondVerificationPending(ctx, ar.TaskId)
 	if !pendingFound {
 		return
 	}
 
 	epoch := ctx.BlockHeight() / 100
 	stats := k.GetEpochStats(ctx, epoch)
-	stats.AuditTotal++
+	stats.SecondVerificationTotal++
 
-	isReaudit := apt.IsReaudit
+	isThirdVerification := apt.IsThirdVerification
 
-	if !isReaudit {
-		// S2 fix: check reaudit VRF BEFORE settling — if reaudit triggers, do NOT settle yet
-		reauditRate := k.GetCurrentReauditRate(ctx)
-		if k.shouldTriggerReaudit(ctx, ar.TaskId, reauditRate) {
-			reauditPending := types.AuditPendingTask{
+	if !isThirdVerification {
+		// S2 fix: check third_verification VRF BEFORE settling — if third_verification triggers, do NOT settle yet
+		third_verificationRate := k.GetCurrentThirdVerificationRate(ctx)
+		if k.shouldTriggerThirdVerification(ctx, ar.TaskId, third_verificationRate) {
+			third_verificationPending := types.SecondVerificationPendingTask{
 				TaskId:              apt.TaskId,
 				OriginalStatus:      apt.OriginalStatus,
 				SubmittedAt:         ctx.BlockHeight(),
@@ -1431,29 +1431,29 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 				VerifierAddresses:   apt.VerifierAddresses,
 				Fee:                 apt.Fee,
 				ExpireBlock:         apt.ExpireBlock,
-				IsReaudit:           true,
+				IsThirdVerification: true,
 				FeePerInputToken:    apt.FeePerInputToken,
 				FeePerOutputToken:   apt.FeePerOutputToken,
 				MaxFee:              apt.MaxFee,
 				SettledOutputTokens: apt.SettledOutputTokens,
 				SettledInputTokens:  apt.SettledInputTokens,
 			}
-			k.SetAuditPending(ctx, reauditPending)
-			k.DeleteAuditPending(ctx, ar.TaskId, false)
+			k.SetSecondVerificationPending(ctx, third_verificationPending)
+			k.DeleteSecondVerificationPending(ctx, ar.TaskId, false)
 			k.SetEpochStats(ctx, stats)
 			return
 		}
 
 		// S9 §5.2.5: per-token audit token count verification
 		if auditPass && params.PerTokenBillingEnabled && apt.FeePerOutputToken > 0 {
-			auditorMedianOut := medianUint32(ar.AuditorOutputTokens)
-			if auditorMedianOut > 0 && apt.SettledOutputTokens > 0 {
+			second_verifierMedianOut := medianUint32(ar.SecondVerifierOutputTokens)
+			if second_verifierMedianOut > 0 && apt.SettledOutputTokens > 0 {
 				tol := effectiveTolerance(apt.SettledOutputTokens, params.TokenCountTolerance, params.TokenCountTolerancePct)
 				var delta uint32
-				if apt.SettledOutputTokens > auditorMedianOut {
-					delta = apt.SettledOutputTokens - auditorMedianOut
+				if apt.SettledOutputTokens > second_verifierMedianOut {
+					delta = apt.SettledOutputTokens - second_verifierMedianOut
 				} else {
-					delta = auditorMedianOut - apt.SettledOutputTokens
+					delta = second_verifierMedianOut - apt.SettledOutputTokens
 				}
 				if delta > tol {
 					// Token count fraud detected — jail Worker + colluding Verifiers
@@ -1461,7 +1461,7 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 					k.logger.Info("S9: audit token count fraud detected",
 						"task", hex.EncodeToString(apt.TaskId),
 						"settled_tokens", apt.SettledOutputTokens,
-						"auditor_median", auditorMedianOut)
+						"second_verifier_median", second_verifierMedianOut)
 
 					userAddr, uErr := sdk.AccAddressFromBech32(apt.UserAddress)
 					if uErr == nil {
@@ -1472,7 +1472,7 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 					if k.workerKeeper != nil && workerAddr != nil {
 						k.workerKeeper.JailWorker(ctx, workerAddr, 0)
 					}
-					// Jail verifiers whose reported tokens deviate from auditor median
+					// Jail verifiers whose reported tokens deviate from second_verifier median
 					for i, vAddr := range apt.VerifierAddresses {
 						if i < len(apt.VerifierVotes) && apt.VerifierVotes[i] {
 							vAccAddr, vErr := sdk.AccAddressFromBech32(vAddr)
@@ -1491,17 +1491,17 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 						OriginalVerifiers: apt.VerifierAddresses,
 						UserAddress:       apt.UserAddress,
 					})
-					k.DeleteAuditPending(ctx, ar.TaskId, isReaudit)
+					k.DeleteSecondVerificationPending(ctx, ar.TaskId, isThirdVerification)
 					k.SetEpochStats(ctx, stats)
 
-					// Resettle as FAIL using the auditor's true token count
-					k.settleAuditedTask(ctx, apt, false, false, params, auditorMedianOut)
+					// Resettle as FAIL using the second_verifier's true token count
+					k.settleAuditedTask(ctx, apt, false, false, params, second_verifierMedianOut)
 					return
 				}
 			}
 		}
 
-		// No reaudit → proceed with settlement based on audit result
+		// No third_verification → proceed with settlement based on audit result
 		if apt.OriginalStatus == types.SettlementSuccess && auditPass {
 			k.settleAuditedTask(ctx, apt, true, false, params, 0)
 		} else if apt.OriginalStatus == types.SettlementSuccess && !auditPass {
@@ -1529,11 +1529,11 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 			k.settleAuditedTask(ctx, apt, false, false, params, 0)
 		}
 	} else {
-		// Reaudit judgment
-		stats.ReauditTotal++
-		origAudit, origFound := k.GetAuditRecord(ctx, ar.TaskId)
+		// ThirdVerification judgment
+		stats.ThirdVerificationTotal++
+		origAudit, origFound := k.GetSecondVerificationRecord(ctx, ar.TaskId)
 		if !origFound {
-			k.DeleteAuditPending(ctx, ar.TaskId, true)
+			k.DeleteSecondVerificationPending(ctx, ar.TaskId, true)
 			k.SetEpochStats(ctx, stats)
 			return
 		}
@@ -1545,12 +1545,12 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 				origPassCount++
 			}
 		}
-		origAuditPass = origPassCount >= params.AuditMatchThreshold
+		origAuditPass = origPassCount >= params.SecondVerificationMatchThreshold
 
 		if origAuditPass && !auditPass {
-			// H2: Reaudit overturns audit PASS→FAIL — §10.7: no settlement + jail original PASS auditors + jail Worker + jail verifiers
-			stats.ReauditOverturn++
-			k.jailAuditors(ctx, origAudit)
+			// H2: ThirdVerification overturns audit PASS→FAIL — §10.7: no settlement + jail original PASS second_verifiers + jail Worker + jail verifiers
+			stats.ThirdVerificationOverturn++
+			k.jailSecondVerifiers(ctx, origAudit)
 			k.jailWorkerAndVerifiers(ctx, apt)
 			k.SetSettledTask(ctx, types.SettledTaskID{
 				TaskId:            apt.TaskId,
@@ -1561,19 +1561,19 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 				OriginalVerifiers: apt.VerifierAddresses,
 			})
 		} else if !origAuditPass && auditPass {
-			// Reaudit overturns audit FAIL→PASS: malicious auditors → jail original FAIL auditors, settle by original verification result
-			stats.ReauditOverturn++
-			k.jailFailAuditors(ctx, origAudit, params)
+			// ThirdVerification overturns audit FAIL→PASS: malicious second_verifiers → jail original FAIL second_verifiers, settle by original verification result
+			stats.ThirdVerificationOverturn++
+			k.jailFailSecondVerifiers(ctx, origAudit, params)
 			// P1-NEW-1 fix: Under "no settlement before audit" principle, no fee was ever collected
 			// when the audit VRF triggered. alreadyPaidFail must always be false.
 			k.settleAuditedTask(ctx, apt, apt.OriginalStatus == types.SettlementSuccess, false, params, 0)
 		} else {
-			// Reaudit confirms audit result
+			// ThirdVerification confirms audit result
 			if origAuditPass {
 				k.settleAuditedTask(ctx, apt, apt.OriginalStatus == types.SettlementSuccess, false, params, 0)
 			} else {
 				if apt.OriginalStatus == types.SettlementSuccess {
-					// Reaudit confirms audit overturn SUCCESS→FAIL: no settlement + jail
+					// ThirdVerification confirms audit overturn SUCCESS→FAIL: no settlement + jail
 					k.jailWorkerAndVerifiers(ctx, apt)
 					k.SetSettledTask(ctx, types.SettledTaskID{
 						TaskId:            apt.TaskId,
@@ -1589,27 +1589,27 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.AuditRecord, para
 			}
 		}
 
-		k.DeleteAuditPending(ctx, ar.TaskId, true)
+		k.DeleteSecondVerificationPending(ctx, ar.TaskId, true)
 	}
 
-	if !isReaudit {
-		k.DeleteAuditPending(ctx, ar.TaskId, false)
+	if !isThirdVerification {
+		k.DeleteSecondVerificationPending(ctx, ar.TaskId, false)
 	}
 
 	k.SetEpochStats(ctx, stats)
 
 	ctx.EventManager().EmitEvent(sdk.NewEvent(
-		types.EventAuditResult,
+		types.EventSecondVerificationResult,
 		sdk.NewAttribute(types.AttributeKeyTaskId, fmt.Sprintf("%x", ar.TaskId)),
 		sdk.NewAttribute("audit_pass", fmt.Sprintf("%v", auditPass)),
-		sdk.NewAttribute("is_reaudit", fmt.Sprintf("%v", isReaudit)),
+		sdk.NewAttribute("is_third_verification", fmt.Sprintf("%v", isThirdVerification)),
 	))
 }
 
-// settleAuditedTask settles a task after audit/reaudit completion.
+// settleAuditedTask settles a task after audit/third_verification completion.
 // alreadyPaidFail: if true, user already paid 5% during initial FAIL settlement,
 // so only charge the remaining 95% (not full fee) to avoid double-charging.
-func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.AuditPendingTask, asSuccess bool, alreadyPaidFail bool, params types.Params, overrideOutputTokens uint32) {
+func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationPendingTask, asSuccess bool, alreadyPaidFail bool, params types.Params, overrideOutputTokens uint32) {
 	userAddr, err := sdk.AccAddressFromBech32(apt.UserAddress)
 	if err != nil {
 		return
@@ -1633,12 +1633,12 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.AuditPendingTask, a
 	baseFee := apt.Fee
 	if apt.FeePerInputToken > 0 || apt.FeePerOutputToken > 0 {
 		k.UnfreezeBalance(ctx, userAddr, apt.TaskId)
-		
+
 		outTokens := apt.SettledOutputTokens
 		if overrideOutputTokens > 0 {
 			outTokens = overrideOutputTokens
 		}
-		
+
 		computedFee := CalculatePerTokenFee(
 			apt.SettledInputTokens, outTokens,
 			apt.FeePerInputToken, apt.FeePerOutputToken,
@@ -1698,7 +1698,7 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.AuditPendingTask, a
 }
 
 // P2-7: jails Worker + only PASS-voting verifiers (FAIL voters were correct).
-func (k Keeper) jailWorkerAndVerifiers(ctx sdk.Context, apt types.AuditPendingTask) {
+func (k Keeper) jailWorkerAndVerifiers(ctx sdk.Context, apt types.SecondVerificationPendingTask) {
 	if k.workerKeeper == nil {
 		return
 	}
@@ -1719,7 +1719,7 @@ func (k Keeper) jailWorkerAndVerifiers(ctx sdk.Context, apt types.AuditPendingTa
 
 // jailFailVerifiers jails only the verifiers who voted FAIL in the original verification.
 // P1-8 §10.6: "each verifier who voted FAIL gets jail_count += 1" — only FAIL voters are jailed.
-func (k Keeper) jailFailVerifiers(ctx sdk.Context, apt types.AuditPendingTask) {
+func (k Keeper) jailFailVerifiers(ctx sdk.Context, apt types.SecondVerificationPendingTask) {
 	if k.workerKeeper == nil {
 		return
 	}
@@ -1735,14 +1735,14 @@ func (k Keeper) jailFailVerifiers(ctx sdk.Context, apt types.AuditPendingTask) {
 	}
 }
 
-// jailAuditors jails only auditors who voted PASS (lazy/colluding auditors).
-// V5.2 §10.7: "reaudit overturns audit PASS→FAIL → jail original PASS auditors"
-func (k Keeper) jailAuditors(ctx sdk.Context, ar types.AuditRecord) {
+// jailSecondVerifiers jails only second_verifiers who voted PASS (lazy/colluding second_verifiers).
+// V5.2 §10.7: "third_verification overturns audit PASS→FAIL → jail original PASS second_verifiers"
+func (k Keeper) jailSecondVerifiers(ctx sdk.Context, ar types.SecondVerificationRecord) {
 	if k.workerKeeper == nil {
 		return
 	}
-	for i, aAddr := range ar.AuditorAddresses {
-		// Only jail auditors who voted PASS (i.e., were lazy/wrong)
+	for i, aAddr := range ar.SecondVerifierAddresses {
+		// Only jail second_verifiers who voted PASS (i.e., were lazy/wrong)
 		if i < len(ar.Results) && !ar.Results[i] {
 			continue // voted FAIL = honest, skip
 		}
@@ -1753,11 +1753,11 @@ func (k Keeper) jailAuditors(ctx sdk.Context, ar types.AuditRecord) {
 	}
 }
 
-func (k Keeper) jailFailAuditors(ctx sdk.Context, ar types.AuditRecord, params types.Params) {
+func (k Keeper) jailFailSecondVerifiers(ctx sdk.Context, ar types.SecondVerificationRecord, params types.Params) {
 	if k.workerKeeper == nil {
 		return
 	}
-	for i, aAddr := range ar.AuditorAddresses {
+	for i, aAddr := range ar.SecondVerifierAddresses {
 		if !ar.Results[i] {
 			addr, err := sdk.AccAddressFromBech32(aAddr)
 			if err == nil {
@@ -1767,10 +1767,10 @@ func (k Keeper) jailFailAuditors(ctx sdk.Context, ar types.AuditRecord, params t
 	}
 }
 
-// CalculateAuditRate computes the dynamic audit rate for the next epoch.
+// CalculateSecondVerificationRate computes the dynamic audit rate for the next epoch.
 // V5.2: audit_rate = base_rate × (1 + 10 × recent_fail_ratio + 50 × recent_audit_fail)
-// Clamped to [audit_rate_min, audit_rate_max].
-func (k Keeper) CalculateAuditRate(ctx sdk.Context, prevEpoch int64) uint32 {
+// Clamped to [second_verification_rate_min, second_verification_rate_max].
+func (k Keeper) CalculateSecondVerificationRate(ctx sdk.Context, prevEpoch int64) uint32 {
 	params := k.GetParams(ctx)
 	stats := k.GetEpochStats(ctx, prevEpoch)
 
@@ -1780,68 +1780,68 @@ func (k Keeper) CalculateAuditRate(ctx sdk.Context, prevEpoch int64) uint32 {
 	}
 
 	recentAuditFail := float64(0)
-	if stats.AuditTotal > 0 {
-		recentAuditFail = float64(stats.AuditFail) / float64(stats.AuditTotal)
+	if stats.SecondVerificationTotal > 0 {
+		recentAuditFail = float64(stats.AuditFail) / float64(stats.SecondVerificationTotal)
 	}
 
-	rate := float64(params.AuditBaseRate) * (1.0 + 10.0*recentFailRatio + 50.0*recentAuditFail)
+	rate := float64(params.SecondVerificationBaseRate) * (1.0 + 10.0*recentFailRatio + 50.0*recentAuditFail)
 	rateU32 := uint32(rate)
 
-	if rateU32 < params.AuditRateMin {
-		rateU32 = params.AuditRateMin
+	if rateU32 < params.SecondVerificationRateMin {
+		rateU32 = params.SecondVerificationRateMin
 	}
-	if rateU32 > params.AuditRateMax {
-		rateU32 = params.AuditRateMax
+	if rateU32 > params.SecondVerificationRateMax {
+		rateU32 = params.SecondVerificationRateMax
 	}
 	return rateU32
 }
 
-// CalculateReauditRate computes the dynamic reaudit rate.
-// V5.2: reaudit_rate = base × (1 + 10 × recent_audit_overturn_ratio + 50 × recent_reaudit_overturn)
-func (k Keeper) CalculateReauditRate(ctx sdk.Context, prevEpoch int64) uint32 {
+// CalculateThirdVerificationRate computes the dynamic third_verification rate.
+// V5.2: third_verification_rate = base × (1 + 10 × recent_audit_overturn_ratio + 50 × recent_third_verification_overturn)
+func (k Keeper) CalculateThirdVerificationRate(ctx sdk.Context, prevEpoch int64) uint32 {
 	params := k.GetParams(ctx)
 	stats := k.GetEpochStats(ctx, prevEpoch)
 
 	recentOverturn := float64(0)
-	if stats.AuditTotal > 0 {
-		recentOverturn = float64(stats.AuditOverturn) / float64(stats.AuditTotal)
+	if stats.SecondVerificationTotal > 0 {
+		recentOverturn = float64(stats.AuditOverturn) / float64(stats.SecondVerificationTotal)
 	}
 
-	recentReauditOverturn := float64(0)
-	if stats.ReauditTotal > 0 {
-		recentReauditOverturn = float64(stats.ReauditOverturn) / float64(stats.ReauditTotal)
+	recentThirdVerificationOverturn := float64(0)
+	if stats.ThirdVerificationTotal > 0 {
+		recentThirdVerificationOverturn = float64(stats.ThirdVerificationOverturn) / float64(stats.ThirdVerificationTotal)
 	}
 
-	rate := float64(params.ReauditBaseRate) * (1.0 + 10.0*recentOverturn + 50.0*recentReauditOverturn)
+	rate := float64(params.ThirdVerificationBaseRate) * (1.0 + 10.0*recentOverturn + 50.0*recentThirdVerificationOverturn)
 	rateU32 := uint32(rate)
 
-	if rateU32 < params.ReauditRateMin {
-		rateU32 = params.ReauditRateMin
+	if rateU32 < params.ThirdVerificationRateMin {
+		rateU32 = params.ThirdVerificationRateMin
 	}
-	if rateU32 > params.ReauditRateMax {
-		rateU32 = params.ReauditRateMax
+	if rateU32 > params.ThirdVerificationRateMax {
+		rateU32 = params.ThirdVerificationRateMax
 	}
 	return rateU32
 }
 
-// HandleAuditTimeouts processes audit/reaudit timeouts using height-indexed keys.
+// HandleSecondVerificationTimeouts processes audit/third_verification timeouts using height-indexed keys.
 // V5.2 §13.11: audit timeout 12h → original verification result stands → CLEARED.
 // Uses O(k) iteration where k = number of timed-out tasks, instead of O(n) over all pending.
-func (k Keeper) HandleAuditTimeouts(ctx sdk.Context) int {
+func (k Keeper) HandleSecondVerificationTimeouts(ctx sdk.Context) int {
 	params := k.GetParams(ctx)
 	currentHeight := ctx.BlockHeight()
 	timeoutCount := 0
 
-	// Check audit pending timeouts: scan timeout index up to (currentHeight - AuditTimeout)
-	auditCutoff := currentHeight - params.AuditTimeout
+	// Check audit pending timeouts: scan timeout index up to (currentHeight - SecondVerificationTimeout)
+	auditCutoff := currentHeight - params.SecondVerificationTimeout
 	if auditCutoff > 0 {
-		timeoutCount += k.processTimeoutsByIndex(ctx, types.AuditPendingTimeoutKeyPrefix, auditCutoff, false, params)
+		timeoutCount += k.processTimeoutsByIndex(ctx, types.SecondVerificationPendingTimeoutKeyPrefix, auditCutoff, false, params)
 	}
 
-	// Check reaudit pending timeouts
-	reauditCutoff := currentHeight - params.ReauditTimeout
-	if reauditCutoff > 0 {
-		timeoutCount += k.processTimeoutsByIndex(ctx, types.ReauditPendingTimeoutKeyPrefix, reauditCutoff, true, params)
+	// Check third_verification pending timeouts
+	third_verificationCutoff := currentHeight - params.ThirdVerificationTimeout
+	if third_verificationCutoff > 0 {
+		timeoutCount += k.processTimeoutsByIndex(ctx, types.ThirdVerificationPendingTimeoutKeyPrefix, third_verificationCutoff, true, params)
 	}
 
 	return timeoutCount
@@ -1849,7 +1849,7 @@ func (k Keeper) HandleAuditTimeouts(ctx sdk.Context) int {
 
 // processTimeoutsByIndex scans the height-indexed timeout keys up to cutoffHeight
 // and settles timed-out tasks. Returns number of tasks processed.
-func (k Keeper) processTimeoutsByIndex(ctx sdk.Context, prefix []byte, cutoffHeight int64, isReaudit bool, params types.Params) int {
+func (k Keeper) processTimeoutsByIndex(ctx sdk.Context, prefix []byte, cutoffHeight int64, isThirdVerification bool, params types.Params) int {
 	store := ctx.KVStore(k.storeKey)
 
 	// Iterate from prefix start to prefix + cutoffHeight (inclusive)
@@ -1860,7 +1860,7 @@ func (k Keeper) processTimeoutsByIndex(ctx sdk.Context, prefix []byte, cutoffHei
 	iter := store.Iterator(prefix, endKey)
 	defer iter.Close()
 
-	var toProcess []types.AuditPendingTask
+	var toProcess []types.SecondVerificationPendingTask
 	var timeoutKeys [][]byte
 	for ; iter.Valid(); iter.Next() {
 		timeoutKeys = append(timeoutKeys, append([]byte{}, iter.Key()...))
@@ -1870,12 +1870,12 @@ func (k Keeper) processTimeoutsByIndex(ctx sdk.Context, prefix []byte, cutoffHei
 			continue
 		}
 		taskID := key[len(prefix)+8:]
-		var apt types.AuditPendingTask
+		var apt types.SecondVerificationPendingTask
 		var found bool
-		if isReaudit {
-			apt, found = k.getAuditPendingByKey(ctx, types.ReauditPendingKey(taskID))
+		if isThirdVerification {
+			apt, found = k.getSecondVerificationPendingByKey(ctx, types.ThirdVerificationPendingKey(taskID))
 		} else {
-			apt, found = k.getAuditPendingByKey(ctx, types.AuditPendingKey(taskID))
+			apt, found = k.getSecondVerificationPendingByKey(ctx, types.SecondVerificationPendingKey(taskID))
 		}
 		if found {
 			toProcess = append(toProcess, apt)
@@ -1883,11 +1883,11 @@ func (k Keeper) processTimeoutsByIndex(ctx sdk.Context, prefix []byte, cutoffHei
 	}
 
 	for i, apt := range toProcess {
-		// P1-7: For reaudit timeout, use audit result (not OriginalStatus).
-		// Spec §13.11: "reaudit timeout: original audit result takes effect."
+		// P1-7: For third_verification timeout, use audit result (not OriginalStatus).
+		// Spec §13.11: "third_verification timeout: original audit result takes effect."
 		settleAsSuccess := apt.OriginalStatus == types.SettlementSuccess
-		if isReaudit {
-			ar, arFound := k.GetAuditRecord(ctx, apt.TaskId)
+		if isThirdVerification {
+			ar, arFound := k.GetSecondVerificationRecord(ctx, apt.TaskId)
 			if arFound {
 				var passCount uint32
 				for _, r := range ar.Results {
@@ -1895,8 +1895,8 @@ func (k Keeper) processTimeoutsByIndex(ctx sdk.Context, prefix []byte, cutoffHei
 						passCount++
 					}
 				}
-				auditPass := passCount >= params.AuditMatchThreshold
-				// Reaudit timeout → original audit result stands
+				auditPass := passCount >= params.SecondVerificationMatchThreshold
+				// ThirdVerification timeout → original audit result stands
 				if apt.OriginalStatus == types.SettlementSuccess {
 					settleAsSuccess = auditPass
 				} else {
@@ -1905,10 +1905,10 @@ func (k Keeper) processTimeoutsByIndex(ctx sdk.Context, prefix []byte, cutoffHei
 			}
 		}
 		k.settleAuditedTask(ctx, apt, settleAsSuccess, false, params, 0)
-		if isReaudit {
-			store.Delete(types.ReauditPendingKey(apt.TaskId))
+		if isThirdVerification {
+			store.Delete(types.ThirdVerificationPendingKey(apt.TaskId))
 		} else {
-			store.Delete(types.AuditPendingKey(apt.TaskId))
+			store.Delete(types.SecondVerificationPendingKey(apt.TaskId))
 		}
 		store.Delete(timeoutKeys[i])
 	}
@@ -1949,9 +1949,9 @@ func (k Keeper) CleanupExpiredTasks(ctx sdk.Context) int {
 	return len(toDelete)
 }
 
-// shouldTriggerAudit checks if a task should be audited using on-chain VRF.
+// shouldTriggerSecondVerification checks if a task should be audited using on-chain VRF.
 // S3 §13.4: VRF(task_id + post_verification_block_hash) < audit_rate → PENDING_AUDIT.
-func (k Keeper) shouldTriggerAudit(ctx sdk.Context, taskId []byte, auditRate uint32) bool {
+func (k Keeper) shouldTriggerSecondVerification(ctx sdk.Context, taskId []byte, auditRate uint32) bool {
 	blockHash := ctx.HeaderHash()
 	if len(blockHash) == 0 {
 		blockHash = ctx.BlockHeader().LastBlockId.Hash
@@ -1968,9 +1968,9 @@ func (k Keeper) shouldTriggerAudit(ctx sdk.Context, taskId []byte, auditRate uin
 	return vrfValue.Cmp(threshold) < 0
 }
 
-// shouldTriggerReaudit checks if a task should go to reaudit using VRF.
-// S5: VRF(task_id || post_audit_block_hash) < reaudit_rate → PENDING_REAUDIT.
-func (k Keeper) shouldTriggerReaudit(ctx sdk.Context, taskId []byte, reauditRate uint32) bool {
+// shouldTriggerThirdVerification checks if a task should go to third_verification using VRF.
+// S5: VRF(task_id || post_audit_block_hash) < third_verification_rate → PENDING_REAUDIT.
+func (k Keeper) shouldTriggerThirdVerification(ctx sdk.Context, taskId []byte, third_verificationRate uint32) bool {
 	blockHash := ctx.HeaderHash()
 	if len(blockHash) == 0 {
 		blockHash = ctx.BlockHeader().LastBlockId.Hash
@@ -1981,7 +1981,7 @@ func (k Keeper) shouldTriggerReaudit(ctx sdk.Context, taskId []byte, reauditRate
 	vrfValue := new(big.Int).SetBytes(h[:])
 
 	maxUint := new(big.Int).Lsh(big.NewInt(1), 256)
-	threshold := new(big.Int).Mul(maxUint, big.NewInt(int64(reauditRate)))
+	threshold := new(big.Int).Mul(maxUint, big.NewInt(int64(third_verificationRate)))
 	threshold.Div(threshold, big.NewInt(1000))
 
 	return vrfValue.Cmp(threshold) < 0
@@ -2274,9 +2274,9 @@ func (k Keeper) CalculateWorkerAuditBoost(ctx sdk.Context, workerAddr string, pa
 	}
 
 	if maxPairRatio > 50 {
-		return params.TokenMismatchAuditWeight
+		return params.TokenMismatchSecondVerificationWeight
 	} else if maxPairRatio > 30 {
-		return params.TokenMismatchAuditWeight / 2
+		return params.TokenMismatchSecondVerificationWeight / 2
 	}
 	return 0
 }
@@ -2285,10 +2285,10 @@ func (k Keeper) CalculateWorkerAuditBoost(ctx sdk.Context, workerAddr string, pa
 
 // TokenCountResolution holds the resolved token counts after three-party validation.
 type TokenCountResolution struct {
-	InputTokens      uint32
-	OutputTokens     uint32
-	WorkerDishonest  bool // true if Worker misreported
-	LowConfidence    bool // E14: true if no verifier provided token counts (all returned 0)
+	InputTokens     uint32
+	OutputTokens    uint32
+	WorkerDishonest bool // true if Worker misreported
+	LowConfidence   bool // E14: true if no verifier provided token counts (all returned 0)
 }
 
 // ResolveTokenCounts implements S9 §3.4 two-party verification:

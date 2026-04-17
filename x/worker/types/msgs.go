@@ -50,9 +50,11 @@ func NewMsgRegisterWorker(creator, pubkey string, models []string, endpoint, gpu
 	}
 }
 
-func (msg *MsgRegisterWorker) ProtoMessage()  {}
-func (msg *MsgRegisterWorker) Reset()         { *msg = MsgRegisterWorker{} }
-func (msg *MsgRegisterWorker) String() string { return fmt.Sprintf("MsgRegisterWorker{%s}", msg.Creator) }
+func (msg *MsgRegisterWorker) ProtoMessage() {}
+func (msg *MsgRegisterWorker) Reset()        { *msg = MsgRegisterWorker{} }
+func (msg *MsgRegisterWorker) String() string {
+	return fmt.Sprintf("MsgRegisterWorker{%s}", msg.Creator)
+}
 
 func (msg *MsgRegisterWorker) ValidateBasic() error {
 	_, err := sdk.AccAddressFromBech32(msg.Creator)

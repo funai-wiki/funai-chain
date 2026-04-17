@@ -390,9 +390,9 @@ func (c *Client) GetActiveWorkers(ctx context.Context) ([]WorkerListEntry, error
 
 	var result struct {
 		Workers []struct {
-			Address            string `json:"address"`
-			Pubkey             string `json:"pubkey"`
-			Stake              struct {
+			Address string `json:"address"`
+			Pubkey  string `json:"pubkey"`
+			Stake   struct {
 				Amount string `json:"amount"`
 			} `json:"stake"`
 			SupportedModels    []string `json:"supported_models"`

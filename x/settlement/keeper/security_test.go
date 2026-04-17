@@ -14,48 +14,48 @@ import (
 )
 
 // ================================================================
-// S1: Forged AuditResponse — invalid auditor rejected
+// S1: Forged SecondVerificationResponse — invalid second_verifier rejected
 // ================================================================
-func TestForgedAuditResponse(t *testing.T) {
+func TestForgedSecondVerificationResponse(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	taskId := []byte("s1-forged-audit00001")
 
 	// Set up audit pending task
-	k.SetAuditPending(ctx, types.AuditPendingTask{
-		TaskId:         taskId,
-		OriginalStatus: types.SettlementSuccess,
-		SubmittedAt:    ctx.BlockHeight(),
-		UserAddress:    makeAddr("s1-user").String(),
-		WorkerAddress:  makeAddr("s1-worker").String(),
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
+		TaskId:            taskId,
+		OriginalStatus:    types.SettlementSuccess,
+		SubmittedAt:       ctx.BlockHeight(),
+		UserAddress:       makeAddr("s1-user").String(),
+		WorkerAddress:     makeAddr("s1-worker").String(),
 		VerifierAddresses: []string{makeAddr("s1-v1").String()},
-		Fee:            sdk.NewCoin("ufai", cosmosmath.NewInt(1_000_000)),
-		ExpireBlock:    10000,
+		Fee:               sdk.NewCoin("ufai", cosmosmath.NewInt(1_000_000)),
+		ExpireBlock:       10000,
 	})
 
 	// Submit audit from ORIGINAL verifier (should be rejected — conflict of interest)
-	err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-		Auditor:    makeAddr("s1-v1").String(), // same as original verifier
-		TaskId:     taskId,
-		Epoch:      1,
-		Pass:       true,
-		LogitsHash: []byte("hash-padding-32-bytes-here!!!!!"),
+	err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+		SecondVerifier: makeAddr("s1-v1").String(), // same as original verifier
+		TaskId:         taskId,
+		Epoch:          1,
+		Pass:           true,
+		LogitsHash:     []byte("hash-padding-32-bytes-here!!!!!"),
 	})
 	if err == nil {
 		t.Fatal("S1: expected rejection of audit from original verifier")
 	}
 
-	// Submit from different (valid) auditor — should succeed
-	err = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-		Auditor:    makeAddr("s1-aud0").String(),
-		TaskId:     taskId,
-		Epoch:      1,
-		Pass:       true,
-		LogitsHash: []byte("hash-padding-32-bytes-here!!!!!"),
+	// Submit from different (valid) second_verifier — should succeed
+	err = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+		SecondVerifier: makeAddr("s1-aud0").String(),
+		TaskId:         taskId,
+		Epoch:          1,
+		Pass:           true,
+		LogitsHash:     []byte("hash-padding-32-bytes-here!!!!!"),
 	})
 	if err != nil {
-		t.Fatalf("S1: valid auditor rejected: %v", err)
+		t.Fatalf("S1: valid second_verifier rejected: %v", err)
 	}
 }
 
@@ -65,7 +65,7 @@ func TestForgedAuditResponse(t *testing.T) {
 // ================================================================
 func TestReplayAttack_DuplicateTaskId(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("s2-user")
 	worker := makeAddr("s2-worker")
@@ -198,7 +198,7 @@ func TestOverflowProtection_AllPaths(t *testing.T) {
 // ================================================================
 func TestBalanceDrainAttack(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("s9-user")

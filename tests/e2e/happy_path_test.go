@@ -11,8 +11,8 @@ import (
 	"cosmossdk.io/store"
 	storemetrics "cosmossdk.io/store/metrics"
 	storetypes "cosmossdk.io/store/types"
-	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cometbft/cometbft/crypto/secp256k1"
+	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -277,7 +277,7 @@ func TestHappyPath_InferenceToReward(t *testing.T) {
 	verifiers := []string{v1.String(), v2.String(), v3.String()}
 
 	// Disable audit so all tasks settle immediately
-	sk.SetCurrentAuditRate(ctx, 0)
+	sk.SetCurrentSecondVerificationRate(ctx, 0)
 
 	// ========== Phase 2: Deposit ==========
 	deposit := sdk.NewCoin("ufai", math.NewInt(100_000_000_000))
@@ -335,8 +335,8 @@ func TestHappyPath_InferenceToReward(t *testing.T) {
 	//   burn           = 1_000_000 * 10 / 1000 = 10_000
 	//   executor       = 1_000_000 - 30_000 - 10_000 - 10_000 = 950_000
 	perTaskVerifierTotal := fee.Amount.MulRaw(int64(params.VerifierFeeRatio)).QuoRaw(1000)
-	perTaskAuditFund := fee.Amount.MulRaw(int64(params.AuditFundRatio)).QuoRaw(1000)
-	perTaskExecutor := fee.Amount.Sub(perTaskVerifierTotal).Sub(perTaskAuditFund)
+	perTaskMultiVerificationFund := fee.Amount.MulRaw(int64(params.MultiVerificationFundRatio)).QuoRaw(1000)
+	perTaskExecutor := fee.Amount.Sub(perTaskVerifierTotal).Sub(perTaskMultiVerificationFund)
 
 	totalExecutorExpected := perTaskExecutor.MulRaw(int64(taskCount))
 	gotExecutor := bk.receivedBy(workerAddr)
@@ -365,15 +365,15 @@ func TestHappyPath_InferenceToReward(t *testing.T) {
 		totalDistributed = totalDistributed.Add(bk.receivedBy(v))
 	}
 	totalUserCharged := fee.Amount.MulRaw(int64(taskCount))
-	totalAuditFund := perTaskAuditFund.MulRaw(int64(taskCount))
-	expectedDistributed := totalUserCharged.Sub(totalAuditFund)
+	totalMultiVerificationFund := perTaskMultiVerificationFund.MulRaw(int64(taskCount))
+	expectedDistributed := totalUserCharged.Sub(totalMultiVerificationFund)
 	if !totalDistributed.Equal(expectedDistributed) {
 		t.Fatalf("Phase 5 - No-leakage: distributed=%s, expected=%s (user charged=%s, audit fund=%s)",
-			totalDistributed, expectedDistributed, totalUserCharged, totalAuditFund)
+			totalDistributed, expectedDistributed, totalUserCharged, totalMultiVerificationFund)
 	}
 
 	t.Logf("[Phase 5] Fee distribution OK: executor=%s/task, verifier=%s/task each, audit=%s/task, total distributed=%s",
-		perTaskExecutor, perVerifier, perTaskAuditFund, totalDistributed)
+		perTaskExecutor, perVerifier, perTaskMultiVerificationFund, totalDistributed)
 
 	// ========== Phase 6: Epoch Reward Distribution ==========
 	// Reset bk tracking for reward phase
@@ -474,7 +474,7 @@ func TestHappyPath_InferenceToReward(t *testing.T) {
 	t.Logf("  Tasks:       %d SUCCESS × %s fee", taskCount, fee)
 	t.Logf("  User balance: %s → %s", deposit.Amount, expectedBalance)
 	t.Logf("  Fee split:   executor=%s, verifiers=%s, multi-verif-fund=%s (per task)",
-		perTaskExecutor, perTaskVerifierTotal, perTaskAuditFund)
+		perTaskExecutor, perTaskVerifierTotal, perTaskMultiVerificationFund)
 	t.Logf("  Rewards:     epoch=%s, inference=%s, verifier_pool=%s, fund=%s",
 		epochReward, inferenceReward, sumVerifierRewards, fundReward)
 }
@@ -496,7 +496,7 @@ func TestE2E_EpochBoundarySettlement(t *testing.T) {
 	proposerAddr := makeAddr("epoch-proposer")
 	verifiers := []string{v1.String(), v2.String(), v3.String()}
 
-	sk.SetCurrentAuditRate(ctx, 0)
+	sk.SetCurrentSecondVerificationRate(ctx, 0)
 
 	deposit := sdk.NewCoin("ufai", math.NewInt(100_000_000_000))
 	if err := sk.ProcessDeposit(ctx, userAddr, deposit); err != nil {

@@ -29,8 +29,8 @@ type Host struct {
 	mu     sync.RWMutex
 
 	// P3-4: per-peer message rate limiting
-	peerRates   map[peer.ID]*peerRateEntry
-	peerRateMu  sync.Mutex
+	peerRates  map[peer.ID]*peerRateEntry
+	peerRateMu sync.Mutex
 }
 
 // peerRateEntry tracks message counts per peer for rate limiting.
@@ -54,18 +54,18 @@ func New(listenAddr string) (*Host, error) {
 	// N5: configure peer scoring to defend against message floods.
 	// Malicious peers sending excessive messages get penalized and eventually disconnected.
 	peerScoreParams := &pubsub.PeerScoreParams{
-		AppSpecificScore: func(p peer.ID) float64 { return 0 },
-		DecayInterval:    time.Minute,
-		DecayToZero:      0.01,
+		AppSpecificScore:            func(p peer.ID) float64 { return 0 },
+		DecayInterval:               time.Minute,
+		DecayToZero:                 0.01,
 		IPColocationFactorWeight:    -10,
 		IPColocationFactorThreshold: 3,
-		BehaviourPenaltyWeight: -1,
-		BehaviourPenaltyDecay:  0.99,
+		BehaviourPenaltyWeight:      -1,
+		BehaviourPenaltyDecay:       0.99,
 	}
 	peerScoreThresholds := &pubsub.PeerScoreThresholds{
 		GossipThreshold:             -100,
 		PublishThreshold:            -500,
-		GraylistThreshold:          -1000,
+		GraylistThreshold:           -1000,
 		OpportunisticGraftThreshold: 5,
 	}
 	ps, err := pubsub.NewGossipSub(context.Background(), h,

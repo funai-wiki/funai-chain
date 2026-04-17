@@ -3,9 +3,9 @@ package types
 import "fmt"
 
 type GenesisState struct {
-	Params             Params             `protobuf:"bytes,1,opt,name=params,proto3" json:"params"`
-	InferenceAccounts  []InferenceAccount `protobuf:"bytes,2,rep,name=inference_accounts,proto3" json:"inference_accounts"`
-	BatchRecords       []BatchRecord      `protobuf:"bytes,3,rep,name=batch_records,proto3" json:"batch_records"`
+	Params            Params             `protobuf:"bytes,1,opt,name=params,proto3" json:"params"`
+	InferenceAccounts []InferenceAccount `protobuf:"bytes,2,rep,name=inference_accounts,proto3" json:"inference_accounts"`
+	BatchRecords      []BatchRecord      `protobuf:"bytes,3,rep,name=batch_records,proto3" json:"batch_records"`
 }
 
 func (m *GenesisState) ProtoMessage()  {}

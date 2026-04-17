@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/spf13/cobra"
 
 	"github.com/funai-wiki/funai-chain/x/settlement/types"

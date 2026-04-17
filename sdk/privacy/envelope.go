@@ -9,11 +9,11 @@ import (
 // Envelope wraps an encrypted P2P message with metadata needed for decryption.
 // Used to encrypt entire InferRequest/StreamToken messages at the SDK layer.
 type Envelope struct {
-	Version         byte   `json:"version"`
-	SenderPubkey    []byte `json:"sender_pubkey"`
-	EncryptedData   []byte `json:"encrypted_data"`
-	ContentHash     []byte `json:"content_hash"`
-	IsEncrypted     bool   `json:"is_encrypted"`
+	Version       byte   `json:"version"`
+	SenderPubkey  []byte `json:"sender_pubkey"`
+	EncryptedData []byte `json:"encrypted_data"`
+	ContentHash   []byte `json:"content_hash"`
+	IsEncrypted   bool   `json:"is_encrypted"`
 }
 
 // Seal creates an encrypted Envelope from plaintext data.

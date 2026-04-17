@@ -46,4 +46,6 @@ agency-agents/
 *.bak
 
 docs/internal/
+docs/reports/
+docs/mainnet-readiness/
 funai-node

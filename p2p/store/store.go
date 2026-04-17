@@ -13,7 +13,7 @@ import (
 const (
 	// DefaultRetentionDuration is 48 hours for P2P message retention.
 	// Audit KT §7: reduced from 7 days for data minimization (legal risk).
-	// 48h covers 99%+ of audit/re-audit windows.
+	// 48h covers 99%+ of audit/third-verification windows.
 	DefaultRetentionDuration = 48 * time.Hour
 
 	// CleanupInterval controls how often expired entries are pruned.
@@ -24,10 +24,10 @@ const (
 type RecordType string
 
 const (
-	RecordPrompt   RecordType = "prompt"
-	RecordOutput   RecordType = "output"
-	RecordReceipt  RecordType = "receipt"
-	RecordVerify   RecordType = "verify"
+	RecordPrompt  RecordType = "prompt"
+	RecordOutput  RecordType = "output"
+	RecordReceipt RecordType = "receipt"
+	RecordVerify  RecordType = "verify"
 )
 
 // Record is a single stored P2P message with TTL metadata.

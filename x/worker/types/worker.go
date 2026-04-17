@@ -54,7 +54,7 @@ type Worker struct {
 	TotalFeeEarned  sdk.Coin `protobuf:"bytes,19,opt,name=total_fee_earned,proto3" json:"total_fee_earned"`
 	LastActiveBlock int64    `protobuf:"varint,20,opt,name=last_active_block,proto3" json:"last_active_block"`
 	// S1: concurrent inference capacity
-	MaxConcurrentTasks  uint32 `protobuf:"varint,21,opt,name=max_concurrent_tasks,proto3" json:"max_concurrent_tasks"`
+	MaxConcurrentTasks uint32 `protobuf:"varint,21,opt,name=max_concurrent_tasks,proto3" json:"max_concurrent_tasks"`
 	// S2: concurrent verification capacity
 	MaxConcurrentVerify uint32 `protobuf:"varint,22,opt,name=max_concurrent_verify,proto3" json:"max_concurrent_verify"`
 
@@ -78,7 +78,7 @@ const (
 	ReputationMax         uint32 = 12000 // 1.2
 	ReputationAcceptDelta uint32 = 100   // +0.01 per accept
 	ReputationMissDelta   uint32 = 1000  // -0.1 per miss (10x accept)
-	ReputationAuditMiss   uint32 = 2000  // -0.2 per auditor miss (doubled)
+	ReputationAuditMiss   uint32 = 2000  // -0.2 per second_verifier miss (doubled)
 	ReputationRejectChain uint32 = 500   // -0.05 after 10 consecutive rejects
 	ReputationDecayStep   uint32 = 50    // ±0.005 hourly decay toward 1.0
 	ReputationRejectLimit uint32 = 10    // consecutive rejects before penalty

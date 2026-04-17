@@ -32,18 +32,18 @@ type OutputObserver interface {
 
 // Worker handles inference execution and verification dispatch.
 type Worker struct {
-	Address        string
-	Pubkey         []byte
-	PrivKey        []byte // S6: private key for signing InferReceipts
-	ModelIds       []string
-	Host           *p2phost.Host
-	Engine         inference.Engine
-	ChainClient    *chain.Client
+	Address             string
+	Pubkey              []byte
+	PrivKey             []byte // S6: private key for signing InferReceipts
+	ModelIds            []string
+	Host                *p2phost.Host
+	Engine              inference.Engine
+	ChainClient         *chain.Client
 	CurrentLeader       string // M12: expected leader address for legitimacy check
 	CurrentLeaderPubkey []byte // S4: leader's secp256k1 pubkey for AssignTask signature verification
-	OutputObserver OutputObserver
-	activeTasks        sync.Map // P2-3: task_id dedup to prevent processing duplicate dispatches
-	rebroadcastCancels sync.Map // P2-8: task_key → context.CancelFunc for rebroadcast termination
+	OutputObserver      OutputObserver
+	activeTasks         sync.Map // P2-3: task_id dedup to prevent processing duplicate dispatches
+	rebroadcastCancels  sync.Map // P2-8: task_key → context.CancelFunc for rebroadcast termination
 	// S1: concurrent inference control
 	activeInferenceTasks atomic.Uint32
 	maxConcurrentTasks   uint32
@@ -532,24 +532,24 @@ type VerifierCandidate struct {
 
 // VerifyPayload is sent from Worker to Verifiers.
 type VerifyPayload struct {
-	TaskId             []byte     `json:"task_id"`
-	Prompt             string     `json:"prompt"`
-	Output             string     `json:"output"`
-	WorkerLogits       [5]float32 `json:"worker_logits"`
-	ResultHash         []byte     `json:"result_hash"`
-	Temperature        float32    `json:"temperature"`
-	TopP               float32    `json:"top_p"`
-	FinalSeed          []byte     `json:"final_seed"`
-	SampledTokens      [5]uint32  `json:"sampled_tokens"`
-	InputTokenCount    uint32     `json:"input_token_count"`
-	OutputTokenCount   uint32     `json:"output_token_count"`
-	UserSeed           []byte     `json:"user_seed"`            // S4: for final_seed verification
-	DispatchBlockHash  []byte     `json:"dispatch_block_hash"`  // S4: for final_seed verification
-	WorkerAddress      string     `json:"worker_address"`       // M3: for VRF self-check
-	WorkerPubkey       []byte     `json:"worker_pubkey"`        // P1-4: for signature verification
-	WorkerSig          []byte     `json:"worker_sig"`           // P1-4: InferReceipt signature
-	ModelId            []byte     `json:"model_id,omitempty"`   // KT: for multi-model topic routing
-	TargetVerifier     string     `json:"target_verifier,omitempty"` // Intended verifier address for filtering
+	TaskId            []byte     `json:"task_id"`
+	Prompt            string     `json:"prompt"`
+	Output            string     `json:"output"`
+	WorkerLogits      [5]float32 `json:"worker_logits"`
+	ResultHash        []byte     `json:"result_hash"`
+	Temperature       float32    `json:"temperature"`
+	TopP              float32    `json:"top_p"`
+	FinalSeed         []byte     `json:"final_seed"`
+	SampledTokens     [5]uint32  `json:"sampled_tokens"`
+	InputTokenCount   uint32     `json:"input_token_count"`
+	OutputTokenCount  uint32     `json:"output_token_count"`
+	UserSeed          []byte     `json:"user_seed"`                 // S4: for final_seed verification
+	DispatchBlockHash []byte     `json:"dispatch_block_hash"`       // S4: for final_seed verification
+	WorkerAddress     string     `json:"worker_address"`            // M3: for VRF self-check
+	WorkerPubkey      []byte     `json:"worker_pubkey"`             // P1-4: for signature verification
+	WorkerSig         []byte     `json:"worker_sig"`                // P1-4: InferReceipt signature
+	ModelId           []byte     `json:"model_id,omitempty"`        // KT: for multi-model topic routing
+	TargetVerifier    string     `json:"target_verifier,omitempty"` // Intended verifier address for filtering
 }
 
 // shouldStopGeneration checks if the Worker should stop generating tokens due to per-token budget limit.

@@ -18,21 +18,21 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/client/grpc/cmtservice"
+	nodeservice "github.com/cosmos/cosmos-sdk/client/grpc/node"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/address"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/client/grpc/cmtservice"
-	nodeservice "github.com/cosmos/cosmos-sdk/client/grpc/node"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	"github.com/cosmos/cosmos-sdk/server"
 	"github.com/cosmos/cosmos-sdk/server/api"
 	serverconfig "github.com/cosmos/cosmos-sdk/server/config"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	authkeeper "github.com/cosmos/cosmos-sdk/x/auth/keeper"
+	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/cosmos/cosmos-sdk/x/bank"
 	bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper"
@@ -49,15 +49,15 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 
 	// Cosmos EVM modules
-	evmmod "github.com/cosmos/evm/x/vm"
-	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
-	evmtypes "github.com/cosmos/evm/x/vm/types"
 	feemarketmod "github.com/cosmos/evm/x/feemarket"
 	feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 	precisebankmod "github.com/cosmos/evm/x/precisebank"
 	precisebankkeeper "github.com/cosmos/evm/x/precisebank/keeper"
 	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
+	evmmod "github.com/cosmos/evm/x/vm"
+	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 
 	modelregmod "github.com/funai-wiki/funai-chain/x/modelreg"
 	modelregkeeper "github.com/funai-wiki/funai-chain/x/modelreg/keeper"
@@ -122,14 +122,14 @@ var (
 	)
 
 	maccPerms = map[string][]string{
-		authtypes.FeeCollectorName:     nil,
-		stakingtypes.BondedPoolName:    {authtypes.Burner, authtypes.Staking},
-		stakingtypes.NotBondedPoolName: {authtypes.Burner, authtypes.Staking},
-		workertypes.ModuleName:         {authtypes.Burner},
+		authtypes.FeeCollectorName:        nil,
+		stakingtypes.BondedPoolName:       {authtypes.Burner, authtypes.Staking},
+		stakingtypes.NotBondedPoolName:    {authtypes.Burner, authtypes.Staking},
+		workertypes.ModuleName:            {authtypes.Burner},
 		settlementtypes.ModuleAccountName: nil,
-		rewardtypes.ModuleName:         {authtypes.Minter, authtypes.Burner},
-		evmtypes.ModuleName:           {authtypes.Minter, authtypes.Burner},
-		precisebanktypes.ModuleName:   {authtypes.Minter, authtypes.Burner},
+		rewardtypes.ModuleName:            {authtypes.Minter, authtypes.Burner},
+		evmtypes.ModuleName:               {authtypes.Minter, authtypes.Burner},
+		precisebanktypes.ModuleName:       {authtypes.Minter, authtypes.Burner},
 	}
 )
 
@@ -159,9 +159,9 @@ type FunAIApp struct {
 	VRFKeeper        vrfkeeper.Keeper
 
 	// EVM keepers
-	EvmKeeper           *evmkeeper.Keeper
-	FeeMarketKeeper     feemarketkeeper.Keeper
-	PreciseBankKeeper   precisebankkeeper.Keeper
+	EvmKeeper         *evmkeeper.Keeper
+	FeeMarketKeeper   feemarketkeeper.Keeper
+	PreciseBankKeeper precisebankkeeper.Keeper
 
 	ModuleManager *module.Manager
 }
@@ -419,13 +419,13 @@ func NewFunAIApp(
 			return nil
 		}
 		stats := app.SettlementKeeper.GetEpochStats(ctx, prevEpoch)
-		if stats.VerificationCount == 0 && stats.AuditTotal == 0 {
+		if stats.VerificationCount == 0 && stats.SecondVerificationTotal == 0 {
 			return nil
 		}
 
 		// Return actual per-worker verification/2nd-3rd-verification counts and fees.
 		// Fees are used for the 85% amount-weighted portion of the 12% verifier reward pool.
-		counts := app.SettlementKeeper.GetAllVerifierAuditorEpochCounts(ctx)
+		counts := app.SettlementKeeper.GetAllVerifierSecondVerifierEpochCounts(ctx)
 		var contribs []rewardtypes.VerificationContribution
 		for _, c := range counts {
 			contribs = append(contribs, rewardtypes.VerificationContribution{
@@ -437,7 +437,7 @@ func NewFunAIApp(
 		}
 
 		// Clear counts for next epoch
-		app.SettlementKeeper.ClearVerifierAuditorEpochCounts(ctx)
+		app.SettlementKeeper.ClearVerifierSecondVerifierEpochCounts(ctx)
 
 		return contribs
 	}
@@ -667,7 +667,7 @@ func (app *FunAIApp) RegisterNodeService(clientCtx client.Context, cfg servercon
 	nodeservice.RegisterNodeService(clientCtx, app.GRPCQueryRouter(), cfg)
 }
 
-func (app *FunAIApp) LegacyAmino() *codec.LegacyAmino                { return app.legacyAmino }
+func (app *FunAIApp) LegacyAmino() *codec.LegacyAmino                 { return app.legacyAmino }
 func (app *FunAIApp) AppCodec() codec.Codec                           { return app.appCodec }
 func (app *FunAIApp) InterfaceRegistry() codectypes.InterfaceRegistry { return app.interfaceRegistry }
 func (app *FunAIApp) TxConfig() client.TxConfig                       { return app.txConfig }

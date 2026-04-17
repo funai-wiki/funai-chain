@@ -23,10 +23,10 @@ import (
 )
 
 var (
-	_ module.AppModuleBasic      = AppModuleBasic{}
-	_ module.AppModule           = AppModule{}
-	_ module.HasABCIEndBlock     = AppModule{}
-	_ appmodule.HasBeginBlocker  = AppModule{} // P1-10: accumulate block signers
+	_ module.AppModuleBasic     = AppModuleBasic{}
+	_ module.AppModule          = AppModule{}
+	_ module.HasABCIEndBlock    = AppModule{}
+	_ appmodule.HasBeginBlocker = AppModule{} // P1-10: accumulate block signers
 )
 
 // -------- AppModuleBasic --------
@@ -45,7 +45,7 @@ func (AppModuleBasic) RegisterInterfaces(registry cdctypes.InterfaceRegistry) {
 		&types.MsgWithdraw{},
 		&types.MsgBatchSettlement{},
 		&types.MsgFraudProof{},
-		&types.MsgAuditResult{},
+		&types.MsgSecondVerificationResult{},
 	)
 }
 
@@ -121,8 +121,8 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 
 // EndBlock runs the settlement EndBlocker:
 // 1. Cleanup expired task_id records
-// 2. Handle audit/reaudit timeouts (V5.2)
-// 3. Recalculate audit_rate / reaudit_rate at epoch boundaries (V5.2)
+// 2. Handle audit/third_verification timeouts (V5.2)
+// 3. Recalculate audit_rate / third_verification_rate at epoch boundaries (V5.2)
 func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
@@ -135,11 +135,11 @@ func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error
 		))
 	}
 
-	// 2. Handle audit/reaudit timeouts
-	timedOut := am.keeper.HandleAuditTimeouts(sdkCtx)
+	// 2. Handle audit/third_verification timeouts
+	timedOut := am.keeper.HandleSecondVerificationTimeouts(sdkCtx)
 	if timedOut > 0 {
 		sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
-			"audit_timeout",
+			"second_verification_timeout",
 			sdk.NewAttribute("timed_out_count", strconv.Itoa(timedOut)),
 		))
 	}
@@ -159,19 +159,19 @@ func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error
 	if height%epochBlocks == 0 {
 		prevEpoch := height/epochBlocks - 1
 		if prevEpoch >= 0 {
-			newAuditRate := am.keeper.CalculateAuditRate(sdkCtx, prevEpoch)
-			am.keeper.SetCurrentAuditRate(sdkCtx, newAuditRate)
+			newSecondVerificationRate := am.keeper.CalculateSecondVerificationRate(sdkCtx, prevEpoch)
+			am.keeper.SetCurrentSecondVerificationRate(sdkCtx, newSecondVerificationRate)
 
-			newReauditRate := am.keeper.CalculateReauditRate(sdkCtx, prevEpoch)
-			am.keeper.SetCurrentReauditRate(sdkCtx, newReauditRate)
+			newThirdVerificationRate := am.keeper.CalculateThirdVerificationRate(sdkCtx, prevEpoch)
+			am.keeper.SetCurrentThirdVerificationRate(sdkCtx, newThirdVerificationRate)
 
-			// M9: distribute audit fund to auditors for the previous epoch
-			am.keeper.DistributeAuditFund(sdkCtx, prevEpoch)
+			// M9: distribute audit fund to second_verifiers for the previous epoch
+			am.keeper.DistributeMultiVerificationFund(sdkCtx, prevEpoch)
 
 			sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
 				"audit_rate_updated",
-				sdk.NewAttribute("audit_rate", fmt.Sprintf("%d", newAuditRate)),
-				sdk.NewAttribute("reaudit_rate", fmt.Sprintf("%d", newReauditRate)),
+				sdk.NewAttribute("audit_rate", fmt.Sprintf("%d", newSecondVerificationRate)),
+				sdk.NewAttribute("third_verification_rate", fmt.Sprintf("%d", newThirdVerificationRate)),
 				sdk.NewAttribute("epoch", fmt.Sprintf("%d", height/epochBlocks)),
 			))
 		}

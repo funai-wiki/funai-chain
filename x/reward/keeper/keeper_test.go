@@ -347,15 +347,15 @@ func TestSetAndGetParams(t *testing.T) {
 	k, ctx, _ := setupRewardKeeper(t)
 
 	custom := types.Params{
-		BaseBlockReward:    math.NewInt(2000),
-		HalvingPeriod:      1000,
-		FeeWeight:          math.LegacyNewDecWithPrec(60, 2),
-		CountWeight:        math.LegacyNewDecWithPrec(40, 2),
-		EpochBlocks:        50,
-		TotalSupply:        math.NewInt(100_000_000),
-		InferenceWeight:    math.LegacyNewDecWithPrec(85, 2),
-		VerificationWeight: math.LegacyNewDecWithPrec(12, 2),
-		AuditFundWeight:    math.LegacyNewDecWithPrec(3, 2),
+		BaseBlockReward:             math.NewInt(2000),
+		HalvingPeriod:               1000,
+		FeeWeight:                   math.LegacyNewDecWithPrec(60, 2),
+		CountWeight:                 math.LegacyNewDecWithPrec(40, 2),
+		EpochBlocks:                 50,
+		TotalSupply:                 math.NewInt(100_000_000),
+		InferenceWeight:             math.LegacyNewDecWithPrec(85, 2),
+		VerificationWeight:          math.LegacyNewDecWithPrec(12, 2),
+		MultiVerificationFundWeight: math.LegacyNewDecWithPrec(3, 2),
 	}
 	err := k.SetParams(ctx, custom)
 	if err != nil {

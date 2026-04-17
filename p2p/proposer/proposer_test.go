@@ -45,11 +45,11 @@ func TestBatchLoop_BroadcastFail(t *testing.T) {
 
 	// Manually inject a cleared entry (simulating ProcessPending result)
 	entry := settlementtypes.SettlementEntry{
-		TaskId:      []byte("task-001"),
-		UserAddress: "funai1user",
+		TaskId:        []byte("task-001"),
+		UserAddress:   "funai1user",
 		WorkerAddress: "funai1worker",
-		Fee:         sdk.NewCoin("ufai", math.NewInt(1000000)),
-		Status:      settlementtypes.SettlementSuccess,
+		Fee:           sdk.NewCoin("ufai", math.NewInt(1000000)),
+		Status:        settlementtypes.SettlementSuccess,
 	}
 	p.mu.Lock()
 	p.clearedTasks = append(p.clearedTasks, entry)

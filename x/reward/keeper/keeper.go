@@ -143,7 +143,7 @@ func (k Keeper) DistributeRewards(
 
 		// Multi-verification fund: mint into x/reward then transfer to settlement
 		// module account, where it co-mingles with fee-based audit fund accumulation
-		// and is distributed per-epoch to 2nd/3rd verifiers via settlement.DistributeAuditFund.
+		// and is distributed per-epoch to 2nd/3rd verifiers via settlement.DistributeMultiVerificationFund.
 		if fundReward.IsPositive() {
 			coins := sdk.NewCoins(sdk.NewCoin(types.BondDenom, fundReward))
 			if err := k.bankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {

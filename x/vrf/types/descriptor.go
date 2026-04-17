@@ -61,7 +61,7 @@ func (m *MsgReportLeaderTimeoutResponse) Descriptor() ([]byte, []int) { return v
 func (m *LeaderInfo) Descriptor() ([]byte, []int)                     { return vrfDescGz, []int{6} }
 func (m *CommitteeMember) Descriptor() ([]byte, []int)                { return vrfDescGz, []int{7} }
 func (m *CommitteeInfo) Descriptor() ([]byte, []int)                  { return vrfDescGz, []int{8} }
-func (m *VRFSeed) Descriptor() ([]byte, []int)                       { return vrfDescGz, []int{9} }
+func (m *VRFSeed) Descriptor() ([]byte, []int)                        { return vrfDescGz, []int{9} }
 func (m *QueryParamsRequest) Descriptor() ([]byte, []int)             { return vrfDescGz, []int{10} }
 func (m *QueryParamsResponse) Descriptor() ([]byte, []int)            { return vrfDescGz, []int{11} }
 func (m *QueryCurrentSeedRequest) Descriptor() ([]byte, []int)        { return vrfDescGz, []int{12} }

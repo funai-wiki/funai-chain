@@ -23,14 +23,14 @@ type MsgModelProposalResponse struct {
 	ModelId string `protobuf:"bytes,1,opt,name=model_id,proto3" json:"model_id"`
 }
 
-func (m *MsgModelProposalResponse) ProtoMessage() {}
-func (m *MsgModelProposalResponse) Reset()        { *m = MsgModelProposalResponse{} }
+func (m *MsgModelProposalResponse) ProtoMessage()  {}
+func (m *MsgModelProposalResponse) Reset()         { *m = MsgModelProposalResponse{} }
 func (m *MsgModelProposalResponse) String() string { return "MsgModelProposalResponse" }
 
 type MsgUpdateModelStatsResponse struct{}
 
-func (m *MsgUpdateModelStatsResponse) ProtoMessage() {}
-func (m *MsgUpdateModelStatsResponse) Reset()        { *m = MsgUpdateModelStatsResponse{} }
+func (m *MsgUpdateModelStatsResponse) ProtoMessage()  {}
+func (m *MsgUpdateModelStatsResponse) Reset()         { *m = MsgUpdateModelStatsResponse{} }
 func (m *MsgUpdateModelStatsResponse) String() string { return "MsgUpdateModelStatsResponse" }
 
 type MsgDeclareInstalledResponse struct{}

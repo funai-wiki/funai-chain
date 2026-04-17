@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"cosmossdk.io/math"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 // TaskStatus represents the lifecycle state of a task on-chain.
@@ -13,15 +13,15 @@ import (
 type TaskStatus uint32
 
 const (
-	TaskPending        TaskStatus = 0
-	TaskSettled         TaskStatus = 1
-	TaskFraud           TaskStatus = 2
-	TaskFailSettled     TaskStatus = 3
-	TaskVerified        TaskStatus = 4
-	TaskCleared         TaskStatus = 5
-	TaskPendingAudit    TaskStatus = 6
-	TaskPendingReaudit  TaskStatus = 7
-	TaskFailed          TaskStatus = 8
+	TaskPending                   TaskStatus = 0
+	TaskSettled                   TaskStatus = 1
+	TaskFraud                     TaskStatus = 2
+	TaskFailSettled               TaskStatus = 3
+	TaskVerified                  TaskStatus = 4
+	TaskCleared                   TaskStatus = 5
+	TaskPendingSecondVerification TaskStatus = 6
+	TaskPendingThirdVerification  TaskStatus = 7
+	TaskFailed                    TaskStatus = 8
 )
 
 func (s TaskStatus) String() string {
@@ -38,9 +38,9 @@ func (s TaskStatus) String() string {
 		return "TASK_VERIFIED"
 	case TaskCleared:
 		return "TASK_CLEARED"
-	case TaskPendingAudit:
+	case TaskPendingSecondVerification:
 		return "TASK_PENDING_AUDIT"
-	case TaskPendingReaudit:
+	case TaskPendingThirdVerification:
 		return "TASK_PENDING_REAUDIT"
 	case TaskFailed:
 		return "TASK_FAILED"
@@ -119,8 +119,8 @@ type SettlementEntry struct {
 	ResultCount     uint32           `protobuf:"varint,13,opt,name=result_count,proto3" json:"result_count,omitempty"`
 
 	// S9: per-token billing fields
-	FeePerInputToken  uint64 `protobuf:"varint,14,opt,name=fee_per_input_token,proto3" json:"fee_per_input_token,omitempty"`
-	FeePerOutputToken uint64 `protobuf:"varint,15,opt,name=fee_per_output_token,proto3" json:"fee_per_output_token,omitempty"`
+	FeePerInputToken  uint64   `protobuf:"varint,14,opt,name=fee_per_input_token,proto3" json:"fee_per_input_token,omitempty"`
+	FeePerOutputToken uint64   `protobuf:"varint,15,opt,name=fee_per_output_token,proto3" json:"fee_per_output_token,omitempty"`
 	MaxFee            sdk.Coin `protobuf:"bytes,16,opt,name=max_fee,proto3" json:"max_fee,omitempty"`
 	// S9: Worker's self-reported token counts
 	WorkerInputTokens  uint32 `protobuf:"varint,17,opt,name=worker_input_tokens,proto3" json:"worker_input_tokens,omitempty"`
@@ -153,9 +153,11 @@ type TokenMismatchRecord struct {
 	MismatchCount   uint32 `json:"mismatch_count"`
 }
 
-func (m *SettlementEntry) ProtoMessage()  {}
-func (m *SettlementEntry) Reset()         { *m = SettlementEntry{} }
-func (m *SettlementEntry) String() string { return fmt.Sprintf("SettlementEntry{%s}", hex.EncodeToString(m.TaskId)) }
+func (m *SettlementEntry) ProtoMessage() {}
+func (m *SettlementEntry) Reset()        { *m = SettlementEntry{} }
+func (m *SettlementEntry) String() string {
+	return fmt.Sprintf("SettlementEntry{%s}", hex.EncodeToString(m.TaskId))
+}
 
 // SettledTaskID tracks which task_ids have been settled (dedup).
 // Chain stores task_id -> settled status. Cleaned up after expire_block + 1000.
@@ -170,9 +172,11 @@ type SettledTaskID struct {
 	UserAddress       string     `protobuf:"bytes,8,opt,name=user_address,proto3" json:"user_address,omitempty"`
 }
 
-func (m *SettledTaskID) ProtoMessage()  {}
-func (m *SettledTaskID) Reset()         { *m = SettledTaskID{} }
-func (m *SettledTaskID) String() string { return fmt.Sprintf("SettledTaskID{%s}", hex.EncodeToString(m.TaskId)) }
+func (m *SettledTaskID) ProtoMessage() {}
+func (m *SettledTaskID) Reset()        { *m = SettledTaskID{} }
+func (m *SettledTaskID) String() string {
+	return fmt.Sprintf("SettledTaskID{%s}", hex.EncodeToString(m.TaskId))
+}
 
 func (st SettledTaskID) TaskIdHex() string {
 	return hex.EncodeToString(st.TaskId)
@@ -222,80 +226,84 @@ func (m *VerifierResult) ProtoMessage()  {}
 func (m *VerifierResult) Reset()         { *m = VerifierResult{} }
 func (m *VerifierResult) String() string { return fmt.Sprintf("VerifierResult{%s}", m.Address) }
 
-// AuditRecord stores the result of a random audit for a task.
-type AuditRecord struct {
-	TaskId           []byte   `protobuf:"bytes,1,opt,name=task_id,proto3" json:"task_id"`
-	Epoch            int64    `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch"`
-	AuditorAddresses []string `protobuf:"bytes,3,rep,name=auditor_addresses,proto3" json:"auditor_addresses"`
-	Results          []bool   `protobuf:"varint,4,rep,packed,name=results,proto3" json:"results"`
-	ProcessedAt      int64    `protobuf:"varint,5,opt,name=processed_at,proto3" json:"processed_at"`
-	// S9: auditor token counts for per-token verification
-	AuditorInputTokens  []uint32 `protobuf:"varint,6,rep,packed,name=auditor_input_tokens,proto3" json:"auditor_input_tokens,omitempty"`
-	AuditorOutputTokens []uint32 `protobuf:"varint,7,rep,packed,name=auditor_output_tokens,proto3" json:"auditor_output_tokens,omitempty"`
+// SecondVerificationRecord stores the result of a random audit for a task.
+type SecondVerificationRecord struct {
+	TaskId                  []byte   `protobuf:"bytes,1,opt,name=task_id,proto3" json:"task_id"`
+	Epoch                   int64    `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch"`
+	SecondVerifierAddresses []string `protobuf:"bytes,3,rep,name=second_verifier_addresses,proto3" json:"second_verifier_addresses"`
+	Results                 []bool   `protobuf:"varint,4,rep,packed,name=results,proto3" json:"results"`
+	ProcessedAt             int64    `protobuf:"varint,5,opt,name=processed_at,proto3" json:"processed_at"`
+	// S9: second_verifier token counts for per-token verification
+	SecondVerifierInputTokens  []uint32 `protobuf:"varint,6,rep,packed,name=second_verifier_input_tokens,proto3" json:"second_verifier_input_tokens,omitempty"`
+	SecondVerifierOutputTokens []uint32 `protobuf:"varint,7,rep,packed,name=second_verifier_output_tokens,proto3" json:"second_verifier_output_tokens,omitempty"`
 }
 
-func (m *AuditRecord) ProtoMessage()  {}
-func (m *AuditRecord) Reset()         { *m = AuditRecord{} }
-func (m *AuditRecord) String() string { return fmt.Sprintf("AuditRecord{%s}", hex.EncodeToString(m.TaskId)) }
+func (m *SecondVerificationRecord) ProtoMessage() {}
+func (m *SecondVerificationRecord) Reset()        { *m = SecondVerificationRecord{} }
+func (m *SecondVerificationRecord) String() string {
+	return fmt.Sprintf("SecondVerificationRecord{%s}", hex.EncodeToString(m.TaskId))
+}
 
-func (ar AuditRecord) Validate() error {
+func (ar SecondVerificationRecord) Validate() error {
 	if len(ar.TaskId) == 0 {
 		return fmt.Errorf("task_id cannot be empty")
 	}
 	if ar.Epoch < 0 {
 		return fmt.Errorf("epoch cannot be negative")
 	}
-	if len(ar.AuditorAddresses) == 0 {
-		return fmt.Errorf("at least one auditor address required")
+	if len(ar.SecondVerifierAddresses) == 0 {
+		return fmt.Errorf("at least one second_verifier address required")
 	}
-	if len(ar.AuditorAddresses) != len(ar.Results) {
-		return fmt.Errorf("auditor addresses count (%d) must match results count (%d)", len(ar.AuditorAddresses), len(ar.Results))
+	if len(ar.SecondVerifierAddresses) != len(ar.Results) {
+		return fmt.Errorf("second_verifier addresses count (%d) must match results count (%d)", len(ar.SecondVerifierAddresses), len(ar.Results))
 	}
-	for _, addr := range ar.AuditorAddresses {
+	for _, addr := range ar.SecondVerifierAddresses {
 		if _, err := sdk.AccAddressFromBech32(addr); err != nil {
-			return fmt.Errorf("invalid auditor address %s: %w", addr, err)
+			return fmt.Errorf("invalid second_verifier address %s: %w", addr, err)
 		}
 	}
 	return nil
 }
 
-// AuditPendingTask tracks a task awaiting audit or reaudit completion.
-type AuditPendingTask struct {
-	TaskId            []byte           `protobuf:"bytes,1,opt,name=task_id,proto3" json:"task_id"`
-	OriginalStatus    SettlementStatus `protobuf:"varint,2,opt,name=original_status,proto3" json:"original_status"`
-	SubmittedAt       int64            `protobuf:"varint,3,opt,name=submitted_at,proto3" json:"submitted_at"`
-	UserAddress       string           `protobuf:"bytes,4,opt,name=user_address,proto3" json:"user_address"`
-	WorkerAddress     string           `protobuf:"bytes,5,opt,name=worker_address,proto3" json:"worker_address"`
-	VerifierAddresses []string         `protobuf:"bytes,6,rep,name=verifier_addresses,proto3" json:"verifier_addresses"`
-	VerifierVotes     []bool           `protobuf:"varint,7,rep,packed,name=verifier_votes,proto3" json:"verifier_votes,omitempty"`
-	Fee               sdk.Coin         `protobuf:"bytes,8,opt,name=fee,proto3" json:"fee"`
-	ExpireBlock       int64            `protobuf:"varint,9,opt,name=expire_block,proto3" json:"expire_block"`
-	IsReaudit         bool             `protobuf:"varint,10,opt,name=is_reaudit,proto3" json:"is_reaudit"`
+// SecondVerificationPendingTask tracks a task awaiting audit or third_verification completion.
+type SecondVerificationPendingTask struct {
+	TaskId              []byte           `protobuf:"bytes,1,opt,name=task_id,proto3" json:"task_id"`
+	OriginalStatus      SettlementStatus `protobuf:"varint,2,opt,name=original_status,proto3" json:"original_status"`
+	SubmittedAt         int64            `protobuf:"varint,3,opt,name=submitted_at,proto3" json:"submitted_at"`
+	UserAddress         string           `protobuf:"bytes,4,opt,name=user_address,proto3" json:"user_address"`
+	WorkerAddress       string           `protobuf:"bytes,5,opt,name=worker_address,proto3" json:"worker_address"`
+	VerifierAddresses   []string         `protobuf:"bytes,6,rep,name=verifier_addresses,proto3" json:"verifier_addresses"`
+	VerifierVotes       []bool           `protobuf:"varint,7,rep,packed,name=verifier_votes,proto3" json:"verifier_votes,omitempty"`
+	Fee                 sdk.Coin         `protobuf:"bytes,8,opt,name=fee,proto3" json:"fee"`
+	ExpireBlock         int64            `protobuf:"varint,9,opt,name=expire_block,proto3" json:"expire_block"`
+	IsThirdVerification bool             `protobuf:"varint,10,opt,name=is_third_verification,proto3" json:"is_third_verification"`
 	// S9: per-token fields preserved for audit re-settlement
-	FeePerInputToken   uint64 `protobuf:"varint,11,opt,name=fee_per_input_token,proto3" json:"fee_per_input_token,omitempty"`
-	FeePerOutputToken  uint64 `protobuf:"varint,12,opt,name=fee_per_output_token,proto3" json:"fee_per_output_token,omitempty"`
-	MaxFee             sdk.Coin `protobuf:"bytes,13,opt,name=max_fee,proto3" json:"max_fee,omitempty"`
-	SettledOutputTokens uint32 `protobuf:"varint,14,opt,name=settled_output_tokens,proto3" json:"settled_output_tokens,omitempty"`
-	SettledInputTokens  uint32 `protobuf:"varint,15,opt,name=settled_input_tokens,proto3" json:"settled_input_tokens,omitempty"`
+	FeePerInputToken    uint64   `protobuf:"varint,11,opt,name=fee_per_input_token,proto3" json:"fee_per_input_token,omitempty"`
+	FeePerOutputToken   uint64   `protobuf:"varint,12,opt,name=fee_per_output_token,proto3" json:"fee_per_output_token,omitempty"`
+	MaxFee              sdk.Coin `protobuf:"bytes,13,opt,name=max_fee,proto3" json:"max_fee,omitempty"`
+	SettledOutputTokens uint32   `protobuf:"varint,14,opt,name=settled_output_tokens,proto3" json:"settled_output_tokens,omitempty"`
+	SettledInputTokens  uint32   `protobuf:"varint,15,opt,name=settled_input_tokens,proto3" json:"settled_input_tokens,omitempty"`
 }
 
-func (m *AuditPendingTask) ProtoMessage()  {}
-func (m *AuditPendingTask) Reset()         { *m = AuditPendingTask{} }
-func (m *AuditPendingTask) String() string { return fmt.Sprintf("AuditPendingTask{%s}", hex.EncodeToString(m.TaskId)) }
+func (m *SecondVerificationPendingTask) ProtoMessage() {}
+func (m *SecondVerificationPendingTask) Reset()        { *m = SecondVerificationPendingTask{} }
+func (m *SecondVerificationPendingTask) String() string {
+	return fmt.Sprintf("SecondVerificationPendingTask{%s}", hex.EncodeToString(m.TaskId))
+}
 
 // EpochStats tracks per-epoch statistics for dynamic audit rate calculation.
 type EpochStats struct {
-	Epoch              int64    `protobuf:"varint,1,opt,name=epoch,proto3" json:"epoch"`
-	TotalSettled       uint64   `protobuf:"varint,2,opt,name=total_settled,proto3" json:"total_settled"`
-	FailSettled        uint64   `protobuf:"varint,3,opt,name=fail_settled,proto3" json:"fail_settled"`
-	AuditTotal         uint64   `protobuf:"varint,4,opt,name=audit_total,proto3" json:"audit_total"`
-	AuditFail          uint64   `protobuf:"varint,5,opt,name=audit_fail,proto3" json:"audit_fail"`
-	AuditOverturn      uint64   `protobuf:"varint,6,opt,name=audit_overturn,proto3" json:"audit_overturn"`
-	ReauditTotal       uint64   `protobuf:"varint,7,opt,name=reaudit_total,proto3" json:"reaudit_total"`
-	ReauditOverturn    uint64   `protobuf:"varint,8,opt,name=reaudit_overturn,proto3" json:"reaudit_overturn"`
-	TotalFees          math.Int `protobuf:"bytes,9,opt,name=total_fees,proto3" json:"total_fees"`
-	AuditPersonCount   uint64   `protobuf:"varint,10,opt,name=audit_person_count,proto3" json:"audit_person_count"`
-	VerificationCount  uint64   `protobuf:"varint,11,opt,name=verification_count,proto3" json:"verification_count"`
+	Epoch                         int64    `protobuf:"varint,1,opt,name=epoch,proto3" json:"epoch"`
+	TotalSettled                  uint64   `protobuf:"varint,2,opt,name=total_settled,proto3" json:"total_settled"`
+	FailSettled                   uint64   `protobuf:"varint,3,opt,name=fail_settled,proto3" json:"fail_settled"`
+	SecondVerificationTotal       uint64   `protobuf:"varint,4,opt,name=audit_total,proto3" json:"audit_total"`
+	AuditFail                     uint64   `protobuf:"varint,5,opt,name=audit_fail,proto3" json:"audit_fail"`
+	AuditOverturn                 uint64   `protobuf:"varint,6,opt,name=audit_overturn,proto3" json:"audit_overturn"`
+	ThirdVerificationTotal        uint64   `protobuf:"varint,7,opt,name=third_verification_total,proto3" json:"third_verification_total"`
+	ThirdVerificationOverturn     uint64   `protobuf:"varint,8,opt,name=third_verification_overturn,proto3" json:"third_verification_overturn"`
+	TotalFees                     math.Int `protobuf:"bytes,9,opt,name=total_fees,proto3" json:"total_fees"`
+	SecondVerificationPersonCount uint64   `protobuf:"varint,10,opt,name=second_verification_person_count,proto3" json:"second_verification_person_count"`
+	VerificationCount             uint64   `protobuf:"varint,11,opt,name=verification_count,proto3" json:"verification_count"`
 }
 
 func (m *EpochStats) ProtoMessage()  {}
@@ -329,6 +337,8 @@ type WorkerEpochContribution struct {
 	TaskCount     uint64   `protobuf:"varint,3,opt,name=task_count,proto3" json:"task_count"`
 }
 
-func (m *WorkerEpochContribution) ProtoMessage()  {}
-func (m *WorkerEpochContribution) Reset()         { *m = WorkerEpochContribution{} }
-func (m *WorkerEpochContribution) String() string { return fmt.Sprintf("WorkerEpochContribution{%s}", m.WorkerAddress) }
+func (m *WorkerEpochContribution) ProtoMessage() {}
+func (m *WorkerEpochContribution) Reset()        { *m = WorkerEpochContribution{} }
+func (m *WorkerEpochContribution) String() string {
+	return fmt.Sprintf("WorkerEpochContribution{%s}", m.WorkerAddress)
+}

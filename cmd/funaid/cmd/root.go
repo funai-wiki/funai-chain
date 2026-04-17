@@ -15,13 +15,13 @@ import (
 	serverconfig "github.com/cosmos/cosmos-sdk/server/config"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 
-	evmserver "github.com/cosmos/evm/server"
-	evmserverconfig "github.com/cosmos/evm/server/config"
-	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	authcli "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
 	"github.com/cosmos/cosmos-sdk/codec/address"
+	authcli "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	bankcli "github.com/cosmos/cosmos-sdk/x/bank/client/cli"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
+	evmserver "github.com/cosmos/evm/server"
+	evmserverconfig "github.com/cosmos/evm/server/config"
 	"github.com/spf13/cobra"
 
 	funaiapp "github.com/funai-wiki/funai-chain/app"

@@ -12,31 +12,31 @@ const (
 )
 
 var (
-	InferenceAccountKeyPrefix       = []byte{0x01}
-	SettledTaskKeyPrefix            = []byte{0x02}
-	FraudMarkKeyPrefix              = []byte{0x03}
-	AuditRecordKeyPrefix            = []byte{0x04}
-	ParamsKey                       = []byte{0x05}
-	BatchRecordKeyPrefix            = []byte{0x06}
-	BatchCounterKey                 = []byte{0x07}
-	AuditPendingKeyPrefix           = []byte{0x08}
-	ReauditPendingKeyPrefix         = []byte{0x09}
-	EpochStatsKeyPrefix             = []byte{0x0A}
-	AuditRateKey                    = []byte{0x0B}
-	ReauditRateKey                  = []byte{0x0C}
-	AuditPendingTimeoutKeyPrefix    = []byte{0x0D} // height-indexed for efficient timeout lookup
-	ReauditPendingTimeoutKeyPrefix  = []byte{0x0E}
-	WorkerSnapshotKeyPrefix         = []byte{0x0F} // P1-8: per-worker epoch snapshot
-	WorkerEpochContribKeyPrefix     = []byte{0x10} // P1-8: per-worker epoch contribution
-	VerifierEpochCountKeyPrefix     = []byte{0x11} // P1-9: per-worker verification count in epoch
-	AuditorEpochCountKeyPrefix      = []byte{0x12} // P1-9: per-worker audit count in epoch
-	BlockSignerCountKeyPrefix       = []byte{0x13} // P1-10: per-validator block signing count in epoch
-	DishonestCountKeyPrefix         = []byte{0x14} // S9: per-worker dishonest token count
-	FrozenBalanceKeyPrefix          = []byte{0x15} // S9: per-task frozen max_fee
-	FrozenTaskIndexKeyPrefix        = []byte{0x16} // S9: expireBlock→taskId index for timeout scan
-	TokenMismatchKeyPrefix          = []byte{0x17} // S9: Worker-Verifier pair mismatch tracking
-	VerifierEpochFeeKeyPrefix       = []byte{0x18} // per-worker verification-fee earned in epoch (for 85/15 reward weighting)
-	AuditorEpochFeeKeyPrefix        = []byte{0x19} // per-worker 2nd/3rd-verification-fee earned in epoch
+	InferenceAccountKeyPrefix                 = []byte{0x01}
+	SettledTaskKeyPrefix                      = []byte{0x02}
+	FraudMarkKeyPrefix                        = []byte{0x03}
+	SecondVerificationRecordKeyPrefix         = []byte{0x04}
+	ParamsKey                                 = []byte{0x05}
+	BatchRecordKeyPrefix                      = []byte{0x06}
+	BatchCounterKey                           = []byte{0x07}
+	SecondVerificationPendingKeyPrefix        = []byte{0x08}
+	ThirdVerificationPendingKeyPrefix         = []byte{0x09}
+	EpochStatsKeyPrefix                       = []byte{0x0A}
+	SecondVerificationRateKey                 = []byte{0x0B}
+	ThirdVerificationRateKey                  = []byte{0x0C}
+	SecondVerificationPendingTimeoutKeyPrefix = []byte{0x0D} // height-indexed for efficient timeout lookup
+	ThirdVerificationPendingTimeoutKeyPrefix  = []byte{0x0E}
+	WorkerSnapshotKeyPrefix                   = []byte{0x0F} // P1-8: per-worker epoch snapshot
+	WorkerEpochContribKeyPrefix               = []byte{0x10} // P1-8: per-worker epoch contribution
+	VerifierEpochCountKeyPrefix               = []byte{0x11} // P1-9: per-worker verification count in epoch
+	SecondVerifierEpochCountKeyPrefix         = []byte{0x12} // P1-9: per-worker audit count in epoch
+	BlockSignerCountKeyPrefix                 = []byte{0x13} // P1-10: per-validator block signing count in epoch
+	DishonestCountKeyPrefix                   = []byte{0x14} // S9: per-worker dishonest token count
+	FrozenBalanceKeyPrefix                    = []byte{0x15} // S9: per-task frozen max_fee
+	FrozenTaskIndexKeyPrefix                  = []byte{0x16} // S9: expireBlock→taskId index for timeout scan
+	TokenMismatchKeyPrefix                    = []byte{0x17} // S9: Worker-Verifier pair mismatch tracking
+	VerifierEpochFeeKeyPrefix                 = []byte{0x18} // per-worker verification-fee earned in epoch (for 85/15 reward weighting)
+	SecondVerifierEpochFeeKeyPrefix           = []byte{0x19} // per-worker 2nd/3rd-verification-fee earned in epoch
 )
 
 func InferenceAccountKey(userAddr []byte) []byte {
@@ -51,8 +51,8 @@ func FraudMarkKey(taskID []byte) []byte {
 	return append(FraudMarkKeyPrefix, taskID...)
 }
 
-func AuditRecordKey(taskID []byte) []byte {
-	return append(AuditRecordKeyPrefix, taskID...)
+func SecondVerificationRecordKey(taskID []byte) []byte {
+	return append(SecondVerificationRecordKeyPrefix, taskID...)
 }
 
 func BatchRecordKey(batchId uint64) []byte {
@@ -61,12 +61,12 @@ func BatchRecordKey(batchId uint64) []byte {
 	return append(BatchRecordKeyPrefix, bz...)
 }
 
-func AuditPendingKey(taskID []byte) []byte {
-	return append(AuditPendingKeyPrefix, taskID...)
+func SecondVerificationPendingKey(taskID []byte) []byte {
+	return append(SecondVerificationPendingKeyPrefix, taskID...)
 }
 
-func ReauditPendingKey(taskID []byte) []byte {
-	return append(ReauditPendingKeyPrefix, taskID...)
+func ThirdVerificationPendingKey(taskID []byte) []byte {
+	return append(ThirdVerificationPendingKeyPrefix, taskID...)
 }
 
 func EpochStatsKey(epoch int64) []byte {
@@ -90,9 +90,9 @@ func VerifierEpochCountKey(workerAddr []byte) []byte {
 	return append(VerifierEpochCountKeyPrefix, workerAddr...)
 }
 
-// AuditorEpochCountKey returns the key for an auditor's epoch audit count.
-func AuditorEpochCountKey(workerAddr []byte) []byte {
-	return append(AuditorEpochCountKeyPrefix, workerAddr...)
+// SecondVerifierEpochCountKey returns the key for an second_verifier's epoch audit count.
+func SecondVerifierEpochCountKey(workerAddr []byte) []byte {
+	return append(SecondVerifierEpochCountKeyPrefix, workerAddr...)
 }
 
 // VerifierEpochFeeKey returns the key for a verifier's epoch fee-earned total.
@@ -100,9 +100,9 @@ func VerifierEpochFeeKey(workerAddr []byte) []byte {
 	return append(VerifierEpochFeeKeyPrefix, workerAddr...)
 }
 
-// AuditorEpochFeeKey returns the key for an auditor's (2nd/3rd verifier) epoch fee-earned total.
-func AuditorEpochFeeKey(workerAddr []byte) []byte {
-	return append(AuditorEpochFeeKeyPrefix, workerAddr...)
+// SecondVerifierEpochFeeKey returns the key for an second_verifier's (2nd/3rd verifier) epoch fee-earned total.
+func SecondVerifierEpochFeeKey(workerAddr []byte) []byte {
+	return append(SecondVerifierEpochFeeKeyPrefix, workerAddr...)
 }
 
 // BlockSignerCountKey returns key for a validator's block signing count.
@@ -142,31 +142,31 @@ func TokenMismatchPrefixForWorker(workerAddr string) []byte {
 	return append(key, byte('|'))
 }
 
-// AuditPendingTimeoutKey returns key: prefix + height(8 bytes) + taskID.
+// SecondVerificationPendingTimeoutKey returns key: prefix + height(8 bytes) + taskID.
 // Enables efficient range scan for timed-out tasks by height.
-func AuditPendingTimeoutKey(height int64, taskID []byte) []byte {
+func SecondVerificationPendingTimeoutKey(height int64, taskID []byte) []byte {
 	bz := make([]byte, 8)
 	binary.BigEndian.PutUint64(bz, uint64(height))
-	key := append(AuditPendingTimeoutKeyPrefix, bz...)
+	key := append(SecondVerificationPendingTimeoutKeyPrefix, bz...)
 	return append(key, taskID...)
 }
 
-func ReauditPendingTimeoutKey(height int64, taskID []byte) []byte {
+func ThirdVerificationPendingTimeoutKey(height int64, taskID []byte) []byte {
 	bz := make([]byte, 8)
 	binary.BigEndian.PutUint64(bz, uint64(height))
-	key := append(ReauditPendingTimeoutKeyPrefix, bz...)
+	key := append(ThirdVerificationPendingTimeoutKeyPrefix, bz...)
 	return append(key, taskID...)
 }
 
-// AuditPendingTimeoutPrefixUpTo returns prefix for scanning all timeout keys up to a given height (inclusive).
-func AuditPendingTimeoutPrefixUpTo(maxHeight int64) []byte {
+// SecondVerificationPendingTimeoutPrefixUpTo returns prefix for scanning all timeout keys up to a given height (inclusive).
+func SecondVerificationPendingTimeoutPrefixUpTo(maxHeight int64) []byte {
 	bz := make([]byte, 8)
 	binary.BigEndian.PutUint64(bz, uint64(maxHeight+1))
-	return append(AuditPendingTimeoutKeyPrefix, bz...)
+	return append(SecondVerificationPendingTimeoutKeyPrefix, bz...)
 }
 
-func ReauditPendingTimeoutPrefixUpTo(maxHeight int64) []byte {
+func ThirdVerificationPendingTimeoutPrefixUpTo(maxHeight int64) []byte {
 	bz := make([]byte, 8)
 	binary.BigEndian.PutUint64(bz, uint64(maxHeight+1))
-	return append(ReauditPendingTimeoutKeyPrefix, bz...)
+	return append(ThirdVerificationPendingTimeoutKeyPrefix, bz...)
 }

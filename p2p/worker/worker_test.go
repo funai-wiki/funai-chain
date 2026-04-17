@@ -23,11 +23,11 @@ func TestShouldStopGeneration_PerRequest(t *testing.T) {
 // TR1: running_cost reaches budgetLimit → stop.
 func TestShouldStopGeneration_NormalBudget(t *testing.T) {
 	task := &p2ptypes.AssignTask{
-		FeePerInputToken:  100,  // 100 ufai/token
-		FeePerOutputToken: 200,  // 200 ufai/token
+		FeePerInputToken:  100,   // 100 ufai/token
+		FeePerOutputToken: 200,   // 200 ufai/token
 		MaxFee:            50000, // 50000 ufai
 	}
-	inputTokens := uint32(100)  // input cost = 100 * 100 = 10000
+	inputTokens := uint32(100) // input cost = 100 * 100 = 10000
 	// budget = 50000 * 95/100 = 47500
 	// remaining for output = 47500 - 10000 = 37500
 	// max output tokens = 37500 / 200 = 187.5

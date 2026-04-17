@@ -478,7 +478,7 @@ func (v *Verifier) makeResult(taskId []byte, pass bool, logitsMatch, samplingMat
 		VerifiedOutputTokens: verifiedOutputTokens,
 	}
 
-	// P1-2: hash actual verifier logits (not placeholders) so auditors can verify teacher forcing
+	// P1-2: hash actual verifier logits (not placeholders) so second_verifiers can verify teacher forcing
 	logitsData := make([]byte, 0, 5*4+len(taskId)+len(v.Pubkey))
 	for i := 0; i < 5; i++ {
 		buf := make([]byte, 4)

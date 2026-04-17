@@ -188,9 +188,11 @@ type TaskDispatchBroadcast struct {
 	BroadcastAt int64  `protobuf:"varint,4,opt,name=broadcast_at,proto3" json:"broadcast_at"`
 }
 
-func (m *TaskDispatchBroadcast) ProtoMessage()  {}
-func (m *TaskDispatchBroadcast) Reset()         { *m = TaskDispatchBroadcast{} }
-func (m *TaskDispatchBroadcast) String() string { return fmt.Sprintf("TaskDispatchBroadcast{%s}", m.TaskId) }
+func (m *TaskDispatchBroadcast) ProtoMessage() {}
+func (m *TaskDispatchBroadcast) Reset()        { *m = TaskDispatchBroadcast{} }
+func (m *TaskDispatchBroadcast) String() string {
+	return fmt.Sprintf("TaskDispatchBroadcast{%s}", m.TaskId)
+}
 
 // WorkerRank represents a worker's VRF-computed rank for a task (V5.1.1).
 type WorkerRank struct {

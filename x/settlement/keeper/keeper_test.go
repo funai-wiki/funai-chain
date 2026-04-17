@@ -11,8 +11,8 @@ import (
 	"cosmossdk.io/store"
 	storemetrics "cosmossdk.io/store/metrics"
 	storetypes "cosmossdk.io/store/types"
-	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cometbft/cometbft/crypto/secp256k1"
+	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -334,7 +334,7 @@ func TestWithdraw_FrozenBalance(t *testing.T) {
 
 func TestProcessBatchSettlement_Success(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("user1")
 	workerAddr := makeAddr("worker1")
@@ -394,7 +394,7 @@ func TestProcessBatchSettlement_Success(t *testing.T) {
 
 func TestProcessBatchSettlement_Fail(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("user1")
 	workerAddr := makeAddr("worker1")
@@ -454,7 +454,7 @@ func TestProcessBatchSettlement_Fail(t *testing.T) {
 
 func TestProcessBatchSettlement_DuplicateTaskId(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("user1")
 	workerAddr := makeAddr("worker1")
@@ -499,7 +499,7 @@ func TestProcessBatchSettlement_DuplicateTaskId(t *testing.T) {
 
 func TestProcessBatchSettlement_FraudMarked(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("user1")
 	workerAddr := makeAddr("worker1")
@@ -540,7 +540,7 @@ func TestProcessBatchSettlement_FraudMarked(t *testing.T) {
 
 func TestProcessBatchSettlement_Expired(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("user1")
 	workerAddr := makeAddr("worker1")
@@ -631,9 +631,9 @@ func TestProcessFraudProof_AlreadyMarked(t *testing.T) {
 	}
 }
 
-// -------- AuditResult Tests --------
+// -------- SecondVerificationResult Tests --------
 
-func TestProcessAuditResult_PassMajority(t *testing.T) {
+func TestProcessSecondVerificationResult_PassMajority(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
 
 	taskId := []byte("audit-pass-task-001")
@@ -648,21 +648,21 @@ func TestProcessAuditResult_PassMajority(t *testing.T) {
 		OriginalVerifiers: []string{verifierAddr.String()},
 	})
 
-	auditors := []sdk.AccAddress{
-		makeAddr("auditor1"),
-		makeAddr("auditor2"),
-		makeAddr("auditor3"),
+	second_verifiers := []sdk.AccAddress{
+		makeAddr("second_verifier1"),
+		makeAddr("second_verifier2"),
+		makeAddr("second_verifier3"),
 	}
 
 	// 2/3 PASS → majority passes (threshold is 2)
 	passFlags := []bool{true, true, false}
-	for i, auditor := range auditors {
-		err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    auditor.String(),
-			TaskId:     taskId,
-			Epoch:      1,
-			Pass:       passFlags[i],
-			LogitsHash: []byte("hash"),
+	for i, second_verifier := range second_verifiers {
+		err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: second_verifier.String(),
+			TaskId:         taskId,
+			Epoch:          1,
+			Pass:           passFlags[i],
+			LogitsHash:     []byte("hash"),
 		})
 		if err != nil {
 			t.Fatalf("audit result %d: unexpected error: %v", i, err)
@@ -674,7 +674,7 @@ func TestProcessAuditResult_PassMajority(t *testing.T) {
 	}
 }
 
-func TestProcessAuditResult_FailMajority(t *testing.T) {
+func TestProcessSecondVerificationResult_FailMajority(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
 
 	taskId := []byte("audit-fail-task-001")
@@ -690,34 +690,34 @@ func TestProcessAuditResult_FailMajority(t *testing.T) {
 		OriginalVerifiers: []string{verifierAddr.String()},
 	})
 
-	// V5.2: processAuditJudgment requires AuditPendingTask to exist
-	k.SetAuditPending(ctx, types.AuditPendingTask{
-		TaskId:            taskId,
-		OriginalStatus:    types.SettlementSuccess,
-		SubmittedAt:       ctx.BlockHeight(),
-		UserAddress:       userAddr.String(),
-		WorkerAddress:     workerAddr.String(),
-		VerifierAddresses: []string{verifierAddr.String()},
-		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
-		ExpireBlock:       200,
-		IsReaudit:         false,
+	// V5.2: processAuditJudgment requires SecondVerificationPendingTask to exist
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
+		TaskId:              taskId,
+		OriginalStatus:      types.SettlementSuccess,
+		SubmittedAt:         ctx.BlockHeight(),
+		UserAddress:         userAddr.String(),
+		WorkerAddress:       workerAddr.String(),
+		VerifierAddresses:   []string{verifierAddr.String()},
+		Fee:                 sdk.NewCoin("ufai", math.NewInt(1_000_000)),
+		ExpireBlock:         200,
+		IsThirdVerification: false,
 	})
 
-	auditors := []sdk.AccAddress{
-		makeAddr("auditor1"),
-		makeAddr("auditor2"),
-		makeAddr("auditor3"),
+	second_verifiers := []sdk.AccAddress{
+		makeAddr("second_verifier1"),
+		makeAddr("second_verifier2"),
+		makeAddr("second_verifier3"),
 	}
 
 	// 1/3 PASS → fail majority (below threshold of 2)
 	passFlags := []bool{true, false, false}
-	for i, auditor := range auditors {
-		err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    auditor.String(),
-			TaskId:     taskId,
-			Epoch:      1,
-			Pass:       passFlags[i],
-			LogitsHash: []byte("hash"),
+	for i, second_verifier := range second_verifiers {
+		err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: second_verifier.String(),
+			TaskId:         taskId,
+			Epoch:          1,
+			Pass:           passFlags[i],
+			LogitsHash:     []byte("hash"),
 		})
 		if err != nil {
 			t.Fatalf("audit result %d: unexpected error: %v", i, err)
@@ -801,10 +801,10 @@ func TestDefaultParams_Valid(t *testing.T) {
 	if params.VerifierFeeRatio != 120 {
 		t.Fatalf("expected verifier ratio 120, got %d", params.VerifierFeeRatio)
 	}
-	if params.AuditFundRatio != 30 {
-		t.Fatalf("expected audit fund ratio 30, got %d", params.AuditFundRatio)
+	if params.MultiVerificationFundRatio != 30 {
+		t.Fatalf("expected audit fund ratio 30, got %d", params.MultiVerificationFundRatio)
 	}
-	if params.ExecutorFeeRatio+params.VerifierFeeRatio+params.AuditFundRatio != 1000 {
+	if params.ExecutorFeeRatio+params.VerifierFeeRatio+params.MultiVerificationFundRatio != 1000 {
 		t.Fatal("fee ratios should sum to 1000")
 	}
 }
@@ -833,17 +833,17 @@ func TestParams_InvalidFailSettlementFeeRatio(t *testing.T) {
 	}
 }
 
-func TestParams_InvalidAuditMatchThreshold(t *testing.T) {
+func TestParams_InvalidSecondVerificationMatchThreshold(t *testing.T) {
 	params := types.DefaultParams()
-	params.AuditMatchThreshold = 0
+	params.SecondVerificationMatchThreshold = 0
 	if err := params.Validate(); err == nil {
-		t.Fatal("params with zero AuditMatchThreshold should fail validation")
+		t.Fatal("params with zero SecondVerificationMatchThreshold should fail validation")
 	}
 
 	params = types.DefaultParams()
-	params.AuditMatchThreshold = params.AuditVerifierCount + 1
+	params.SecondVerificationMatchThreshold = params.SecondVerifierCount + 1
 	if err := params.Validate(); err == nil {
-		t.Fatal("params with AuditMatchThreshold > AuditVerifierCount should fail validation")
+		t.Fatal("params with SecondVerificationMatchThreshold > SecondVerifierCount should fail validation")
 	}
 }
 
@@ -873,7 +873,7 @@ func TestSetAndGetParams(t *testing.T) {
 
 	params.ExecutorFeeRatio = 940
 	params.VerifierFeeRatio = 50
-	params.AuditFundRatio = 10
+	params.MultiVerificationFundRatio = 10
 	k.SetParams(ctx, params)
 
 	got := k.GetParams(ctx)
@@ -916,29 +916,29 @@ func TestFraudMark_SetAndCheck(t *testing.T) {
 	}
 }
 
-func TestAuditRecord_SetAndGet(t *testing.T) {
+func TestSecondVerificationRecord_SetAndGet(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
 
 	taskId := []byte("audit-record-task01")
-	ar := types.AuditRecord{
-		TaskId:           taskId,
-		Epoch:            5,
-		AuditorAddresses: []string{makeAddr("aud1").String()},
-		Results:          []bool{true},
-		ProcessedAt:      100,
+	ar := types.SecondVerificationRecord{
+		TaskId:                  taskId,
+		Epoch:                   5,
+		SecondVerifierAddresses: []string{makeAddr("aud1").String()},
+		Results:                 []bool{true},
+		ProcessedAt:             100,
 	}
 
-	k.SetAuditRecord(ctx, ar)
+	k.SetSecondVerificationRecord(ctx, ar)
 
-	got, found := k.GetAuditRecord(ctx, taskId)
+	got, found := k.GetSecondVerificationRecord(ctx, taskId)
 	if !found {
 		t.Fatal("audit record not found")
 	}
 	if got.Epoch != 5 {
 		t.Fatalf("expected epoch 5, got %d", got.Epoch)
 	}
-	if len(got.AuditorAddresses) != 1 {
-		t.Fatalf("expected 1 auditor, got %d", len(got.AuditorAddresses))
+	if len(got.SecondVerifierAddresses) != 1 {
+		t.Fatalf("expected 1 second_verifier, got %d", len(got.SecondVerifierAddresses))
 	}
 }
 
@@ -1016,7 +1016,7 @@ func TestProcessBatchSettlement_MultipleTasks(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
 
 	// Set audit rate to 0 so no tasks are routed to PENDING_AUDIT
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("user1")
 	workerAddr := makeAddr("worker1")
@@ -1088,7 +1088,7 @@ func TestProcessBatchSettlement_MultipleTasks(t *testing.T) {
 	}
 }
 
-func TestProcessAuditResult_IgnoresExtraAuditors(t *testing.T) {
+func TestProcessSecondVerificationResult_IgnoresExtraSecondVerifiers(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
 
 	taskId := []byte("audit-extra-task001")
@@ -1102,25 +1102,25 @@ func TestProcessAuditResult_IgnoresExtraAuditors(t *testing.T) {
 
 	// Submit 3 PASS audits (threshold met → no jail)
 	for i := 0; i < 3; i++ {
-		_ = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    makeAddr("aud" + string(rune('A'+i))).String(),
-			TaskId:     taskId,
-			Epoch:      1,
-			Pass:       true,
-			LogitsHash: []byte("hash"),
+		_ = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: makeAddr("aud" + string(rune('A'+i))).String(),
+			TaskId:         taskId,
+			Epoch:          1,
+			Pass:           true,
+			LogitsHash:     []byte("hash"),
 		})
 	}
 
-	// 4th auditor should be ignored (audit already has 3 results)
-	_ = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-		Auditor:    makeAddr("aud-extra").String(),
-		TaskId:     taskId,
-		Epoch:      1,
-		Pass:       false,
-		LogitsHash: []byte("hash"),
+	// 4th second_verifier should be ignored (audit already has 3 results)
+	_ = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+		SecondVerifier: makeAddr("aud-extra").String(),
+		TaskId:         taskId,
+		Epoch:          1,
+		Pass:           false,
+		LogitsHash:     []byte("hash"),
 	})
 
-	ar, found := k.GetAuditRecord(ctx, taskId)
+	ar, found := k.GetSecondVerificationRecord(ctx, taskId)
 	if !found {
 		t.Fatal("audit record not found")
 	}
@@ -1406,21 +1406,21 @@ func TestMsgServer_SubmitFraudProof(t *testing.T) {
 	}
 }
 
-func TestMsgServer_SubmitAuditResult(t *testing.T) {
+func TestMsgServer_SubmitSecondVerificationResult(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
 	ms := keeper.NewMsgServerImpl(k)
 
-	msg := &types.MsgAuditResult{
-		Auditor:    makeAddr("auditor1").String(),
-		TaskId:     []byte("audit-msg-task-0001"),
-		Epoch:      1,
-		Pass:       true,
-		LogitsHash: []byte("hash"),
+	msg := &types.MsgSecondVerificationResult{
+		SecondVerifier: makeAddr("second_verifier1").String(),
+		TaskId:         []byte("audit-msg-task-0001"),
+		Epoch:          1,
+		Pass:           true,
+		LogitsHash:     []byte("hash"),
 	}
 
-	_, err := ms.SubmitAuditResult(ctx, msg)
+	_, err := ms.SubmitSecondVerificationResult(ctx, msg)
 	if err != nil {
-		t.Fatalf("SubmitAuditResult failed: %v", err)
+		t.Fatalf("SubmitSecondVerificationResult failed: %v", err)
 	}
 }
 
@@ -1466,7 +1466,7 @@ func TestProcessFraudProof_WithSettledTask(t *testing.T) {
 
 func TestProcessBatchSettlement_InsufficientBalance(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	userAddr := makeAddr("user1")
 	workerAddr := makeAddr("worker1")

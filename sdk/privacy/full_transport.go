@@ -8,8 +8,9 @@ import (
 // (message confidentiality). This is the maximum privacy mode.
 //
 // Data flow:
-//   Send: plaintext → TLS encrypt → (send via Tor proxy)
-//   Recv: (received via Tor proxy) → TLS decrypt → plaintext
+//
+//	Send: plaintext → TLS encrypt → (send via Tor proxy)
+//	Recv: (received via Tor proxy) → TLS decrypt → plaintext
 type fullTransport struct {
 	tls *tlsTransport
 	tor *torTransport

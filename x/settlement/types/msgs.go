@@ -14,7 +14,7 @@ func init() {
 	proto.RegisterType((*MsgWithdraw)(nil), "funai.settlement.MsgWithdraw")
 	proto.RegisterType((*MsgBatchSettlement)(nil), "funai.settlement.MsgBatchSettlement")
 	proto.RegisterType((*MsgFraudProof)(nil), "funai.settlement.MsgFraudProof")
-	proto.RegisterType((*MsgAuditResult)(nil), "funai.settlement.MsgAuditResult")
+	proto.RegisterType((*MsgSecondVerificationResult)(nil), "funai.settlement.MsgSecondVerificationResult")
 }
 
 var (
@@ -22,7 +22,7 @@ var (
 	_ sdk.Msg = &MsgWithdraw{}
 	_ sdk.Msg = &MsgBatchSettlement{}
 	_ sdk.Msg = &MsgFraudProof{}
-	_ sdk.Msg = &MsgAuditResult{}
+	_ sdk.Msg = &MsgSecondVerificationResult{}
 )
 
 // -------- MsgDeposit --------
@@ -36,9 +36,11 @@ func NewMsgDeposit(creator string, amount sdk.Coin) *MsgDeposit {
 	return &MsgDeposit{Creator: creator, Amount: amount}
 }
 
-func (msg *MsgDeposit) ProtoMessage()  {}
-func (msg *MsgDeposit) Reset()         { *msg = MsgDeposit{} }
-func (msg *MsgDeposit) String() string { return fmt.Sprintf("MsgDeposit{%s,%s}", msg.Creator, msg.Amount) }
+func (msg *MsgDeposit) ProtoMessage() {}
+func (msg *MsgDeposit) Reset()        { *msg = MsgDeposit{} }
+func (msg *MsgDeposit) String() string {
+	return fmt.Sprintf("MsgDeposit{%s,%s}", msg.Creator, msg.Amount)
+}
 
 func (msg *MsgDeposit) ValidateBasic() error {
 	if _, err := sdk.AccAddressFromBech32(msg.Creator); err != nil {
@@ -69,9 +71,11 @@ func NewMsgWithdraw(creator string, amount sdk.Coin) *MsgWithdraw {
 	return &MsgWithdraw{Creator: creator, Amount: amount}
 }
 
-func (msg *MsgWithdraw) ProtoMessage()  {}
-func (msg *MsgWithdraw) Reset()         { *msg = MsgWithdraw{} }
-func (msg *MsgWithdraw) String() string { return fmt.Sprintf("MsgWithdraw{%s,%s}", msg.Creator, msg.Amount) }
+func (msg *MsgWithdraw) ProtoMessage() {}
+func (msg *MsgWithdraw) Reset()        { *msg = MsgWithdraw{} }
+func (msg *MsgWithdraw) String() string {
+	return fmt.Sprintf("MsgWithdraw{%s,%s}", msg.Creator, msg.Amount)
+}
 
 func (msg *MsgWithdraw) ValidateBasic() error {
 	if _, err := sdk.AccAddressFromBech32(msg.Creator); err != nil {
@@ -113,8 +117,8 @@ func NewMsgBatchSettlement(proposer string, merkleRoot []byte, entries []Settlem
 	}
 }
 
-func (msg *MsgBatchSettlement) ProtoMessage()  {}
-func (msg *MsgBatchSettlement) Reset()         { *msg = MsgBatchSettlement{} }
+func (msg *MsgBatchSettlement) ProtoMessage() {}
+func (msg *MsgBatchSettlement) Reset()        { *msg = MsgBatchSettlement{} }
 func (msg *MsgBatchSettlement) String() string {
 	return fmt.Sprintf("MsgBatchSettlement{%s,count=%d}", msg.Proposer, len(msg.Entries))
 }
@@ -165,9 +169,11 @@ func NewMsgFraudProof(reporter string, taskId []byte, workerAddress string, cont
 	}
 }
 
-func (msg *MsgFraudProof) ProtoMessage()  {}
-func (msg *MsgFraudProof) Reset()         { *msg = MsgFraudProof{} }
-func (msg *MsgFraudProof) String() string { return fmt.Sprintf("MsgFraudProof{%s,%s}", msg.Reporter, hex.EncodeToString(msg.TaskId)) }
+func (msg *MsgFraudProof) ProtoMessage() {}
+func (msg *MsgFraudProof) Reset()        { *msg = MsgFraudProof{} }
+func (msg *MsgFraudProof) String() string {
+	return fmt.Sprintf("MsgFraudProof{%s,%s}", msg.Reporter, hex.EncodeToString(msg.TaskId))
+}
 
 func (msg *MsgFraudProof) ValidateBasic() error {
 	if _, err := sdk.AccAddressFromBech32(msg.Reporter); err != nil {
@@ -196,10 +202,10 @@ func (msg *MsgFraudProof) GetSigners() []sdk.AccAddress {
 	return []sdk.AccAddress{reporter}
 }
 
-// -------- MsgAuditResult --------
+// -------- MsgSecondVerificationResult --------
 
-type MsgAuditResult struct {
-	Auditor              string `protobuf:"bytes,1,opt,name=auditor,proto3" json:"auditor"`
+type MsgSecondVerificationResult struct {
+	SecondVerifier       string `protobuf:"bytes,1,opt,name=second_verifier,proto3" json:"second_verifier"`
 	TaskId               []byte `protobuf:"bytes,2,opt,name=task_id,proto3" json:"task_id"`
 	Epoch                int64  `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch"`
 	Pass                 bool   `protobuf:"varint,4,opt,name=pass,proto3" json:"pass"`
@@ -208,23 +214,25 @@ type MsgAuditResult struct {
 	VerifiedOutputTokens uint32 `protobuf:"varint,7,opt,name=verified_output_tokens,proto3" json:"verified_output_tokens,omitempty"`
 }
 
-func NewMsgAuditResult(auditor string, taskId []byte, epoch int64, pass bool, logitsHash []byte) *MsgAuditResult {
-	return &MsgAuditResult{
-		Auditor:    auditor,
-		TaskId:     taskId,
-		Epoch:      epoch,
-		Pass:       pass,
-		LogitsHash: logitsHash,
+func NewMsgSecondVerificationResult(second_verifier string, taskId []byte, epoch int64, pass bool, logitsHash []byte) *MsgSecondVerificationResult {
+	return &MsgSecondVerificationResult{
+		SecondVerifier: second_verifier,
+		TaskId:         taskId,
+		Epoch:          epoch,
+		Pass:           pass,
+		LogitsHash:     logitsHash,
 	}
 }
 
-func (msg *MsgAuditResult) ProtoMessage()  {}
-func (msg *MsgAuditResult) Reset()         { *msg = MsgAuditResult{} }
-func (msg *MsgAuditResult) String() string { return fmt.Sprintf("MsgAuditResult{%s,%s}", msg.Auditor, hex.EncodeToString(msg.TaskId)) }
+func (msg *MsgSecondVerificationResult) ProtoMessage() {}
+func (msg *MsgSecondVerificationResult) Reset()        { *msg = MsgSecondVerificationResult{} }
+func (msg *MsgSecondVerificationResult) String() string {
+	return fmt.Sprintf("MsgSecondVerificationResult{%s,%s}", msg.SecondVerifier, hex.EncodeToString(msg.TaskId))
+}
 
-func (msg *MsgAuditResult) ValidateBasic() error {
-	if _, err := sdk.AccAddressFromBech32(msg.Auditor); err != nil {
-		return sdkerrors.Wrap(err, "invalid auditor address")
+func (msg *MsgSecondVerificationResult) ValidateBasic() error {
+	if _, err := sdk.AccAddressFromBech32(msg.SecondVerifier); err != nil {
+		return sdkerrors.Wrap(err, "invalid second_verifier address")
 	}
 	if len(msg.TaskId) == 0 {
 		return sdkerrors.Wrap(ErrInvalidSettlement, "task_id cannot be empty")
@@ -238,7 +246,7 @@ func (msg *MsgAuditResult) ValidateBasic() error {
 	return nil
 }
 
-func (msg *MsgAuditResult) GetSigners() []sdk.AccAddress {
-	auditor, _ := sdk.AccAddressFromBech32(msg.Auditor)
-	return []sdk.AccAddress{auditor}
+func (msg *MsgSecondVerificationResult) GetSigners() []sdk.AccAddress {
+	second_verifier, _ := sdk.AccAddressFromBech32(msg.SecondVerifier)
+	return []sdk.AccAddress{second_verifier}
 }

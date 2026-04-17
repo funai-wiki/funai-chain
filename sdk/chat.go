@@ -55,8 +55,8 @@ var llama3Template = ChatTemplate{
 // templateRegistry maps model alias prefixes to templates.
 // Models not found here default to ChatML.
 var templateRegistry = map[string]*ChatTemplate{
-	"chatml":  &chatMLTemplate,
-	"llama3":  &llama3Template,
+	"chatml": &chatMLTemplate,
+	"llama3": &llama3Template,
 }
 
 // modelTemplateMap maps model alias patterns to template names.

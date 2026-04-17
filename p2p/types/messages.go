@@ -17,11 +17,11 @@ import (
 type InferRequest struct {
 	ModelId       []byte `json:"model_id"`
 	PromptHash    []byte `json:"prompt_hash"`
-	MaxFee        uint64 `json:"max_fee"`         // S9: renamed from fee (protobuf #3, binary compatible)
+	MaxFee        uint64 `json:"max_fee"` // S9: renamed from fee (protobuf #3, binary compatible)
 	ExpireBlock   uint64 `json:"expire_block"`
 	UserSeed      []byte `json:"user_seed"`
-	Temperature   uint16 `json:"temperature"`     // 0=argmax, 10000=1.0, max 20000
-	TopP          uint16 `json:"top_p"`           // 0 or 10000=disabled, 1-9999=nucleus sampling threshold
+	Temperature   uint16 `json:"temperature"` // 0=argmax, 10000=1.0, max 20000
+	TopP          uint16 `json:"top_p"`       // 0 or 10000=disabled, 1-9999=nucleus sampling threshold
 	Timestamp     uint64 `json:"timestamp"`
 	UserPubkey    []byte `json:"user_pubkey"`
 	UserSignature []byte `json:"user_signature"`
@@ -34,8 +34,8 @@ type InferRequest struct {
 	FeePerOutputToken uint64 `json:"fee_per_output_token,omitempty"`
 
 	// Audit KT §4: latency requirements for time-sensitive scenarios (e.g. companion 2s first token)
-	MaxLatencyMs      uint32 `json:"max_latency_ms,omitempty"`       // max first-token latency in ms (0=no constraint)
-	StreamMode        bool   `json:"stream_mode,omitempty"`          // whether client needs streaming response
+	MaxLatencyMs uint32 `json:"max_latency_ms,omitempty"` // max first-token latency in ms (0=no constraint)
+	StreamMode   bool   `json:"stream_mode,omitempty"`    // whether client needs streaming response
 }
 
 // IsPerToken returns true if this request uses per-token billing (S9).
@@ -126,13 +126,13 @@ func (r *InferRequest) SignBytes() []byte {
 
 // InferReceipt is the Worker's proof of completed inference (V5.2 §7.1).
 type InferReceipt struct {
-	TaskId        []byte    `json:"task_id"`
-	WorkerPubkey  []byte    `json:"worker_pubkey"`
-	WorkerLogits  [5]float32 `json:"worker_logits"`   // 5 VRF-selected positions (V5.2 §9.2)
-	ResultHash    []byte    `json:"result_hash"`     // SHA256(complete output)
-	FinalSeed     []byte    `json:"final_seed"`      // SHA256(user_seed || dispatch_block_hash || task_id)
-	SampledTokens [5]uint32 `json:"sampled_tokens"`  // 5 sampled token IDs at VRF positions
-	WorkerSig     []byte    `json:"worker_sig"`
+	TaskId        []byte     `json:"task_id"`
+	WorkerPubkey  []byte     `json:"worker_pubkey"`
+	WorkerLogits  [5]float32 `json:"worker_logits"`  // 5 VRF-selected positions (V5.2 §9.2)
+	ResultHash    []byte     `json:"result_hash"`    // SHA256(complete output)
+	FinalSeed     []byte     `json:"final_seed"`     // SHA256(user_seed || dispatch_block_hash || task_id)
+	SampledTokens [5]uint32  `json:"sampled_tokens"` // 5 sampled token IDs at VRF positions
+	WorkerSig     []byte     `json:"worker_sig"`
 
 	// S9: Worker's token count (included in worker_sig coverage)
 	InputTokenCount  uint32 `json:"input_token_count,omitempty"`
@@ -185,16 +185,16 @@ type VerifyResult struct {
 
 // AssignTask is Leader's dispatch message to a Worker (V5.2 §6.2).
 type AssignTask struct {
-	TaskId             []byte `json:"task_id"`
-	ModelId            []byte `json:"model_id"`
-	Prompt             string `json:"prompt"`
-	Fee                uint64 `json:"fee"`
-	UserAddr           []byte `json:"user_addr"`
-	Temperature        uint16 `json:"temperature"`
-	TopP               uint16 `json:"top_p"`
-	UserSeed           []byte `json:"user_seed,omitempty"`
-	DispatchBlockHash  []byte `json:"dispatch_block_hash"`
-	LeaderSig          []byte `json:"leader_sig"`
+	TaskId            []byte `json:"task_id"`
+	ModelId           []byte `json:"model_id"`
+	Prompt            string `json:"prompt"`
+	Fee               uint64 `json:"fee"`
+	UserAddr          []byte `json:"user_addr"`
+	Temperature       uint16 `json:"temperature"`
+	TopP              uint16 `json:"top_p"`
+	UserSeed          []byte `json:"user_seed,omitempty"`
+	DispatchBlockHash []byte `json:"dispatch_block_hash"`
+	LeaderSig         []byte `json:"leader_sig"`
 
 	// S9: per-token billing fields (forwarded from InferRequest)
 	FeePerInputToken  uint64 `json:"fee_per_input_token,omitempty"`
@@ -203,8 +203,8 @@ type AssignTask struct {
 	MaxTokens         uint32 `json:"max_tokens,omitempty"` // S9: output token limit derived from budget
 
 	// Audit KT §4: latency requirements (forwarded from InferRequest)
-	MaxLatencyMs      uint32 `json:"max_latency_ms,omitempty"`  // max first-token latency in ms
-	StreamMode        bool   `json:"stream_mode,omitempty"`     // client needs streaming
+	MaxLatencyMs uint32 `json:"max_latency_ms,omitempty"` // max first-token latency in ms
+	StreamMode   bool   `json:"stream_mode,omitempty"`    // client needs streaming
 }
 
 // IsPerToken returns true if this task uses per-token billing (S9).
@@ -238,38 +238,38 @@ type StreamToken struct {
 	ContentSig []byte `json:"content_sig,omitempty"` // P3-7: Worker's signature over SHA256(complete_output), only on final token
 }
 
-// AuditRequest is sent by the Proposer to selected auditors via P2P.
-// Contains all data needed for the auditor to re-execute inference and verify.
+// AuditRequest is sent by the Proposer to selected second_verifiers via P2P.
+// Contains all data needed for the second_verifier to re-execute inference and verify.
 type AuditRequest struct {
-	TaskId            []byte    `json:"task_id"`
-	ModelId           []byte    `json:"model_id"`
-	Prompt            string    `json:"prompt"`
-	Output            string    `json:"output"`
+	TaskId            []byte     `json:"task_id"`
+	ModelId           []byte     `json:"model_id"`
+	Prompt            string     `json:"prompt"`
+	Output            string     `json:"output"`
 	WorkerLogits      [5]float32 `json:"worker_logits"`
-	SampledTokens     [5]uint32 `json:"sampled_tokens"`
-	FinalSeed         []byte    `json:"final_seed"`
-	Temperature       uint16    `json:"temperature"`
-	TopP              uint16    `json:"top_p"`
-	WorkerPubkey      []byte    `json:"worker_pubkey"`
-	InputTokenCount   uint32    `json:"input_token_count,omitempty"`
-	OutputTokenCount  uint32    `json:"output_token_count,omitempty"`
-	VerifierAddresses []string  `json:"verifier_addresses"`
-	ProposerSig       []byte    `json:"proposer_sig"`
+	SampledTokens     [5]uint32  `json:"sampled_tokens"`
+	FinalSeed         []byte     `json:"final_seed"`
+	Temperature       uint16     `json:"temperature"`
+	TopP              uint16     `json:"top_p"`
+	WorkerPubkey      []byte     `json:"worker_pubkey"`
+	InputTokenCount   uint32     `json:"input_token_count,omitempty"`
+	OutputTokenCount  uint32     `json:"output_token_count,omitempty"`
+	VerifierAddresses []string   `json:"verifier_addresses"`
+	ProposerSig       []byte     `json:"proposer_sig"`
 }
 
-// AuditResponse is returned by an auditor after re-executing and verifying.
-type AuditResponse struct {
+// SecondVerificationResponse is returned by an second_verifier after re-executing and verifying.
+type SecondVerificationResponse struct {
 	TaskId               []byte `json:"task_id"`
 	Pass                 bool   `json:"pass"`
-	AuditorAddr          []byte `json:"auditor_addr"`
+	SecondVerifierAddr   []byte `json:"second_verifier_addr"`
 	LogitsHash           []byte `json:"logits_hash"`
 	Signature            []byte `json:"signature"`
 	VerifiedInputTokens  uint32 `json:"verified_input_tokens,omitempty"`
 	VerifiedOutputTokens uint32 `json:"verified_output_tokens,omitempty"`
 }
 
-// SignBytes returns canonical bytes for signing the AuditResponse.
-func (r *AuditResponse) SignBytes() []byte {
+// SignBytes returns canonical bytes for signing the SecondVerificationResponse.
+func (r *SecondVerificationResponse) SignBytes() []byte {
 	h := sha256.New()
 	h.Write(r.TaskId)
 	if r.Pass {
@@ -277,7 +277,7 @@ func (r *AuditResponse) SignBytes() []byte {
 	} else {
 		h.Write([]byte{0})
 	}
-	h.Write(r.AuditorAddr)
+	h.Write(r.SecondVerifierAddr)
 	h.Write(r.LogitsHash)
 	itcBuf := make([]byte, 4)
 	binary.BigEndian.PutUint32(itcBuf, r.VerifiedInputTokens)

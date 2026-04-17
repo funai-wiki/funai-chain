@@ -17,7 +17,7 @@ import (
 // ================================================================
 func TestDustAccumulation_1M(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("e1-user")
 	worker := makeAddr("e1-worker")
@@ -67,16 +67,16 @@ func TestFeeConservation_Randomized_1M(t *testing.T) {
 		// Simulate fee split: executor=850/1000, verifier=120/1000, audit=30/1000
 		executorShare := fee * 850 / 1000
 		verifierShare := fee * 120 / 1000
-		auditShare := fee * 30 / 1000
-		remainder := fee - executorShare - verifierShare - auditShare
+		fundShare := fee * 30 / 1000
+		remainder := fee - executorShare - verifierShare - fundShare
 
 		// Executor gets remainder
 		executorTotal := executorShare + remainder
-		total := executorTotal + verifierShare + auditShare
+		total := executorTotal + verifierShare + fundShare
 
 		if total != fee {
 			t.Fatalf("E2 iteration %d: fee=%d total=%d (executor=%d verifier=%d audit=%d rem=%d)",
-				i, fee, total, executorTotal, verifierShare, auditShare, remainder)
+				i, fee, total, executorTotal, verifierShare, fundShare, remainder)
 		}
 	}
 }
@@ -93,8 +93,8 @@ func TestExtremePrices(t *testing.T) {
 		maxFee  uint64
 	}{
 		{"min_fee_per_token=1", 1, 1, 1, 1, 1000},
-		{"large_fee_per_token", 1, 1, 1<<62, 1<<62, 1<<63},
-		{"max_tokens", 4294967295, 4294967295, 1, 1, 1<<63},
+		{"large_fee_per_token", 1, 1, 1 << 62, 1 << 62, 1 << 63},
+		{"max_tokens", 4294967295, 4294967295, 1, 1, 1 << 63},
 		{"zero_tokens", 0, 0, 100, 200, 1000},
 	}
 
@@ -221,7 +221,7 @@ func TestVerifierInsufficient_0(t *testing.T) {
 // ================================================================
 func TestDoubleSettlement(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("e13-user")
 	worker := makeAddr("e13-worker")
@@ -267,7 +267,7 @@ func TestDoubleSettlement(t *testing.T) {
 // ================================================================
 func TestVerifierAllReturnZero(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 	enablePerToken(k, ctx)
 
 	user := makeAddr("e14-user")
@@ -280,7 +280,7 @@ func TestVerifierAllReturnZero(t *testing.T) {
 	entry := types.SettlementEntry{
 		TaskId:      []byte("e14-all-zero-verify0"),
 		UserAddress: user.String(), WorkerAddress: worker.String(),
-		Fee:               sdk.NewCoin("ufai", cosmosmath.ZeroInt()),
+		Fee:                sdk.NewCoin("ufai", cosmosmath.ZeroInt()),
 		MaxFee:             sdk.NewCoin("ufai", cosmosmath.NewInt(1_000_000)),
 		ExpireBlock:        10000,
 		Status:             types.SettlementSuccess,
@@ -322,7 +322,7 @@ func TestVerifierAllReturnZero(t *testing.T) {
 // ================================================================
 func TestBlockTimeVariance(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("e16-user")
 	worker := makeAddr("e16-worker")
@@ -416,7 +416,7 @@ func TestBatchLoop_GasEstimate(t *testing.T) {
 // ================================================================
 func TestEpochBoundary_Settlement(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("e4-user")
 	worker := makeAddr("e4-worker")
@@ -492,7 +492,7 @@ func TestPairStorageScale(t *testing.T) {
 // ================================================================
 func TestBatchSettlement_Large10K(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("e8-user")
 	worker := makeAddr("e8-worker")
@@ -501,7 +501,7 @@ func TestBatchSettlement_Large10K(t *testing.T) {
 	entries := make([]types.SettlementEntry, 10000)
 	for i := 0; i < 10000; i++ {
 		entries[i] = types.SettlementEntry{
-			TaskId: []byte(fmt.Sprintf("e8-task-%010d", i)),
+			TaskId:      []byte(fmt.Sprintf("e8-task-%010d", i)),
 			UserAddress: user.String(), WorkerAddress: worker.String(),
 			Fee: sdk.NewCoin("ufai", cosmosmath.NewInt(1000)), ExpireBlock: 100000,
 			Status: types.SettlementSuccess,
@@ -622,8 +622,8 @@ func TestChainHaltRecovery(t *testing.T) {
 // ================================================================
 func TestAntiCheat_CollusionAudit(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
-	k.SetCurrentReauditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
+	k.SetCurrentThirdVerificationRate(ctx, 0)
 
 	user := makeAddr("ac4-user")
 	worker := makeAddr("ac4-worker")
@@ -632,7 +632,7 @@ func TestAntiCheat_CollusionAudit(t *testing.T) {
 
 	// Simulate: original settlement was SUCCESS but should have been FAIL
 	// Set up audit pending task
-	k.SetAuditPending(ctx, types.AuditPendingTask{
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 		TaskId:         taskId,
 		OriginalStatus: types.SettlementSuccess,
 		SubmittedAt:    ctx.BlockHeight(),
@@ -648,14 +648,14 @@ func TestAntiCheat_CollusionAudit(t *testing.T) {
 		ExpireBlock:   10000,
 	})
 
-	// 3 auditors all vote FAIL — this overturns the original SUCCESS
+	// 3 second_verifiers all vote FAIL — this overturns the original SUCCESS
 	for i := 0; i < 3; i++ {
-		err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    makeAddr(fmt.Sprintf("ac4-aud%d", i)).String(),
-			TaskId:     taskId,
-			Epoch:      1,
-			Pass:       false, // FAIL — contradicts original SUCCESS
-			LogitsHash: []byte("audit-logits-hash-padding!!!!"),
+		err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: makeAddr(fmt.Sprintf("ac4-aud%d", i)).String(),
+			TaskId:         taskId,
+			Epoch:          1,
+			Pass:           false, // FAIL — contradicts original SUCCESS
+			LogitsHash:     []byte("audit-logits-hash-padding!!!!"),
 		})
 		if err != nil {
 			t.Fatalf("audit %d: %v", i, err)

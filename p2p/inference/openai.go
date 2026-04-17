@@ -62,15 +62,15 @@ type chatRequest struct {
 }
 
 type chatResponse struct {
-	ID      string         `json:"id"`
-	Choices []chatChoice   `json:"choices"`
-	Usage   chatUsage      `json:"usage"`
+	ID      string       `json:"id"`
+	Choices []chatChoice `json:"choices"`
+	Usage   chatUsage    `json:"usage"`
 }
 
 type chatChoice struct {
-	Index        int          `json:"index"`
-	Message      chatMessage  `json:"message"`
-	FinishReason string       `json:"finish_reason"`
+	Index        int           `json:"index"`
+	Message      chatMessage   `json:"message"`
+	FinishReason string        `json:"finish_reason"`
 	Logprobs     *chatLogprobs `json:"logprobs,omitempty"`
 }
 
@@ -79,9 +79,9 @@ type chatLogprobs struct {
 }
 
 type chatLogprobEntry struct {
-	Token       string              `json:"token"`
-	Logprob     float32             `json:"logprob"`
-	TopLogprobs []chatTopLogprob    `json:"top_logprobs,omitempty"`
+	Token       string           `json:"token"`
+	Logprob     float32          `json:"logprob"`
+	TopLogprobs []chatTopLogprob `json:"top_logprobs,omitempty"`
 }
 
 type chatTopLogprob struct {

@@ -43,7 +43,7 @@ type VerificationContribution struct {
 	WorkerAddress     string   `protobuf:"bytes,1,opt,name=worker_address,proto3" json:"worker_address"`
 	VerificationCount uint64   `protobuf:"varint,2,opt,name=verification_count,proto3" json:"verification_count"`
 	AuditCount        uint64   `protobuf:"varint,3,opt,name=audit_count,proto3" json:"audit_count"`
-	FeeAmount         math.Int `protobuf:"bytes,4,opt,name=fee_amount,proto3" json:"fee_amount"` // total fees earned by this verifier+auditor across all roles this epoch
+	FeeAmount         math.Int `protobuf:"bytes,4,opt,name=fee_amount,proto3" json:"fee_amount"` // total fees earned by this verifier+second_verifier across all roles this epoch
 }
 
 func (m *VerificationContribution) ProtoMessage()  {}

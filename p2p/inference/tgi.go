@@ -118,14 +118,14 @@ var _ Engine = (*TGIClient)(nil)
 // TGI request/response types
 
 type GenerateRequest struct {
-	Inputs     string           `json:"inputs"`
-	Parameters GenerateParams   `json:"parameters"`
+	Inputs     string         `json:"inputs"`
+	Parameters GenerateParams `json:"parameters"`
 }
 
 type GenerateParams struct {
 	MaxNewTokens        int     `json:"max_new_tokens,omitempty"`
 	Temperature         float32 `json:"temperature,omitempty"`
-	TopP                float32 `json:"top_p,omitempty"`          // nucleus sampling threshold (0 or 1.0 = disabled)
+	TopP                float32 `json:"top_p,omitempty"` // nucleus sampling threshold (0 or 1.0 = disabled)
 	DoSample            bool    `json:"do_sample,omitempty"`
 	ReturnFullText      bool    `json:"return_full_text,omitempty"`
 	Details             bool    `json:"details"`
@@ -135,23 +135,23 @@ type GenerateParams struct {
 }
 
 type GenerateResponse struct {
-	GeneratedText string          `json:"generated_text"`
+	GeneratedText string           `json:"generated_text"`
 	Details       *GenerateDetails `json:"details,omitempty"`
 }
 
 type GenerateDetails struct {
-	FinishReason string             `json:"finish_reason"`
-	Tokens       []TokenInfo        `json:"tokens"`
-	Prefill      []TokenInfo        `json:"prefill"`
-	TopTokens    [][]TopTokenInfo   `json:"top_tokens,omitempty"` // TGI v3: per-position top-N at details level
+	FinishReason string           `json:"finish_reason"`
+	Tokens       []TokenInfo      `json:"tokens"`
+	Prefill      []TokenInfo      `json:"prefill"`
+	TopTokens    [][]TopTokenInfo `json:"top_tokens,omitempty"` // TGI v3: per-position top-N at details level
 }
 
 type TokenInfo struct {
-	ID         int            `json:"id"`
-	Text       string         `json:"text"`
-	Logprob    float32        `json:"logprob"`
-	Special    bool           `json:"special"`
-	TopTokens  []TopTokenInfo `json:"top_tokens,omitempty"` // S1: top-N alternatives at this position
+	ID        int            `json:"id"`
+	Text      string         `json:"text"`
+	Logprob   float32        `json:"logprob"`
+	Special   bool           `json:"special"`
+	TopTokens []TopTokenInfo `json:"top_tokens,omitempty"` // S1: top-N alternatives at this position
 }
 
 // TopTokenInfo represents one of the top-N token alternatives at a position.
@@ -194,8 +194,8 @@ func (t *TopTokenInfo) UnmarshalJSON(data []byte) error {
 }
 
 type StreamResponse struct {
-	Token         *TokenInfo `json:"token,omitempty"`
-	GeneratedText string     `json:"generated_text,omitempty"`
+	Token         *TokenInfo       `json:"token,omitempty"`
+	GeneratedText string           `json:"generated_text,omitempty"`
 	Details       *GenerateDetails `json:"details,omitempty"`
 }
 

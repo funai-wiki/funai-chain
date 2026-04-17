@@ -29,11 +29,11 @@ type ModelRegKeeper interface {
 }
 
 type Keeper struct {
-	cdc             codec.BinaryCodec
-	storeKey        storetypes.StoreKey
-	bankKeeper      BankKeeper
-	modelRegKeeper  ModelRegKeeper
-	logger          log.Logger
+	cdc            codec.BinaryCodec
+	storeKey       storetypes.StoreKey
+	bankKeeper     BankKeeper
+	modelRegKeeper ModelRegKeeper
+	logger         log.Logger
 }
 
 func NewKeeper(
@@ -269,7 +269,7 @@ func (k Keeper) TombstoneWorker(ctx sdk.Context, workerAddr sdk.AccAddress) {
 // JailWorker jails a worker using progressive durations based on jail_count.
 // V5.2: 1st jail = Jail1Duration (120 blocks), 2nd = Jail2Duration (720 blocks),
 // 3rd+ = slash 5% + tombstone.
-// All roles (Worker, Leader, Proposer, verifier, auditor) share the same jail progression.
+// All roles (Worker, Leader, Proposer, verifier, second_verifier) share the same jail progression.
 func (k Keeper) JailWorker(ctx sdk.Context, workerAddr sdk.AccAddress, _ int64) {
 	worker, found := k.GetWorker(ctx, workerAddr)
 	if !found {
@@ -556,7 +556,7 @@ func (k Keeper) ReputationOnAccept(ctx sdk.Context, addr sdk.AccAddress) {
 }
 
 // ReputationOnMiss decreases reputation for timeout (no response within window).
-// role: "worker" → standard miss, "auditor" → doubled penalty.
+// role: "worker" → standard miss, "second_verifier" → doubled penalty.
 func (k Keeper) ReputationOnMiss(ctx sdk.Context, addr sdk.AccAddress, role string) {
 	w, found := k.GetWorker(ctx, addr)
 	if !found {
@@ -564,7 +564,7 @@ func (k Keeper) ReputationOnMiss(ctx sdk.Context, addr sdk.AccAddress, role stri
 	}
 	ensureReputation(&w)
 	delta := types.ReputationMissDelta
-	if role == "auditor" {
+	if role == "second_verifier" {
 		delta = types.ReputationAuditMiss
 	}
 	if w.ReputationScore > delta {

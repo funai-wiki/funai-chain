@@ -45,7 +45,7 @@ func TestWithdraw_ExactFullBalance(t *testing.T) {
 
 func TestBatchSettlement_MixedSuccessAndFail(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("mixed-user")
 	worker := makeAddr("mixed-worker")
@@ -102,7 +102,7 @@ func TestBatchSettlement_MixedSuccessAndFail(t *testing.T) {
 
 func TestBatchSettlement_DuplicateWithinSameBatch(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("dup-intra-user")
 	worker := makeAddr("dup-intra-worker")
@@ -146,7 +146,7 @@ func TestBatchSettlement_DuplicateWithinSameBatch(t *testing.T) {
 
 func TestDistributeSuccessFee_DustHandling(t *testing.T) {
 	k, ctx, bk, _ := setupTrackingKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("dust-user")
 	worker := makeAddr("dust-worker")
@@ -205,7 +205,7 @@ func TestDistributeSuccessFee_DustHandling(t *testing.T) {
 
 func TestBatchCounter_Continuity(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("counter-user")
 	worker := makeAddr("counter-worker")
@@ -384,8 +384,8 @@ func TestGRPC_Params(t *testing.T) {
 
 func TestAuditFail_OverturnsSuccess_UserNotCharged(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
-	k.SetCurrentReauditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
+	k.SetCurrentThirdVerificationRate(ctx, 0)
 
 	user := makeAddr("overturn-user")
 	worker := makeAddr("overturn-worker")
@@ -397,7 +397,7 @@ func TestAuditFail_OverturnsSuccess_UserNotCharged(t *testing.T) {
 	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(10_000_000)))
 
 	// Task is pending audit (originally SUCCESS)
-	k.SetAuditPending(ctx, types.AuditPendingTask{
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 		TaskId:            taskId,
 		OriginalStatus:    types.SettlementSuccess,
 		SubmittedAt:       ctx.BlockHeight(),
@@ -410,12 +410,12 @@ func TestAuditFail_OverturnsSuccess_UserNotCharged(t *testing.T) {
 
 	// 3 FAIL audits → overturns SUCCESS
 	for i := 0; i < 3; i++ {
-		_ = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    makeAddr(fmt.Sprintf("ot-aud%d", i)).String(),
-			TaskId:     taskId,
-			Epoch:      1,
-			Pass:       false,
-			LogitsHash: []byte("hash"),
+		_ = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: makeAddr(fmt.Sprintf("ot-aud%d", i)).String(),
+			TaskId:         taskId,
+			Epoch:          1,
+			Pass:           false,
+			LogitsHash:     []byte("hash"),
 		})
 	}
 
@@ -448,8 +448,8 @@ func TestAuditFail_OverturnsSuccess_UserNotCharged(t *testing.T) {
 
 func TestAuditPass_OverturnsFail_UserPaysRemaining(t *testing.T) {
 	k, ctx, _, _ := setupTrackingKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
-	k.SetCurrentReauditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
+	k.SetCurrentThirdVerificationRate(ctx, 0)
 
 	user := makeAddr("overturn-fail-user")
 	worker := makeAddr("overturn-fail-wkr")
@@ -458,7 +458,7 @@ func TestAuditPass_OverturnsFail_UserPaysRemaining(t *testing.T) {
 	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(10_000_000)))
 
 	// Under "no settlement before audit": audit VRF triggered → no fee collected → PENDING_AUDIT
-	k.SetAuditPending(ctx, types.AuditPendingTask{
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 		TaskId:            taskId,
 		OriginalStatus:    types.SettlementFail,
 		SubmittedAt:       ctx.BlockHeight(),
@@ -471,12 +471,12 @@ func TestAuditPass_OverturnsFail_UserPaysRemaining(t *testing.T) {
 
 	// 3 PASS audits → overturns FAIL to SUCCESS
 	for i := 0; i < 3; i++ {
-		_ = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    makeAddr(fmt.Sprintf("of-aud%d", i)).String(),
-			TaskId:     taskId,
-			Epoch:      1,
-			Pass:       true,
-			LogitsHash: []byte("hash"),
+		_ = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: makeAddr(fmt.Sprintf("of-aud%d", i)).String(),
+			TaskId:         taskId,
+			Epoch:          1,
+			Pass:           true,
+			LogitsHash:     []byte("hash"),
 		})
 	}
 
@@ -494,7 +494,7 @@ func TestAuditPass_OverturnsFail_UserPaysRemaining(t *testing.T) {
 
 func TestBatchSettlement_AllInsufficientBalance(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("all-poor-user")
 	worker := makeAddr("all-poor-worker")
@@ -538,7 +538,7 @@ func TestBatchSettlement_AllInsufficientBalance(t *testing.T) {
 
 func TestBatchSettlement_ZeroFee(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("zerofee-user")
 	worker := makeAddr("zerofee-worker")
@@ -585,7 +585,7 @@ func TestBatchSettlement_ZeroFee(t *testing.T) {
 
 func TestBatchSettlement_MissingSigHashes_Skipped(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("nosig-user")
 	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(5_000_000)))
@@ -627,15 +627,15 @@ func TestBatchSettlement_MissingSigHashes_Skipped(t *testing.T) {
 // B17. Audit result from original verifier → rejected (P2-7)
 // ============================================================
 
-func TestAuditResult_FromOriginalVerifier_Rejected(t *testing.T) {
+func TestSecondVerificationResult_FromOriginalVerifier_Rejected(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
-	k.SetCurrentReauditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
+	k.SetCurrentThirdVerificationRate(ctx, 0)
 
 	v1 := makeAddr("conflict-v1")
 	taskId := []byte("conflict-audit-task1")
 
-	k.SetAuditPending(ctx, types.AuditPendingTask{
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 		TaskId:            taskId,
 		OriginalStatus:    types.SettlementSuccess,
 		SubmittedAt:       ctx.BlockHeight(),
@@ -646,12 +646,12 @@ func TestAuditResult_FromOriginalVerifier_Rejected(t *testing.T) {
 		ExpireBlock:       10000,
 	})
 
-	err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-		Auditor:    v1.String(), // same as original verifier!
-		TaskId:     taskId,
-		Epoch:      1,
-		Pass:       true,
-		LogitsHash: []byte("hash"),
+	err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+		SecondVerifier: v1.String(), // same as original verifier!
+		TaskId:         taskId,
+		Epoch:          1,
+		Pass:           true,
+		LogitsHash:     []byte("hash"),
 	})
 	if err == nil {
 		t.Fatal("audit from original verifier should be rejected")
@@ -662,14 +662,14 @@ func TestAuditResult_FromOriginalVerifier_Rejected(t *testing.T) {
 // B18. Audit with max results already → extra results ignored
 // ============================================================
 
-func TestAuditResult_ExtraResultsIgnored(t *testing.T) {
+func TestSecondVerificationResult_ExtraResultsIgnored(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
-	k.SetCurrentReauditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
+	k.SetCurrentThirdVerificationRate(ctx, 0)
 
 	taskId := []byte("extra-audit-task-001")
 
-	k.SetAuditPending(ctx, types.AuditPendingTask{
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
 		TaskId:            taskId,
 		OriginalStatus:    types.SettlementSuccess,
 		SubmittedAt:       ctx.BlockHeight(),
@@ -682,22 +682,22 @@ func TestAuditResult_ExtraResultsIgnored(t *testing.T) {
 
 	// Submit 3 results (the max)
 	for i := 0; i < 3; i++ {
-		_ = k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-			Auditor:    makeAddr(fmt.Sprintf("ea-aud%d", i)).String(),
-			TaskId:     taskId,
-			Epoch:      1,
-			Pass:       true,
-			LogitsHash: []byte("hash"),
+		_ = k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+			SecondVerifier: makeAddr(fmt.Sprintf("ea-aud%d", i)).String(),
+			TaskId:         taskId,
+			Epoch:          1,
+			Pass:           true,
+			LogitsHash:     []byte("hash"),
 		})
 	}
 
 	// 4th result should be silently ignored (no error)
-	err := k.ProcessAuditResult(ctx, &types.MsgAuditResult{
-		Auditor:    makeAddr("ea-aud-extra").String(),
-		TaskId:     taskId,
-		Epoch:      1,
-		Pass:       false,
-		LogitsHash: []byte("hash"),
+	err := k.ProcessSecondVerificationResult(ctx, &types.MsgSecondVerificationResult{
+		SecondVerifier: makeAddr("ea-aud-extra").String(),
+		TaskId:         taskId,
+		Epoch:          1,
+		Pass:           false,
+		LogitsHash:     []byte("hash"),
 	})
 	if err != nil {
 		t.Fatalf("extra audit result should be silently ignored, got error: %v", err)
@@ -736,7 +736,7 @@ func TestMsgWithdraw_ValidateBasic_ZeroAmount(t *testing.T) {
 
 func TestParams_FeeRatiosSumTo1000(t *testing.T) {
 	p := types.DefaultParams()
-	sum := p.ExecutorFeeRatio + p.VerifierFeeRatio + p.AuditFundRatio
+	sum := p.ExecutorFeeRatio + p.VerifierFeeRatio + p.MultiVerificationFundRatio
 	if sum != 1000 {
 		t.Fatalf("fee ratios should sum to 1000, got %d", sum)
 	}
@@ -755,7 +755,7 @@ func TestParams_FeeRatiosSumTo1000(t *testing.T) {
 
 func TestBatchSettlement_LargeBatch_100Tasks(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("large-batch-user")
 	worker := makeAddr("large-batch-worker")
@@ -862,7 +862,7 @@ func TestGenesisState_Validate_DuplicateAccounts(t *testing.T) {
 
 func TestBatchSettlement_SingleEntry_MerkleLeaf(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("single-leaf-user")
 	worker := makeAddr("single-leaf-wkr")
@@ -915,7 +915,7 @@ func TestBatchSettlement_SingleEntry_MerkleLeaf(t *testing.T) {
 
 func TestBatchSettlement_ResultCountMismatch(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("rcm-user")
 	worker := makeAddr("rcm-worker")
@@ -961,7 +961,7 @@ func TestBatchSettlement_ResultCountMismatch(t *testing.T) {
 
 func TestBatchSettlement_UnauthorizedProposer(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("unauth-user")
 	worker := makeAddr("unauth-worker")
@@ -1010,7 +1010,7 @@ func TestBatchSettlement_UnauthorizedProposer(t *testing.T) {
 
 func TestBatchSettlement_EmptyEntries(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	entries := []types.SettlementEntry{}
 	merkleRoot := keeper.ComputeMerkleRoot(entries)
@@ -1043,7 +1043,7 @@ func TestBatchSettlement_EmptyEntries(t *testing.T) {
 
 func TestBatchSettlement_TamperedProposerSig(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
-	k.SetCurrentAuditRate(ctx, 0)
+	k.SetCurrentSecondVerificationRate(ctx, 0)
 
 	user := makeAddr("tampsig-user")
 	worker := makeAddr("tampsig-worker")

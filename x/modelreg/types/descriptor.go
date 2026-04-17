@@ -61,4 +61,4 @@ func (m *QueryModelsRequest) Descriptor() ([]byte, []int)          { return mode
 func (m *QueryModelsResponse) Descriptor() ([]byte, []int)         { return modelregDescGz, []int{10} }
 func (m *QueryParamsRequest) Descriptor() ([]byte, []int)          { return modelregDescGz, []int{11} }
 func (m *QueryParamsResponse) Descriptor() ([]byte, []int)         { return modelregDescGz, []int{12} }
-func (m *QueryModelByAliasRequest) Descriptor() ([]byte, []int)   { return modelregDescGz, []int{13} }
+func (m *QueryModelByAliasRequest) Descriptor() ([]byte, []int)    { return modelregDescGz, []int{13} }

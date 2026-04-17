@@ -24,7 +24,7 @@ var _Msg_serviceDesc = grpc.ServiceDesc{
 		{MethodName: "Withdraw", Handler: _Msg_Withdraw_Handler},
 		{MethodName: "BatchSettle", Handler: _Msg_BatchSettle_Handler},
 		{MethodName: "SubmitFraudProof", Handler: _Msg_SubmitFraudProof_Handler},
-		{MethodName: "SubmitAuditResult", Handler: _Msg_SubmitAuditResult_Handler},
+		{MethodName: "SubmitSecondVerificationResult", Handler: _Msg_SubmitSecondVerificationResult_Handler},
 	},
 	Streams: []grpc.StreamDesc{},
 }
@@ -102,17 +102,17 @@ func _Msg_SubmitFraudProof_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Msg_SubmitAuditResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MsgAuditResult)
+func _Msg_SubmitSecondVerificationResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MsgSecondVerificationResult)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MsgServer).SubmitAuditResult(ctx, in)
+		return srv.(MsgServer).SubmitSecondVerificationResult(ctx, in)
 	}
-	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: "/funai.settlement.Msg/SubmitAuditResult"}
+	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: "/funai.settlement.Msg/SubmitSecondVerificationResult"}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MsgServer).SubmitAuditResult(ctx, req.(*MsgAuditResult))
+		return srv.(MsgServer).SubmitSecondVerificationResult(ctx, req.(*MsgSecondVerificationResult))
 	}
 	return interceptor(ctx, in, info, handler)
 }

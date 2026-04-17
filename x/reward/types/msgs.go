@@ -22,8 +22,8 @@ type MsgUpdateParams struct {
 	Params    Params `protobuf:"bytes,2,opt,name=params,proto3" json:"params"`
 }
 
-func (m *MsgUpdateParams) ProtoMessage()  {}
-func (m *MsgUpdateParams) Reset()         { *m = MsgUpdateParams{} }
+func (m *MsgUpdateParams) ProtoMessage() {}
+func (m *MsgUpdateParams) Reset()        { *m = MsgUpdateParams{} }
 func (m *MsgUpdateParams) String() string {
 	return fmt.Sprintf("reward.MsgUpdateParams{authority:%q}", m.Authority)
 }
@@ -75,8 +75,8 @@ type QueryRewardHistoryRequest struct {
 	WorkerAddress string `protobuf:"bytes,1,opt,name=worker_address,proto3" json:"worker_address"`
 }
 
-func (m *QueryRewardHistoryRequest) ProtoMessage()  {}
-func (m *QueryRewardHistoryRequest) Reset()         { *m = QueryRewardHistoryRequest{} }
+func (m *QueryRewardHistoryRequest) ProtoMessage() {}
+func (m *QueryRewardHistoryRequest) Reset()        { *m = QueryRewardHistoryRequest{} }
 func (m *QueryRewardHistoryRequest) String() string {
 	return fmt.Sprintf("reward.QueryRewardHistoryRequest{worker_address:%q}", m.WorkerAddress)
 }
@@ -85,8 +85,8 @@ type QueryRewardHistoryResponse struct {
 	Records []RewardRecord `protobuf:"bytes,1,rep,name=records,proto3" json:"records"`
 }
 
-func (m *QueryRewardHistoryResponse) ProtoMessage()  {}
-func (m *QueryRewardHistoryResponse) Reset()         { *m = QueryRewardHistoryResponse{} }
+func (m *QueryRewardHistoryResponse) ProtoMessage() {}
+func (m *QueryRewardHistoryResponse) Reset()        { *m = QueryRewardHistoryResponse{} }
 func (m *QueryRewardHistoryResponse) String() string {
 	return fmt.Sprintf("reward.QueryRewardHistoryResponse{records:%d}", len(m.Records))
 }
