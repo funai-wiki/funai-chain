@@ -147,15 +147,15 @@ func socks5Handshake(conn net.Conn, targetAddr string) error {
 	switch respHeader[3] {
 	case 0x01: // IPv4
 		discard := make([]byte, 4+2)
-		io.ReadFull(conn, discard)
+		_, _ = io.ReadFull(conn, discard)
 	case 0x03: // Domain
 		lenBuf := make([]byte, 1)
-		io.ReadFull(conn, lenBuf)
+		_, _ = io.ReadFull(conn, lenBuf)
 		discard := make([]byte, int(lenBuf[0])+2)
-		io.ReadFull(conn, discard)
+		_, _ = io.ReadFull(conn, discard)
 	case 0x04: // IPv6
 		discard := make([]byte, 16+2)
-		io.ReadFull(conn, discard)
+		_, _ = io.ReadFull(conn, discard)
 	}
 
 	return nil

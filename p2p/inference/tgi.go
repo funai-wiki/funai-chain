@@ -98,7 +98,7 @@ func (c *TGIClient) DetectVersion() {
 	parts := strings.SplitN(info.Version, ".", 2)
 	if len(parts) > 0 {
 		var major int
-		fmt.Sscanf(parts[0], "%d", &major)
+		_, _ = fmt.Sscanf(parts[0], "%d", &major)
 		if major > 0 {
 			c.tgiMajor = major
 		}

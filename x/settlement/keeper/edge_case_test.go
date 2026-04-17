@@ -847,14 +847,14 @@ func TestEpochStats_MultipleBatchesAccumulate(t *testing.T) {
 		{TaskId: []byte("epoch-acc-task-0002"), UserAddress: userAddr.String(), WorkerAddress: worker.String(), Fee: fee, ExpireBlock: 10000, Status: types.SettlementSuccess, VerifierResults: verifiers},
 	}
 	msg1 := makeBatchMsg(t, makeAddr("proposer").String(), entries1)
-	k.ProcessBatchSettlement(ctx, msg1)
+	_, _ = k.ProcessBatchSettlement(ctx, msg1)
 
 	// Batch 2: 1 fail task
 	entries2 := []types.SettlementEntry{
 		{TaskId: []byte("epoch-acc-task-0003"), UserAddress: userAddr.String(), WorkerAddress: worker.String(), Fee: fee, ExpireBlock: 10000, Status: types.SettlementFail, VerifierResults: verifiers},
 	}
 	msg2 := makeBatchMsg(t, makeAddr("proposer").String(), entries2)
-	k.ProcessBatchSettlement(ctx, msg2)
+	_, _ = k.ProcessBatchSettlement(ctx, msg2)
 
 	epoch := ctx.BlockHeight() / 100
 	stats := k.GetEpochStats(ctx, epoch)

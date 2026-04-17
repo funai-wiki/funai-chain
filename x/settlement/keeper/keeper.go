@@ -999,7 +999,7 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 			)
 			actualFee = sdk.NewCoin(types.DefaultDenom, math.NewIntFromUint64(computedFee))
 
-			k.UnfreezeBalance(ctx, userAddr, entry.TaskId)
+			_, _ = k.UnfreezeBalance(ctx, userAddr, entry.TaskId)
 		} else {
 			// Per-request billing: use fixed fee
 			actualFee = entry.Fee
@@ -1046,8 +1046,8 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 			totalFees = totalFees.Add(actualFee.Amount)
 		} else {
 			if entry.IsPerToken() {
-				// S9 §4.3: FAIL + per-token — charge fail_fee = actual × 5%, refund rest
-				k.UnfreezeBalance(ctx, userAddr, entry.TaskId)
+				// S9 §4.3: FAIL + per-token — charge fail_fee, refund rest
+				_, _ = k.UnfreezeBalance(ctx, userAddr, entry.TaskId)
 
 				failFee := actualFee.Amount.MulRaw(int64(params.FailSettlementFeeRatio)).QuoRaw(1000)
 				failCoin := sdk.NewCoin(types.DefaultDenom, failFee)
@@ -1465,7 +1465,7 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.SecondVerificatio
 
 					userAddr, uErr := sdk.AccAddressFromBech32(apt.UserAddress)
 					if uErr == nil {
-						k.UnfreezeBalance(ctx, userAddr, apt.TaskId)
+						_, _ = k.UnfreezeBalance(ctx, userAddr, apt.TaskId)
 					}
 
 					workerAddr, _ := sdk.AccAddressFromBech32(apt.WorkerAddress)
@@ -1632,7 +1632,7 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationP
 	// S9: determine base fee for settlement
 	baseFee := apt.Fee
 	if apt.FeePerInputToken > 0 || apt.FeePerOutputToken > 0 {
-		k.UnfreezeBalance(ctx, userAddr, apt.TaskId)
+		_, _ = k.UnfreezeBalance(ctx, userAddr, apt.TaskId)
 
 		outTokens := apt.SettledOutputTokens
 		if overrideOutputTokens > 0 {
@@ -2170,7 +2170,7 @@ func (k Keeper) HandleFrozenBalanceTimeouts(ctx sdk.Context) int {
 		}
 
 		// Unfreeze the max_fee
-		k.UnfreezeBalance(ctx, userAddr, meta.TaskId)
+		_, _ = k.UnfreezeBalance(ctx, userAddr, meta.TaskId)
 
 		// Charge timeout_fee = max_fee × FailSettlementFeeRatio / 1000
 		timeoutFee := meta.MaxFee * uint64(params.FailSettlementFeeRatio) / 1000

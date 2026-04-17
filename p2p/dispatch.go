@@ -209,8 +209,7 @@ func (n *Node) dispatchSettlementMessages(ctx context.Context, sub *pubsub.Subsc
 // ── Message Handlers ────────────────────────────────────────────────────────
 
 func (n *Node) handleInferRequest(ctx context.Context, req *p2ptypes.InferRequest) {
-	modelId := string(req.ModelId)
-	l, ok := n.Leaders[modelId]
+	l, ok := n.Leaders[string(req.ModelId)]
 	if !ok {
 		return
 	}

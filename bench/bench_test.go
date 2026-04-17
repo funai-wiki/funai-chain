@@ -93,12 +93,6 @@ func makeAddr(n int) sdk.AccAddress {
 	return sdk.AccAddress(buf)
 }
 
-func randomHash() []byte {
-	h := make([]byte, 32)
-	_, _ = rand.Read(h)
-	return h
-}
-
 func makeBatchEntries(n, salt int) []types.SettlementEntry {
 	dummySig := make([]byte, 32)
 	entries := make([]types.SettlementEntry, n)

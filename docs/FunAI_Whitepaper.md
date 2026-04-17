@@ -335,44 +335,42 @@ Second verification and third-verification rates are dynamic, adjusted per epoch
 
 ## 6. VRF-Based Selection
 
-### 6.1 Unified Formula
+### 6.1 Per-Role Scoring Formula
 
-All role selection uses a single formula:
+VRF ranking is NOT a single formula with a single parameter. The `alpha` exponent controls only the **stake** contribution; the `reputation × latency_factor` term is always weighted at exponent 1.0. For α = 0.0 (2nd/3rd-tier verifier) stake is dropped entirely and only `reputation × latency_factor` ranks the candidates.
 
 ```
-score = hash(seed || pubkey) / stake^alpha
+reputation     : on-chain node reliability score, range [0.0, 1.2], default 1.0
+latency_factor : monotonic function of the node's on-chain avg_latency_ms;
+                 reference 3000 ms → 1.0, clamped to [0.1, 1.5];
+                 missing data → 1.0 (neutral)
+
+Per-role score (lower score = higher rank):
+
+  α = 1.0  (Worker dispatch / Leader / Validator committee):
+       score = hash(seed || pubkey) / (stake × reputation × latency_factor)
+
+  α = 0.5  (1st-tier verifier):
+       score = hash(seed || pubkey) / sqrt(stake × reputation × latency_factor)
+
+  α = 0.0  (2nd/3rd-tier verifier — stake EXCLUDED):
+       score = hash(seed || pubkey) / (reputation × latency_factor)
 ```
 
-Lower score = higher rank. The `alpha` parameter controls how much stake influences selection:
-
-| Use Case | Alpha | Seed | Effect |
-|----------|-------|------|--------|
-| Dispatch | 1.0 | `task_id \|\| block_hash` | Proportional to stake |
-| Verification | 0.5 | `task_id \|\| result_hash` | Proportional to sqrt(stake) |
-| Second verification | 0.0 | `task_id \|\| post_verification_block_hash` | Equal probability |
-| Third verification | 0.0 | `task_id \|\| post_second verification_block_hash` | Equal probability |
-| Leader election | 1.0 | `model_id \|\| sub_topic_id \|\| epoch_block_hash` | Stake-weighted |
-| Validator committee | 1.0 | `epoch_block_hash` | Stake-weighted |
+| Use Case | α | Seed | Selection proportional to |
+|----------|---|------|---------------------------|
+| Dispatch | 1.0 | `task_id \|\| block_hash` | stake × reputation × speed |
+| Verification (1st tier) | 0.5 | `task_id \|\| result_hash` | sqrt(stake × reputation × speed) |
+| Second verification (2nd tier) | 0.0 | `task_id \|\| post_verification_block_hash` | reputation × speed (stake ignored) |
+| Third verification (3rd tier) | 0.0 | `task_id \|\| post_second_verification_block_hash` | reputation × speed (stake ignored) |
+| Leader election | 1.0 | `model_id \|\| sub_topic_id \|\| epoch_block_hash` | stake × reputation × speed |
+| Validator committee | 1.0 | `epoch_block_hash` | stake × reputation × speed (100 members, 10 min rotation) |
 
 ### 6.2 Design Rationale
 
-- **Dispatch (alpha=1.0):** Pure stake weight prevents whale account-splitting (splitting yields zero benefit). Income volatility for small holders is addressed through delegation pools, not VRF tuning.
-- **Verification (alpha=0.5):** weighted by `sqrt(stake × reputation × latency_factor)`. sqrt allows small GPUs to participate (verification only takes ~0.6s) while reducing collusion probability; rep × speed still contribute.
-- **Second/Third verification (alpha=0.0):** weighted by `reputation × latency_factor` — **stake excluded**. Stake cannot buy selection probability, so whale or Sybil stake concentration offers no advantage; the attacker must earn genuine reputation and fast-latency behavior across many nodes, which is substantially harder than accumulating stake. This makes 2nd/3rd-tier verification the final Sybil-resistant firewall.
-
-### 6.3 Effective Weight
-
-VRF ranking incorporates stake, reputation, and a latency factor. The exact formula depends on the role:
-
-```
-effective_stake      = stake × reputation × latency_factor       (Worker / 1st-tier verifier / Leader / Validator)
-effective_repspeed   = reputation × latency_factor               (2nd/3rd-tier verifier — stake excluded)
-```
-
-Where:
-- `reputation` is an on-chain node reliability score, range 0.0–1.2, default 1.0.
-- `latency_factor` is a monotonic function of the node's `avg_latency_ms`: reference 3000 ms → factor 1.0, clamped to [0.1, 1.5] (faster → higher factor). Missing data → 1.0 (neutral).
-- The role's **α** controls the **stake** exponent only; `reputation × latency_factor` is always applied at exponent 1.0 for non-stake roles, or folded into `effective_stake` for stake-weighted roles.
+- **Dispatch (α=1.0):** Pure stake-proportional weight prevents whale account-splitting — splitting stake into N accounts yields 1/N selection each, so the total expected work is unchanged. Reputation and latency modulate selection so chronically slow or misbehaving nodes drop out of contention. Income volatility for small holders is addressed through delegation pools, not VRF tuning.
+- **Verification, 1st tier (α=0.5):** The √ weighting lets smaller GPUs participate (verification takes ~0.6 s per task and does not require top-tier hardware), while reducing the ability of a large stakeholder to dominate the verifier pool; quadrupling stake still only doubles the odds of filling a slot. Reputation and latency still contribute at exponent 0.5 inside the root.
+- **Verification, 2nd/3rd tier (α=0.0):** Stake is **excluded entirely**. An attacker cannot buy selection probability by accumulating FAI or by splitting stake across Sybil accounts — the only way to raise the odds of being picked is to earn genuine on-chain reputation and maintain low latency across many nodes, which is substantially harder than accumulating stake. This is the final Sybil-resistant firewall. Reputation × speed is still weighted at exponent 1.0 so dishonest or chronically slow nodes drop out of contention.
 
 ---
 

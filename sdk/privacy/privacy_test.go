@@ -411,6 +411,6 @@ func BenchmarkTLSWrapUnwrap(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		encrypted, _ := sender.Wrap(ctx, data, recipPub[:])
-		recip.Unwrap(ctx, encrypted)
+		_, _ = recip.Unwrap(ctx, encrypted)
 	}
 }

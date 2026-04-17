@@ -126,7 +126,7 @@ func (c *Client) GetLatestBlockHash(ctx context.Context) ([]byte, int64, error) 
 
 	hash := []byte(status.Result.SyncInfo.LatestBlockHash)
 	height := int64(0)
-	fmt.Sscanf(status.Result.SyncInfo.LatestBlockHeight, "%d", &height)
+	_, _ = fmt.Sscanf(status.Result.SyncInfo.LatestBlockHeight, "%d", &height)
 
 	return hash, height, nil
 }
@@ -164,7 +164,7 @@ func (c *Client) GetInferenceBalance(ctx context.Context, userAddr string) (uint
 	}
 
 	var amount uint64
-	fmt.Sscanf(account.Balance.Amount, "%d", &amount)
+	_, _ = fmt.Sscanf(account.Balance.Amount, "%d", &amount)
 	return amount, nil
 }
 

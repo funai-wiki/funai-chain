@@ -2,7 +2,6 @@ package keeper
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -651,9 +650,3 @@ func (k Keeper) VerifyConsensusThreshold(ctx sdk.Context, signers []string) bool
 	return validSigners >= threshold
 }
 
-// encodeUint64 helper for big-endian encoding.
-func encodeUint64(v uint64) []byte {
-	bz := make([]byte, 8)
-	binary.BigEndian.PutUint64(bz, v)
-	return bz
-}

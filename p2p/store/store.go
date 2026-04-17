@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 )
 
@@ -43,7 +42,6 @@ type Record struct {
 type Store struct {
 	dir       string
 	retention time.Duration
-	mu        sync.RWMutex
 	stopCh    chan struct{}
 }
 

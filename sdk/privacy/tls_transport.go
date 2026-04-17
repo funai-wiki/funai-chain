@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"sync"
 
 	"golang.org/x/crypto/curve25519"
 )
@@ -40,7 +39,6 @@ type tlsTransport struct {
 	localPrivKey [32]byte
 	localPubKey  [32]byte
 
-	mu       sync.RWMutex
 	sessions map[string]cipher.AEAD // cached AEAD per peer pubkey (for performance)
 }
 

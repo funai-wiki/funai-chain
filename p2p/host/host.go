@@ -208,7 +208,7 @@ type mdnsNotifee struct {
 }
 
 func (n *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
-	n.host.Connect(context.Background(), pi)
+	_ = n.host.Connect(context.Background(), pi)
 }
 
 // CheckPeerRate checks whether a peer has exceeded the per-IP rate limit (P3-4).

@@ -266,7 +266,7 @@ func TestRankWorkers_AllFilteredOut(t *testing.T) {
 
 	// Nil slice
 	ranked = types.RankWorkers(seed, nil, types.AlphaDispatch)
-	if ranked != nil && len(ranked) != 0 {
+	if len(ranked) != 0 {
 		t.Fatalf("nil input should return nil or empty, got %d", len(ranked))
 	}
 
