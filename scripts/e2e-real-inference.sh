@@ -19,7 +19,7 @@ set -euo pipefail
 BINARY="./build/funaid"
 P2P_BINARY="./build/funai-node"
 CLIENT_BINARY="./build/e2e-client"
-CHAIN_ID="funai-e2e-real-1"
+CHAIN_ID="${CHAIN_ID:-funai_7777777-1}"  # EVM-compatible: funai_<eip155>-<version>. The P2P nodes pass this as FUNAI_CHAIN_ID and app.init.0 calls evmtypes.DefaultChainConfig which panics on non-EVM format.
 BASE_DIR="/tmp/funai-e2e-real"
 NODES=4
 DENOM="ufai"
@@ -28,14 +28,19 @@ GENESIS_BALANCE="200000000000000${DENOM}"
 STAKE_AMOUNT="100000000000000${DENOM}"
 BLOCK_TIME=2
 
-# Chain ports (offset from standard to avoid conflicts)
-P2P_PORT_BASE=46656
-RPC_PORT_BASE=46657
-API_PORT_BASE=21317
-GRPC_PORT_BASE=29090
+# Chain ports (offset from standard to avoid conflicts).
+# All port bases are env-overridable so the e2e test can coexist with a running
+# local testnet on the same box. Example for a box already using the 46656 range:
+#   P2P_PORT_BASE=56656 RPC_PORT_BASE=56657 API_PORT_BASE=31317 \
+#     GRPC_PORT_BASE=39090 P2P_LIBP2P_PORT_BASE=15001 \
+#     bash scripts/e2e-real-inference.sh
+P2P_PORT_BASE=${P2P_PORT_BASE:-46656}
+RPC_PORT_BASE=${RPC_PORT_BASE:-46657}
+API_PORT_BASE=${API_PORT_BASE:-21317}
+GRPC_PORT_BASE=${GRPC_PORT_BASE:-29090}
 
 # P2P node ports
-P2P_LIBP2P_PORT_BASE=5001
+P2P_LIBP2P_PORT_BASE=${P2P_LIBP2P_PORT_BASE:-5001}
 
 # TGI endpoint (all P2P nodes share the same backend for verification consistency)
 TGI_ENDPOINT="${TGI_ENDPOINT:-http://localhost:8080}"
@@ -392,8 +397,8 @@ setup_testnet() {
     sed -i '/^\[api\]$/,/^\[/ s|^enable = false|enable = true|' "$app_toml" 2>/dev/null || true
 
     local node_id
-    node_id=$($BINARY comet show-node-id --home "$home" 2>&1 || \
-              $BINARY tendermint show-node-id --home "$home" 2>&1)
+    node_id=$($BINARY comet show-node-id --home "$home" 2>&1 | grep -oP '^[a-f0-9]{40}$' || \
+              $BINARY tendermint show-node-id --home "$home" 2>&1 | grep -oP '^[a-f0-9]{40}$')
     local entry="${node_id}@127.0.0.1:${p2p_port}"
     if [ -z "$peers" ]; then
       peers="$entry"
@@ -405,8 +410,8 @@ setup_testnet() {
   for i in $(seq 0 $((NODES - 1))); do
     local home="$BASE_DIR/node$i"
     local node_id
-    node_id=$($BINARY comet show-node-id --home "$home" 2>&1 || \
-              $BINARY tendermint show-node-id --home "$home" 2>&1)
+    node_id=$($BINARY comet show-node-id --home "$home" 2>&1 | grep -oP '^[a-f0-9]{40}$' || \
+              $BINARY tendermint show-node-id --home "$home" 2>&1 | grep -oP '^[a-f0-9]{40}$')
     local p2p_port=$((P2P_PORT_BASE + i * 2))
     local node_entry="${node_id}@127.0.0.1:${p2p_port}"
     local other_peers
