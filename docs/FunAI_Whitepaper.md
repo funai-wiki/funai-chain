@@ -357,20 +357,22 @@ Lower score = higher rank. The `alpha` parameter controls how much stake influen
 ### 6.2 Design Rationale
 
 - **Dispatch (alpha=1.0):** Pure stake weight prevents whale account-splitting (splitting yields zero benefit). Income volatility for small holders is addressed through delegation pools, not VRF tuning.
-- **Verification (alpha=0.5):** sqrt(stake) weight allows small GPUs to participate (verification only takes ~0.6s) while reducing collusion probability.
-- **Second verification (alpha=0.0):** Pure random selection is the safest; whale probability of controlling all 3 second verifiers drops by ~3,400x compared to stake-weighted selection.
+- **Verification (alpha=0.5):** weighted by `sqrt(stake × reputation × latency_factor)`. sqrt allows small GPUs to participate (verification only takes ~0.6s) while reducing collusion probability; rep × speed still contribute.
+- **Second/Third verification (alpha=0.0):** weighted by `reputation × latency_factor` — **stake excluded**. Stake cannot buy selection probability, so whale or Sybil stake concentration offers no advantage; the attacker must earn genuine reputation and fast-latency behavior across many nodes, which is substantially harder than accumulating stake. This makes 2nd/3rd-tier verification the final Sybil-resistant firewall.
 
-### 6.3 Effective Stake
+### 6.3 Effective Weight
 
-VRF ranking incorporates both stake and reputation:
+VRF ranking incorporates stake, reputation, and a latency factor. The exact formula depends on the role:
 
 ```
-effective_stake = stake * reputation * latency_factor
+effective_stake      = stake × reputation × latency_factor       (Worker / 1st-tier verifier / Leader / Validator)
+effective_repspeed   = reputation × latency_factor               (2nd/3rd-tier verifier — stake excluded)
 ```
 
 Where:
-- `reputation` ranges from 0.0 to 1.2 (initial: 1.0)
-- `latency_factor`: 1.5x for fast Workers (< 50% of threshold), 1.0x for normal, 0.1x for slow (> 80% of threshold)
+- `reputation` is an on-chain node reliability score, range 0.0–1.2, default 1.0.
+- `latency_factor` is a monotonic function of the node's `avg_latency_ms`: reference 3000 ms → factor 1.0, clamped to [0.1, 1.5] (faster → higher factor). Missing data → 1.0 (neutral).
+- The role's **α** controls the **stake** exponent only; `reputation × latency_factor` is always applied at exponent 1.0 for non-stake roles, or folded into `effective_stake` for stake-weighted roles.
 
 ---
 

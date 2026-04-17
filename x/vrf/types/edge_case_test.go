@@ -39,7 +39,7 @@ func TestComputeScore_StakeOne(t *testing.T) {
 	pubkey := []byte("pubkey_min")
 	stake := math.NewInt(1)
 
-	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaAudit} {
+	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaSecondThirdVerification} {
 		score := types.ComputeScore(seed, pubkey, stake, alpha)
 		if score == nil {
 			t.Fatalf("alpha=%v: score should not be nil with stake=1", alpha)
@@ -81,7 +81,7 @@ func TestComputeScore_AlphaZero_AllStakesSameScore(t *testing.T) {
 	stakes := []int64{1, 100, 10000, 1_000_000, 999_999_999}
 	var firstScore *big.Float
 	for _, s := range stakes {
-		score := types.ComputeScore(seed, pubkey, math.NewInt(s), types.AlphaAudit)
+		score := types.ComputeScore(seed, pubkey, math.NewInt(s), types.AlphaSecondThirdVerification)
 		if firstScore == nil {
 			firstScore = score
 		} else if score.Cmp(firstScore) != 0 {
@@ -271,7 +271,7 @@ func TestRankWorkers_AllFilteredOut(t *testing.T) {
 	}
 
 	// Try all alpha values with empty slice to ensure no panic
-	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaAudit} {
+	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaSecondThirdVerification} {
 		result := types.RankWorkers(seed, []types.RankedWorker{}, alpha)
 		if len(result) != 0 {
 			t.Fatalf("alpha=%v: empty input should return empty result", alpha)

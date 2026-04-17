@@ -317,7 +317,7 @@ func (k Keeper) SelectSecondVerifiersForTask(ctx sdk.Context, taskId string, mod
 		return nil, fmt.Errorf("not enough second_verifiers for model %s", modelId)
 	}
 
-	ranked = types.RankWorkers(taskSeed, ranked, types.AlphaAudit)
+	ranked = types.RankWorkers(taskSeed, ranked, types.AlphaSecondThirdVerification)
 
 	result := make([]string, count)
 	for i := 0; i < count; i++ {

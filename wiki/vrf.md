@@ -8,28 +8,38 @@ Source: [FunAI V52 Final Design Spec](../docs/FunAI_V52_Final.md)
 
 ## Formula
 
+**Effective weight** combines three node-level factors:
+
 ```
-score = hash(seed || pubkey) / stake^alpha
+effective_stake   = stake × reputation × latency_factor
+effective_repspeed = reputation × latency_factor        (stake excluded)
 ```
 
-**Lower score = higher rank.**
+- `reputation` is on-chain node reliability in range [0.0, 1.2], default 1.0.
+- `latency_factor` is the latency multiplier derived from the node's on-chain `avg_latency_ms`: reference = 3000 ms, clamped to [0.1, 1.5]. Missing data (new node) → 1.0.
 
-- `hash()` produces a uniformly random value from the seed and participant's public key.
-- `stake^alpha` is the stake weighting factor. The exponent `alpha` controls how much stake influences selection.
-- `seed` varies by use case to ensure independent randomness for each context.
+**VRF score** depends on the role:
+
+```
+Worker dispatch         (alpha = 1.0):  score = hash(seed || pubkey) / effective_stake
+1st-tier verifier       (alpha = 0.5):  score = hash(seed || pubkey) / sqrt(effective_stake)
+2nd/3rd-tier verifier   (alpha = 0.0):  score = hash(seed || pubkey) / effective_repspeed
+```
+
+**Lower score = higher rank.** The `alpha` exponent controls the **stake** contribution only. `reputation × latency_factor` is always weighted at exponent 1.0 (for the 2nd/3rd tier, it is the ONLY factor).
 
 ---
 
 ## Use Cases
 
-| Use Case | alpha | Seed | Selection Behavior |
-|----------|-------|------|--------------------|
-| **Dispatch** | 1.0 | `task_id \|\| block_hash` | Proportional to stake |
-| **Verification** | 0.5 | `task_id \|\| result_hash` | Proportional to sqrt(stake) |
-| **Second verification** | 0.0 | `task_id \|\| post_verification_block_hash` | Pure random |
-| **Re-second verification** | 0.0 | `task_id \|\| post_second verification_block_hash` | Pure random |
-| **Leader election** | 1.0 | `model_id \|\| sub_topic_id \|\| epoch_block_hash` | Proportional to stake |
-| **Validator committee** | 1.0 | `epoch_block_hash` | Proportional to stake (100 members, 10 min rotation) |
+| Use Case | alpha | Weight proportional to | Seed |
+|----------|-------|------------------------|------|
+| **Dispatch** | 1.0 | stake × reputation × speed | `task_id \|\| block_hash` |
+| **Verification (1st tier)** | 0.5 | sqrt(stake × reputation × speed) | `task_id \|\| result_hash` |
+| **Second verification (2nd tier)** | 0.0 | reputation × speed (stake ignored) | `task_id \|\| post_verification_block_hash` |
+| **Third verification (3rd tier)** | 0.0 | reputation × speed (stake ignored) | `task_id \|\| post_second_verification_block_hash` |
+| **Leader election** | 1.0 | stake × reputation × speed | `model_id \|\| sub_topic_id \|\| epoch_block_hash` |
+| **Validator committee** | 1.0 | stake × reputation × speed | `epoch_block_hash` (100 members, 10 min rotation) |
 
 ---
 
@@ -47,15 +57,14 @@ Selection probability is proportional to the square root of stake. A participant
 
 **Why this works:** this reduces the ability of large stakeholders to dominate the verification pool. If a single entity controlled enough verifiers to collude with a dishonest Worker, the sqrt weighting makes that significantly more expensive -- they would need to quadruple their stake to double their chance of filling the 3 verifier slots.
 
-### Second verification (alpha = 0.0) -- pure random
+### Second/Third verification (alpha = 0.0) -- stake ignored, rep × speed weighted
 
-Selection probability is completely independent of stake. Every eligible participant has an equal chance.
+Stake has **zero influence** on 2nd/3rd-tier verifier selection. Whale stake cannot be used to control or predict the verification outcome. Reputation and latency still drive the selection, because those are earned signals of reliability and cost basis, not something that can be Sybil-attacked by splitting coins across accounts.
 
-**Why this works:** second verifications are the last line of defense. Pure randomness makes it approximately 3,400x harder for a large staking pool to control second verification outcomes compared to stake-proportional selection. Even an entity controlling a majority of total stake cannot reliably predict or influence which second verifier is selected.
-
-### Re-second verification (alpha = 0.0) -- pure random
-
-Same rationale as second verification. The seed uses `post_second verification_block_hash` (a future block hash unknown at second verification time) to ensure the third-verifier cannot be predicted during the initial second verification.
+**Why this works:**
+- **Stake-independent selection** makes 2nd/3rd-tier verification the last economic firewall. An attacker cannot increase their odds by buying more FAI; they must build a track record of good behavior (reputation) and fast response (latency_factor) across many nodes, which is substantially harder than buying stake.
+- **Reputation × latency still matter** so honest, fast, well-behaved nodes are preferred — dishonest or chronically slow nodes drop out of contention even though stake is ignored.
+- The 3rd-tier seed uses `post_second_verification_block_hash` (a future block hash unknown at 2nd-verification time), so the 3rd-tier verifier cannot be predicted while the 2nd-tier verification is still being computed.
 
 ### Leader election (alpha = 1.0) -- proportional to stake
 
