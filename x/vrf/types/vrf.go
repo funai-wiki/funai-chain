@@ -9,22 +9,56 @@ import (
 	"cosmossdk.io/math"
 )
 
-// VRFAlpha is the exponent in the unified VRF formula: score = hash(seed||pubkey) / stake^α
+// VRFAlpha is the exponent applied to the **stake** term in the unified VRF formula.
+// The reputation × latency_factor term is ALWAYS applied with exponent 1.0
+// (for α > 0 it is folded into effective_stake; for α = 0 it is the only factor).
 // Lower score = higher rank.
 type VRFAlpha float64
 
 const (
-	// AlphaDispatch (α=1.0): dispatch selection — pure stake weight. Higher stake = higher rank probability.
+	// AlphaDispatch (α=1.0): Worker dispatch.
+	// score = hash / (stake × reputation × latency_factor)
+	// Rank is proportional to stake × rep × speed.
 	AlphaDispatch VRFAlpha = 1.0
-	// AlphaVerification (α=0.5): verifier selection — √stake weight. Balances stake and randomness.
+	// AlphaVerification (α=0.5): 1st-tier verifier selection.
+	// score = hash / sqrt(stake × reputation × latency_factor)
+	// Rank is proportional to sqrt(stake × rep × speed).
 	AlphaVerification VRFAlpha = 0.5
-	// AlphaAudit (α=0.0): audit selection — equal probability, ignores stake.
-	AlphaAudit VRFAlpha = 0.0
+	// AlphaSecondThirdVerification (α=0.0): 2nd/3rd-tier verifier selection.
+	// score = hash / (reputation × latency_factor)
+	// **Stake is NOT considered**. Rank is proportional to rep × speed only.
+	AlphaSecondThirdVerification VRFAlpha = 0.0
 )
 
+// rankLatencyReferenceMs is the reference latency used to normalize AvgLatencyMs
+// into a rank multiplier. A worker with AvgLatencyMs == refMs gets factor 1.0;
+// faster → up to 1.5x; slower → down to 0.1x.
+const rankLatencyReferenceMs uint32 = 3000
+
+// rankSpeedMultiplier returns the latency multiplier used in VRF ranking,
+// clamped to [0.1, 1.5]. Missing data (AvgLatencyMs == 0) → 1.0 (neutral).
+// Distinct from LatencyFactor below, which is used for dispatch-time eligibility
+// filtering against a task-specific MaxLatencyMs.
+func rankSpeedMultiplier(avgMs uint32) float64 {
+	if avgMs == 0 {
+		return 1.0
+	}
+	ratio := float64(rankLatencyReferenceMs) / float64(avgMs)
+	if ratio > 1.5 {
+		return 1.5
+	}
+	if ratio < 0.1 {
+		return 0.1
+	}
+	return ratio
+}
+
 // ComputeScore calculates VRF score = hash(seed || pubkey) / stake^α
-// Lower score = higher rank.
-// When α=0.0, stake is ignored (equal probability).
+// Lower score = higher rank. When α=0.0, stake is ignored (pure hash).
+//
+// NOTE: this legacy function does NOT include reputation or latency weighting.
+// For correct per-role behavior use RankWorkers, which wires in rep × speed
+// according to the role's alpha.
 func ComputeScore(seed []byte, pubkey []byte, stakeAmount math.Int, alpha VRFAlpha) *big.Float {
 	data := append(append([]byte{}, seed...), pubkey...)
 	h := sha256.Sum256(data)
@@ -46,6 +80,21 @@ func ComputeScore(seed []byte, pubkey []byte, stakeAmount math.Int, alpha VRFAlp
 	return new(big.Float).SetPrec(256).Quo(hashFloat, sqrtStake)
 }
 
+// computeScoreByFloatWeight returns hash(seed||pubkey) / weight.
+// Used when the effective weight is a float (e.g. rep × latency_factor for
+// 2nd/3rd-tier verifier selection, where stake is excluded entirely).
+func computeScoreByFloatWeight(seed []byte, pubkey []byte, weight float64) *big.Float {
+	data := append(append([]byte{}, seed...), pubkey...)
+	h := sha256.Sum256(data)
+	hashInt := new(big.Int).SetBytes(h[:])
+	hashFloat := new(big.Float).SetPrec(256).SetInt(hashInt)
+	if weight <= 0 {
+		return hashFloat
+	}
+	weightFloat := new(big.Float).SetPrec(256).SetFloat64(weight)
+	return new(big.Float).SetPrec(256).Quo(hashFloat, weightFloat)
+}
+
 // RankedWorker holds worker info for VRF ranking.
 type RankedWorker struct {
 	Address      string     `protobuf:"bytes,1,opt,name=address,proto3" json:"address"`
@@ -58,25 +107,47 @@ type RankedWorker struct {
 
 // RankWorkers computes VRF scores and sorts workers by score ascending.
 // Lower score = higher rank (rank 1 = lowest score).
-// Audit KT §3+§5: effective weight = stake × reputation. Reputation=0 → treated as 1.0.
+//
+// Per-role weighting (v5.3):
+//
+//	AlphaDispatch (α=1.0, Worker):
+//	    score = hash / (stake × reputation × latency_factor)
+//	AlphaVerification (α=0.5, 1st-tier verifier):
+//	    score = hash / sqrt(stake × reputation × latency_factor)
+//	AlphaSecondThirdVerification (α=0.0, 2nd/3rd-tier verifier):
+//	    score = hash / (reputation × latency_factor)        [stake ignored]
+//
+// Reputation (0.0–1.2, uninitialized treated as 1.0) and latency multiplier
+// (3000 ms reference, clamped to [0.1, 1.5]; missing latency data treated as 1.0)
+// are ALWAYS applied. The α exponent controls only the stake contribution.
 func RankWorkers(seed []byte, workers []RankedWorker, alpha VRFAlpha) []RankedWorker {
 	for i := range workers {
-		effectiveStake := workers[i].Stake
 		rep := workers[i].Reputation
 		if rep <= 0 {
 			rep = 1.0 // uninitialized → neutral
 		}
-		if rep != 1.0 {
-			// Scale stake by reputation: effectiveStake = stake × reputation
-			scaledBig := new(big.Float).SetPrec(256).SetInt(effectiveStake.BigInt())
-			scaledBig.Mul(scaledBig, new(big.Float).SetPrec(256).SetFloat64(rep))
-			scaledInt, _ := scaledBig.Int(nil)
-			if scaledInt.Sign() <= 0 {
-				scaledInt = big.NewInt(1)
+		latFactor := rankSpeedMultiplier(workers[i].AvgLatencyMs)
+		repSpeed := rep * latFactor
+
+		if alpha == AlphaSecondThirdVerification {
+			// 2nd/3rd verifier: stake excluded entirely.
+			workers[i].Score = computeScoreByFloatWeight(seed, workers[i].Pubkey, repSpeed)
+		} else {
+			// Dispatch / 1st-tier verifier: fold rep × latency into effective stake,
+			// then apply α exponent uniformly (matches stake × rep × speed for α=1,
+			// sqrt(stake × rep × speed) for α=0.5).
+			effectiveStake := workers[i].Stake
+			if repSpeed != 1.0 {
+				scaledBig := new(big.Float).SetPrec(256).SetInt(effectiveStake.BigInt())
+				scaledBig.Mul(scaledBig, new(big.Float).SetPrec(256).SetFloat64(repSpeed))
+				scaledInt, _ := scaledBig.Int(nil)
+				if scaledInt.Sign() <= 0 {
+					scaledInt = big.NewInt(1)
+				}
+				effectiveStake = math.NewIntFromBigInt(scaledInt)
 			}
-			effectiveStake = math.NewIntFromBigInt(scaledInt)
+			workers[i].Score = ComputeScore(seed, workers[i].Pubkey, effectiveStake, alpha)
 		}
-		workers[i].Score = ComputeScore(seed, workers[i].Pubkey, effectiveStake, alpha)
 	}
 	sort.Slice(workers, func(i, j int) bool {
 		cmp := workers[i].Score.Cmp(workers[j].Score)

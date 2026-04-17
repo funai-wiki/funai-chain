@@ -80,7 +80,7 @@ func TestRankWorkers_AllZeroStake(t *testing.T) {
 
 func TestRankWorkers_SingleWorker_AllAlphas(t *testing.T) {
 	seed := []byte("single_worker_test")
-	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaAudit} {
+	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaSecondThirdVerification} {
 		workers := []types.RankedWorker{
 			{Address: "w_solo", Pubkey: []byte("pub_solo"), Stake: math.NewInt(10000)},
 		}
@@ -144,7 +144,7 @@ func TestComputeScore_DifferentAlphas_DifferentScores(t *testing.T) {
 
 	s1 := types.ComputeScore(seed, pubkey, stake, types.AlphaDispatch)
 	s2 := types.ComputeScore(seed, pubkey, stake, types.AlphaVerification)
-	s3 := types.ComputeScore(seed, pubkey, stake, types.AlphaAudit)
+	s3 := types.ComputeScore(seed, pubkey, stake, types.AlphaSecondThirdVerification)
 
 	// All three should be different (different alpha → different division)
 	if s1.Cmp(s2) == 0 {
@@ -193,7 +193,7 @@ func TestComputeScore_StakeOne_AllAlphas(t *testing.T) {
 	pubkey := []byte("pub_one")
 	stake := math.NewInt(1)
 
-	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaAudit} {
+	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaSecondThirdVerification} {
 		score := types.ComputeScore(seed, pubkey, stake, alpha)
 		if score == nil || score.Sign() <= 0 {
 			t.Fatalf("alpha=%v: stake=1 should produce positive score", alpha)
@@ -279,7 +279,7 @@ func TestComputeScore_MaxStake(t *testing.T) {
 		}
 	}()
 
-	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaAudit} {
+	for _, alpha := range []types.VRFAlpha{types.AlphaDispatch, types.AlphaVerification, types.AlphaSecondThirdVerification} {
 		score := types.ComputeScore(seed, pubkey, maxStake, alpha)
 		if score == nil {
 			t.Fatalf("alpha=%v: max stake should produce a score", alpha)

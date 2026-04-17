@@ -333,7 +333,7 @@ func (n *Node) SelectAuditCandidates(taskId []byte, resultHash []byte, allWorker
 	}
 
 	// Rank with α=0.0 (pure random — all workers have equal probability regardless of stake)
-	ranked := vrftypes.RankWorkers(auditSeed, candidates, vrftypes.AlphaAudit)
+	ranked := vrftypes.RankWorkers(auditSeed, candidates, vrftypes.AlphaSecondThirdVerification)
 
 	// Audit KT §1: unified rank window 21 (same as verifier)
 	maxCandidates := 21
