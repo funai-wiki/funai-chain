@@ -1,5 +1,21 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-17] ingest | FunAI_TPS_Logits_Test_Plan_KT.md + Alibaba Cloud bootstrap script
+
+**Operator:** Claude (LLM)
+
+**New source docs ingested:**
+- `docs/testing/FunAI_TPS_Logits_Test_Plan_KT.md` (628 lines) — TPS stress + logits consistency test plan, pinned to TGI 3.3.6 + Qwen2.5-8B-Instruct FP16. English translation of the earlier Chinese plan; same technical content (C0–C4 logits tests, 5-layer TPS tests, Day 0–3 timeline, ~$35 Vast.ai budget).
+
+**New tooling:**
+- `scripts/tgi-bootstrap-aliyun.sh` (308 lines) — one-shot setup from a bare Alibaba Cloud ECS GPU instance to a running TGI endpoint with `ghcr.io/huggingface/text-generation-inference:3.3.6` (the exact image the test plan requires). Pulls Qwen2.5-8B-Instruct by default, supports `MODEL=` override for Int4 / other models, uses `hf-mirror.com` for China-friendly downloads.
+
+**Wiki pages updated:**
+- `wiki/test-status.md` — Added "TPS Stress + Logits Consistency Test Plan" section with C0–C4 matrix and 5-layer TPS table.
+- `wiki/log.md` — This entry.
+
+---
+
 ## [2026-04-16] update | Close all P1 issues
 
 **Operator:** Claude (LLM)
