@@ -13,12 +13,20 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/crypto/secp256k1"
+	"github.com/cosmos/cosmos-sdk/types/bech32"
 
 	"github.com/funai-wiki/funai-chain/p2p/chain"
 	p2phost "github.com/funai-wiki/funai-chain/p2p/host"
 	p2ptypes "github.com/funai-wiki/funai-chain/p2p/types"
 	"github.com/funai-wiki/funai-chain/sdk/privacy"
+	settlementtypes "github.com/funai-wiki/funai-chain/x/settlement/types"
 )
+
+// defaultFraudProofChainID is the default Cosmos chain ID used to sign
+// MsgFraudProof transactions when Config.ChainID is not set. Matches
+// p2p/node.go's default so an SDK instance works out of the box against
+// the reference mainnet-readiness testnet.
+const defaultFraudProofChainID = "funai_123123123-3"
 
 // Config holds SDK client configuration.
 type Config struct {
@@ -29,6 +37,7 @@ type Config struct {
 	UserPrivKey []byte   // P0-1: user's secp256k1 private key for signing requests
 	ChainRPC    string   // chain RPC URL for FraudProof submission
 	ChainREST   string   // chain REST URL
+	ChainID     string   // Cosmos chain ID for FraudProof tx signing; falls back to funai_123123123-3
 
 	// P3-3: Privacy options (§19: sanitization defaults ON; set DisableSanitization=true to opt out)
 	DisableSanitization    bool          // set true to skip PII sanitization (default: sanitization ON)
@@ -343,6 +352,14 @@ func (c *Client) Infer(ctx context.Context, params InferParams) (*InferResult, e
 
 				resultHash := sha256.Sum256([]byte(output))
 
+				// P3-7: Worker signs sha256(complete_output) on the final StreamToken.
+				// Capture it here so a downstream FraudProof can carry a valid
+				// WorkerContentSig through the on-chain H3 check
+				// (x/settlement/keeper/keeper.go:1279-1288). Without this, FraudProof
+				// would ship empty WorkerContentSig and the H3 sig verification would
+				// be silently skipped — anyone could spam forged fraud reports.
+				workerContentSig := streamToken.ContentSig
+
 				// Restore PII in output if sanitization was applied
 				restoredOutput := output
 				if len(piiMapping) > 0 {
@@ -373,7 +390,7 @@ func (c *Client) Infer(ctx context.Context, params InferParams) (*InferResult, e
 					} else if !bytes.Equal(resultHash[:], workerReceipt.ResultHash) {
 						result.Verified = false
 						log.Printf("SDK: FRAUD DETECTED! result_hash mismatch for task %x", taskId[:8])
-						c.submitFraudProof(ctx, taskId, workerReceipt, resultHash[:])
+						c.submitFraudProof(ctx, taskId, workerReceipt, []byte(output), resultHash[:], workerContentSig)
 					}
 				}
 
@@ -406,45 +423,88 @@ func verifyWorkerReceiptSig(receipt *p2ptypes.InferReceipt) bool {
 	return pk.VerifySignature(receipt.SignBytes(), receipt.WorkerSig)
 }
 
-// submitFraudProof submits a MsgFraudProof to the chain when Worker
-// sends content that doesn't match the signed InferReceipt.
+// submitFraudProof submits a MsgFraudProof to the chain when Worker sends
+// content that doesn't match the signed InferReceipt.
+//
 // M7: last line of defense against Workers sending fake content.
-func (c *Client) submitFraudProof(ctx context.Context, taskId []byte, receipt *p2ptypes.InferReceipt, actualContentHash []byte) {
+//
+// Prior to this implementation the SDK marshalled a custom struct to raw JSON
+// and handed it to BroadcastTx, which CometBFT rejects as "tx parse error"
+// — the on-chain keeper is complete but the submission channel was broken
+// (same pattern as D2 / issue #9). This rewrite builds a proper
+// MsgFraudProof, derives bech32 addresses from pubkeys, includes the
+// Worker's content signature (captured from the final StreamToken's
+// ContentSig), and hands the message to BroadcastFraudProof which uses the
+// Cosmos SDK tx builder + signer + TxEncoder pipeline.
+//
+// actualContent: the bytes the SDK actually received from streaming.
+// contentHash: sha256(actualContent) — matches what Worker signed.
+// workerContentSig: the ContentSig field on the final StreamToken. If empty,
+//   the on-chain H3 check skips sig verification — the fraud proof still
+//   lands but can be spammed. The SDK logs a warning in that case.
+func (c *Client) submitFraudProof(ctx context.Context, taskId []byte, receipt *p2ptypes.InferReceipt, actualContent, contentHash, workerContentSig []byte) {
 	if c.chainClient == nil {
 		log.Printf("SDK: FraudProof: no chain client configured, cannot submit")
 		return
 	}
-
-	var receiptBytes []byte
-	if receipt != nil {
-		receiptBytes, _ = json.Marshal(receipt)
+	if receipt == nil || len(receipt.WorkerPubkey) != 33 {
+		log.Printf("SDK: FraudProof: missing or malformed Worker receipt, cannot submit for task %x", taskId[:8])
+		return
+	}
+	if len(c.config.UserPrivKey) != 32 || len(c.config.UserPubkey) != 33 {
+		log.Printf("SDK: FraudProof: user key not configured, cannot sign fraud-proof tx for task %x", taskId[:8])
+		return
+	}
+	if len(workerContentSig) == 0 {
+		log.Printf("SDK: FraudProof WARNING: Worker's ContentSig was not captured on the final StreamToken; submitting unsigned fraud proof for task %x — on-chain H3 sig check will be skipped", taskId[:8])
 	}
 
-	fraudProof := struct {
-		TaskId            []byte `json:"task_id"`
-		Reporter          string `json:"reporter"`
-		WorkerReceipt     []byte `json:"worker_receipt"`
-		ActualContentHash []byte `json:"actual_content_hash"`
-	}{
-		TaskId:            taskId,
-		Reporter:          string(c.config.UserPubkey),
-		WorkerReceipt:     receiptBytes,
-		ActualContentHash: actualContentHash,
-	}
-
-	data, err := json.Marshal(fraudProof)
+	reporterAddr, err := bech32FromPubkey(c.config.UserPubkey)
 	if err != nil {
-		log.Printf("SDK: FraudProof: marshal error: %v", err)
+		log.Printf("SDK: FraudProof: derive reporter bech32 failed: %v", err)
+		return
+	}
+	workerAddr, err := bech32FromPubkey(receipt.WorkerPubkey)
+	if err != nil {
+		log.Printf("SDK: FraudProof: derive worker bech32 failed: %v", err)
 		return
 	}
 
-	txHash, err := c.chainClient.BroadcastTx(ctx, data)
+	msg := settlementtypes.NewMsgFraudProof(
+		reporterAddr,
+		taskId,
+		workerAddr,
+		contentHash,
+		workerContentSig,
+		actualContent,
+	)
+
+	chainID := c.config.ChainID
+	if chainID == "" {
+		chainID = defaultFraudProofChainID
+	}
+
+	txHash, err := c.chainClient.BroadcastFraudProof(ctx, msg, c.config.UserPrivKey, reporterAddr, chainID)
 	if err != nil {
-		log.Printf("SDK: FraudProof: broadcast error: %v", err)
+		log.Printf("SDK: FraudProof: broadcast error for task %x: %v", taskId[:8], err)
 		return
 	}
 
-	log.Printf("SDK: FraudProof submitted tx=%s for task %x", txHash, taskId[:8])
+	log.Printf("SDK: FraudProof submitted tx=%s for task %x worker=%s", txHash, taskId[:8], workerAddr)
+}
+
+// bech32FromPubkey returns the funai-prefixed bech32 address of a compressed
+// secp256k1 pubkey. Uses explicit-prefix bech32 encoding so the SDK does not
+// depend on the caller having called app.SetAddressPrefixes() on the global
+// sdk.Config — important because the SDK is designed to be importable by
+// third-party tooling that does not link the full app package.
+func bech32FromPubkey(pubkey []byte) (string, error) {
+	if len(pubkey) != 33 {
+		return "", fmt.Errorf("expected 33-byte compressed secp256k1 pubkey, got %d", len(pubkey))
+	}
+	pk := secp256k1.PubKey(pubkey)
+	addrBytes := pk.Address().Bytes()
+	return bech32.ConvertAndEncode("funai", addrBytes)
 }
 
 // ---- P3-3: Privacy Protection ----

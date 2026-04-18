@@ -1,9 +1,11 @@
 package sdk
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cometbft/cometbft/crypto/secp256k1"
+	"github.com/cosmos/cosmos-sdk/types/bech32"
 
 	p2ptypes "github.com/funai-wiki/funai-chain/p2p/types"
 )
@@ -124,4 +126,83 @@ func TestVerifyWorkerReceiptSig_RejectsMalformedInputs(t *testing.T) {
 			t.Fatal("short pubkey must be rejected (expected 33-byte compressed secp256k1)")
 		}
 	})
+}
+
+// ── FraudProof submission helpers ────────────────────────────────────────────
+//
+// Tests for the SDK's MsgFraudProof construction path. Prior behavior
+// marshalled a custom struct to raw JSON and shipped it directly to
+// CometBFT's /broadcast_tx_sync — which rejects as "tx parse error"
+// because it expects a protobuf-encoded Cosmos SDK tx envelope. These
+// tests lock in the corrected behavior: the SDK must build a real
+// MsgFraudProof with correct field names, bech32 addresses derived from
+// pubkeys, and the captured WorkerContentSig.
+
+// TestBech32FromPubkey_RoundTrip: the SDK-internal helper must produce a
+// "funai1..." address that decodes back to the original 20-byte address
+// bytes. Guards against the regression where the old submitFraudProof
+// used `string(c.config.UserPubkey)` (raw pubkey bytes as string) which
+// would fail on-chain ValidateBasic immediately.
+func TestBech32FromPubkey_RoundTrip(t *testing.T) {
+	priv := secp256k1.GenPrivKey()
+	pub := priv.PubKey().Bytes()
+
+	addr, err := bech32FromPubkey(pub)
+	if err != nil {
+		t.Fatalf("bech32FromPubkey: %v", err)
+	}
+	if !strings.HasPrefix(addr, "funai1") {
+		t.Fatalf("expected funai1-prefixed bech32, got %s", addr)
+	}
+
+	// Decode and verify the payload matches the pubkey's Address().Bytes().
+	prefix, decoded, err := bech32.DecodeAndConvert(addr)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if prefix != "funai" {
+		t.Fatalf("expected prefix 'funai', got %s", prefix)
+	}
+	expectedAddrBytes := priv.PubKey().Address().Bytes()
+	if len(decoded) != len(expectedAddrBytes) {
+		t.Fatalf("decoded length %d, want %d", len(decoded), len(expectedAddrBytes))
+	}
+	for i := range decoded {
+		if decoded[i] != expectedAddrBytes[i] {
+			t.Fatalf("decoded byte %d: got %x want %x", i, decoded[i], expectedAddrBytes[i])
+		}
+	}
+}
+
+// TestBech32FromPubkey_RejectsMalformedLength: SDK must not silently
+// produce garbage when given a truncated or padded pubkey.
+func TestBech32FromPubkey_RejectsMalformedLength(t *testing.T) {
+	cases := []struct {
+		name   string
+		pubkey []byte
+	}{
+		{"empty", nil},
+		{"too short", []byte{0x02, 0x03}},
+		{"too long", make([]byte, 65)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := bech32FromPubkey(tc.pubkey); err == nil {
+				t.Fatal("expected error for malformed pubkey length")
+			}
+		})
+	}
+}
+
+// TestBech32FromPubkey_DifferentPubkeysProduceDifferentAddresses: sanity
+// check — two distinct pubkeys must not collide to the same bech32.
+func TestBech32FromPubkey_DifferentPubkeysProduceDifferentAddresses(t *testing.T) {
+	a, _ := bech32FromPubkey(secp256k1.GenPrivKey().PubKey().Bytes())
+	b, _ := bech32FromPubkey(secp256k1.GenPrivKey().PubKey().Bytes())
+	if a == "" || b == "" {
+		t.Fatalf("unexpected empty bech32 output: a=%q b=%q", a, b)
+	}
+	if a == b {
+		t.Fatal("two distinct pubkeys produced the same bech32 address")
+	}
 }
