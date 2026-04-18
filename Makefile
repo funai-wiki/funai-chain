@@ -5,7 +5,7 @@ GO := go
 GOFLAGS := -mod=readonly
 LDFLAGS := -s -w
 
-.PHONY: all build build-p2p build-e2e-client build-all install clean test test-e2e test-e2e-real test-p2p-e2e-mock bench lint proto \
+.PHONY: all build build-p2p build-e2e-client build-all install clean test test-stress test-e2e test-e2e-real test-p2p-e2e-mock bench lint proto \
         init start testnet-init testnet-clean docker-build
 
 all: build-all
@@ -29,7 +29,14 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 test:
-	$(GO) test ./... -race -coverprofile=coverage.out
+	$(GO) test ./... -race -short -coverprofile=coverage.out
+
+# test-stress: run all tests including the 1M-iteration stress tests
+# (TestDustAccumulation_1M, TestFeeConservation_Randomized_1M). These are
+# skipped under `make test` via testing.Short(). Budget ~30-60 min under
+# -race due to secp256k1 signing overhead in the dust test.
+test-stress:
+	$(GO) test ./... -race -timeout 60m
 
 bench:
 	$(GO) test ./bench/... -bench=. -benchtime=10s -benchmem -run=^$

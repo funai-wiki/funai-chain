@@ -15,7 +15,17 @@ import (
 // ================================================================
 // E1: Dust accumulation — 1M settlements, no dust loss (A4)
 // ================================================================
+// Heavy stress test: 1M iterations, each doing a full ProcessBatchSettlement
+// including real secp256k1 proposer-sig verification. Under -race the
+// instrumentation overhead pushes total runtime past 25min, which breaks CI.
+// Gated behind -short so default `make test` stays fast. Run explicitly via:
+//   make test-stress
+// or
+//   go test ./x/settlement/keeper/... -run TestDustAccumulation_1M -timeout 60m
 func TestDustAccumulation_1M(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skip 1M-iteration stress test under -short (run via make test-stress)")
+	}
 	k, ctx, _, _ := setupKeeper(t)
 	k.SetCurrentSecondVerificationRate(ctx, 0)
 
@@ -58,7 +68,12 @@ func TestDustAccumulation_1M(t *testing.T) {
 // ================================================================
 // E2: Fee conservation — 1M random params, sum(debit) exact (A4)
 // ================================================================
+// Pure arithmetic (no keeper calls) but still 1M iterations — gated behind
+// -short so default test runs stay fast. Run explicitly via make test-stress.
 func TestFeeConservation_Randomized_1M(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skip 1M-iteration stress test under -short (run via make test-stress)")
+	}
 	rng := rand.New(rand.NewSource(42))
 
 	for i := 0; i < 1_000_000; i++ {
