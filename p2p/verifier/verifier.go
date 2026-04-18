@@ -137,6 +137,20 @@ func (v *Verifier) HandleVerifyRequest(ctx context.Context, payload *worker.Veri
 		}
 	}
 
+	// E14: guard against all-zero / near-constant logits collusion attack.
+	// If Worker returns degenerate logits (all zero or variance below noise floor),
+	// CompareLogits would match any equally-degenerate fake from a colluding verifier.
+	// Reject before the comparison so degenerate-vs-degenerate cannot produce a PASS.
+	if isLogitsDegenerate(payload.WorkerLogits) {
+		return v.makeResult(payload.TaskId, false, 0, 0, zeroLogits, verifiedInputTokens, verifiedOutputTokens), nil
+	}
+	// Symmetric check: if our own teacher-forcing output is degenerate, the local TGI
+	// likely failed. Submitting PASS based on such a comparison is unsafe — return FAIL
+	// and let 2nd/3rd-tier verifiers decide.
+	if isLogitsDegenerate(verifierLogits) {
+		return v.makeResult(payload.TaskId, false, 0, 0, zeroLogits, verifiedInputTokens, verifiedOutputTokens), nil
+	}
+
 	logitsMatch := inference.CompareLogits(payload.WorkerLogits, verifierLogits, v.Epsilon)
 
 	// Sampling verification when temperature > 0
@@ -457,6 +471,51 @@ func (v *Verifier) verifyWorkerPayloadSignature(payload *worker.VerifyPayload) b
 
 	var pubKey secp256k1.PubKey = payload.WorkerPubkey
 	return pubKey.VerifySignature(msgHash, payload.WorkerSig)
+}
+
+// E14: degenerateLogitsVarThreshold bounds the minimum acceptable variance across
+// the 5 VRF-selected logit positions. Real top-k logits across independent token
+// positions in a healthy 8B model span several units with variance typically O(1)
+// or larger; variance below this threshold indicates either a TGI malfunction or
+// a collusion attack returning (near-)constant values to trivially match.
+const degenerateLogitsVarThreshold = float32(1e-6)
+
+// isLogitsDegenerate reports whether a 5-position logits sample is unsafe to
+// feed into CompareLogits. Two degeneracies are rejected:
+//   - all-zero: attacker returns [0,0,0,0,0] which trivially matches a colluding
+//     verifier's equally-zero fake.
+//   - low-variance: attacker returns [c, c+ε₁, c+ε₂, ...] with εᵢ near float32
+//     noise floor, bypassing a naive all-zero guard while still being trivial
+//     to match.
+//
+// A legitimate sample from 5 independent token positions will always have
+// variance several orders of magnitude above the threshold.
+func isLogitsDegenerate(logits [5]float32) bool {
+	allZero := true
+	for _, v := range logits {
+		if v != 0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		return true
+	}
+
+	var mean float32
+	for _, v := range logits {
+		mean += v
+	}
+	mean /= 5
+
+	var variance float32
+	for _, v := range logits {
+		d := v - mean
+		variance += d * d
+	}
+	variance /= 5
+
+	return variance < degenerateLogitsVarThreshold
 }
 
 func computeFinalSeed(userSeed, dispatchBlockHash, taskId []byte) []byte {
