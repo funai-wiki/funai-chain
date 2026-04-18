@@ -35,7 +35,7 @@ Total engineering estimate: **3–4 weeks**.
 | 8 | Revenue and block-reward distribution | The old 4.5% verifier incentive was too low — participation suffered; the audit fund is split out to 3% | Governance parameter, 0 days |
 | 9 | `ComputeModelId` must include a weights hash (confirm) | Prevents fake model registration: an attacker cannot claim the id "Qwen3-72B" while actually pointing at Qwen-8B weights and charging large-model prices | 1 day (if missing) |
 | 10 | Leader must check user balance BEFORE dispatch (confirm) | DoS defense: a zero-balance user cannot force Leader / P2P resource consumption with a spam stream of requests | 0.5 day (if missing) |
-| 11 | Tendermint Chain ID set to `funai_333-1` (EVM Chain ID = 333) | Fixed earlier in commit `d32eeab`; no further change needed | Done |
+| 11 | Tendermint Chain ID set to `funai_123123123-3` (EVM Chain ID = 123123123) | Locked in `p2p/node.go` default and testnet config; no further change needed | Done |
 
 ---
 
@@ -341,12 +341,15 @@ currentCanServe := model.WorkerCount >= params.MinServiceWorkerCount &&
 | Multi-verification fund | 3% | Split out as its own bucket |
 
 **Verifier / second-verifier block-reward breakdown:**
-- **80% by fee weight:** pro-rata by the fee volume of tasks the Verifier / SecondVerifier participated in.
-- **20% by count weight:** pro-rata by the number of tasks verified.
+- **85% by fee weight:** pro-rata by the fee volume of tasks the Verifier / SecondVerifier participated in.
+- **15% by count weight:** pro-rata by the number of tasks verified.
 
-**Rationale for 80/20:**
-- 80% by fee → encourages Verifiers to grab large-fee tasks first (higher value, higher reward).
-- 20% by count → prevents small-fee tasks from being abandoned (they still add up to meaningful income).
+**Rationale for 85/15:**
+- 85% by fee → encourages Verifiers to grab large-fee tasks first (higher value, higher reward).
+- 15% by count → prevents small-fee tasks from being abandoned (they still add up to meaningful income).
+
+Implementation: `x/reward/types/params.go` — `DefaultFeeWeight = 0.85`,
+`DefaultCountWeight = 0.15` (pool-sum validation enforces they equal 1.0).
 
 **Worker block reward is distributed pro-rata to stake among active Workers.**
 
@@ -412,9 +415,11 @@ func (l *Leader) handleInferRequest(req *p2ptypes.InferRequest) error {
 
 ---
 
-### 11. Chain ID = `funai_333-1` (done)
+### 11. Chain ID = `funai_123123123-3` (done)
 
-Fixed in commit `d32eeab`. EVM Chain ID = 333. No further changes.
+Locked. EVM Chain ID = 123123123. Cosmos Chain ID follows the Cosmos EVM
+`<prefix>_<eip155>-<version>` convention: `funai_123123123-3`. Default in
+`p2p/node.go` and all testnet bootstrap configs. No further changes.
 
 Recorded here only for document completeness.
 
@@ -470,7 +475,7 @@ Recorded here only for document completeness.
 
 3. **Every change must pass tests before merge.** Each item needs corresponding unit tests + E2E tests green through CI before merging to `main`.
 
-4. **Chain ID is final.** `funai_333-1` is locked. Every new testnet boots from this Chain ID.
+4. **Chain ID is final.** `funai_123123123-3` is locked (EVM Chain ID 123123123). Every new testnet boots from this Chain ID.
 
 5. **This document is the source of truth for decisions.** Whitepaper and technical documentation defer to this document on facts.
 
@@ -524,7 +529,7 @@ Multiple candidate values were discussed. **Final choice: 21.** Symmetry (3 prim
 
 Leader forces `ExpireBlock ≥ a minimum` (e.g. 50 s) during `InferRequest` handling, to prevent a user with a modified SDK setting a 1-second timeout and wasting Worker time.
 
-**Rejected because:** the Worker itself decides on receipt of `AssignTask` whether `ExpireBlock` is achievable. If not, it rejects without Reputation penalty (honest rejection). A user setting a 1-second timeout via a modified SDK is only hurting themselves (the task inevitably fails and they pay the 5% `max_fee` penalty), not mounting a real external attack. The protocol does not need to enforce this; Worker-side decision-making is enough.
+**Rejected because:** the Worker itself decides on receipt of `AssignTask` whether `ExpireBlock` is achievable. If not, it rejects without Reputation penalty (honest rejection). A user setting a 1-second timeout via a modified SDK is only hurting themselves (the task inevitably fails and they pay the 15% `max_fee` penalty, per `x/settlement/types/params.go` `DefaultFailSettlementFeeRatio = 150` per-mille), not mounting a real external attack. The protocol does not need to enforce this; Worker-side decision-making is enough.
 
 ---
 
