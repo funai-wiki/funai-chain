@@ -238,6 +238,84 @@ func TestSetLeadersForModel_ClearsWhenEmpty(t *testing.T) {
 	}
 }
 
+// ── Audit KT §5: InferReceipt.InferenceLatencyMs is signature-covered ────────
+//
+// Regression tests that the new field participates in the Worker's signature
+// so a MITM cannot rewrite the reported latency to game the Worker's on-chain
+// AvgLatencyMs (and thus the VRF speed ranking).
+
+func makeSignedReceipt(t *testing.T, priv secp256k1.PrivKey, inferenceLatencyMs uint32) *p2ptypes.InferReceipt {
+	t.Helper()
+	r := &p2ptypes.InferReceipt{
+		TaskId:             []byte("task-id-latency-1"),
+		WorkerPubkey:       priv.PubKey().Bytes(),
+		WorkerLogits:       [5]float32{1.0, 2.0, 3.0, 4.0, 5.0},
+		ResultHash:         []byte("result-hash-0000"),
+		FinalSeed:          []byte("final-seed-00"),
+		SampledTokens:      [5]uint32{10, 20, 30, 40, 50},
+		InputTokenCount:    42,
+		OutputTokenCount:   7,
+		InferenceLatencyMs: inferenceLatencyMs,
+	}
+	sig, err := priv.Sign(r.SignBytes())
+	if err != nil {
+		t.Fatalf("sign receipt: %v", err)
+	}
+	r.WorkerSig = sig
+	return r
+}
+
+// TestInferReceiptSig_ValidRoundTrip: a signed receipt round-trips through
+// SignBytes → VerifySignature with the original Worker's pubkey.
+func TestInferReceiptSig_ValidRoundTrip(t *testing.T) {
+	priv := secp256k1.GenPrivKey()
+	r := makeSignedReceipt(t, priv, 250)
+	pk := secp256k1.PubKey(r.WorkerPubkey)
+	if !pk.VerifySignature(r.SignBytes(), r.WorkerSig) {
+		t.Fatal("valid receipt signature must verify")
+	}
+}
+
+// TestInferReceiptSig_TamperedInferenceLatencyMs: a MITM cannot change the
+// reported latency without invalidating the signature.
+func TestInferReceiptSig_TamperedInferenceLatencyMs(t *testing.T) {
+	priv := secp256k1.GenPrivKey()
+	r := makeSignedReceipt(t, priv, 250)
+
+	r.InferenceLatencyMs = 10 // attacker tries to make this Worker look 25× faster
+
+	pk := secp256k1.PubKey(r.WorkerPubkey)
+	if pk.VerifySignature(r.SignBytes(), r.WorkerSig) {
+		t.Fatal("tampered InferenceLatencyMs must invalidate the Worker signature")
+	}
+}
+
+// TestInferReceiptSig_DigestChangesWithLatency: sanity check that changing
+// only InferenceLatencyMs (all other fields equal) produces a different digest.
+// Guards against accidentally dropping the field from SignBytes in a future
+// refactor.
+func TestInferReceiptSig_DigestChangesWithLatency(t *testing.T) {
+	base := &p2ptypes.InferReceipt{
+		TaskId:             []byte("task-id-latency-2"),
+		WorkerPubkey:       []byte("pk-33-bytes......................"), // 33 chars, non-functional
+		WorkerLogits:       [5]float32{0.1, 0.2, 0.3, 0.4, 0.5},
+		ResultHash:         []byte("result-hash"),
+		FinalSeed:          []byte("final-seed"),
+		SampledTokens:      [5]uint32{1, 2, 3, 4, 5},
+		InputTokenCount:    10,
+		OutputTokenCount:   20,
+		InferenceLatencyMs: 100,
+	}
+	faster := *base
+	faster.InferenceLatencyMs = 50
+
+	if string(base.SignBytes()) == string(faster.SignBytes()) {
+		t.Fatal("SignBytes must differ when only InferenceLatencyMs differs")
+	}
+}
+
+// ── S4: AssignTask Leader signature — SigDigest regression tests ─────────────
+
 // TestAssignTaskSigDigest_Deterministic: the same task produces the same digest.
 func TestAssignTaskSigDigest_Deterministic(t *testing.T) {
 	p1 := secp256k1.GenPrivKey()

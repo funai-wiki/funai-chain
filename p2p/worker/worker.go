@@ -3,11 +3,9 @@ package worker
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
-	gomath "math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -58,8 +56,14 @@ type Worker struct {
 	leaderAddrs    map[string][]string // modelId → up to 3 addresses (for logging / M12)
 	leadersSeeded  bool                // true once SetLeadersForModel has been called at least once
 
-	// Audit KT §4: latency tracking for self-assessment
-	avgFirstTokenMs atomic.Uint32 // exponential moving average of first-token latency (ms)
+	// Audit KT §5: latency tracking for self-assessment. EMA of inference duration
+	// (engine call → receipt), matching what the Worker reports on-chain via
+	// InferReceipt.InferenceLatencyMs. The field was previously named
+	// avgFirstTokenMs, but the measurement is and always was total inference time —
+	// measuring real TTFT would require per-token streaming instrumentation that
+	// doesn't exist for the deterministic (temperature > 0) path. Renamed to match
+	// reality and avoid driving spec decisions off a misnamed signal.
+	avgInferenceMs atomic.Uint32 // EMA of InferenceLatencyMs (ms)
 }
 
 // SetLeadersForModel updates the accepted top-3 VRF-ranked Leader pubkeys / addresses
@@ -209,15 +213,18 @@ func (w *Worker) HandleTask(ctx context.Context, task *p2ptypes.AssignTask, bloc
 	}
 	_ = leaderAddr // M12 legacy parameter; retained for call-site stability but no longer used
 
-	// Audit KT §4: reject if we cannot meet latency requirement
+	// Audit KT §4/§5: reject if we cannot meet the user's latency requirement.
+	// avgInferenceMs is total inference time (engine call → receipt). We compare it
+	// to MaxLatencyMs as an upper-bound proxy for TTFT — if total inference is
+	// already over the budget, TTFT is guaranteed to be too. Under-approximates TTFT
+	// (over-rejects some valid tasks) but never accepts a task we cannot meet.
 	if task.MaxLatencyMs > 0 {
-		avgMs := w.avgFirstTokenMs.Load()
-		// If we have latency history and it exceeds requirement, reject honestly (no reputation penalty)
+		avgMs := w.avgInferenceMs.Load()
 		if avgMs > 0 && avgMs > task.MaxLatencyMs {
 			w.sendAcceptTask(ctx, task.TaskId, false)
 			return nil, fmt.Errorf("cannot meet latency requirement: avg %dms > max %dms", avgMs, task.MaxLatencyMs)
 		}
-		// If GPU concurrency is high, estimated latency scales linearly
+		// If GPU concurrency is high, estimated latency scales linearly.
 		activeTasks := w.activeInferenceTasks.Load()
 		if activeTasks > 0 && avgMs > 0 {
 			estimatedMs := avgMs * (activeTasks + 1)
@@ -369,16 +376,19 @@ func (w *Worker) HandleTask(ctx context.Context, task *p2ptypes.AssignTask, bloc
 		}
 	}
 
-	// Audit KT §4: update first-token latency EMA for self-assessment
+	// Audit KT §5: update inference-duration EMA for self-assessment. The same
+	// inferMs value is embedded into the outgoing InferReceipt below so the chain
+	// can update the Worker's on-chain AvgLatencyMs from a Worker-signed sample
+	// rather than a noisy proposer wall-clock measurement.
 	inferMs := uint32(time.Since(inferStart).Milliseconds())
 	if inferMs > 0 {
-		prev := w.avgFirstTokenMs.Load()
+		prev := w.avgInferenceMs.Load()
 		if prev == 0 {
-			w.avgFirstTokenMs.Store(inferMs)
+			w.avgInferenceMs.Store(inferMs)
 		} else {
 			// Exponential moving average: new = 0.8*old + 0.2*sample
 			updated := (prev*4 + inferMs) / 5
-			w.avgFirstTokenMs.Store(updated)
+			w.avgInferenceMs.Store(updated)
 		}
 	}
 
@@ -404,14 +414,15 @@ func (w *Worker) HandleTask(ctx context.Context, task *p2ptypes.AssignTask, bloc
 	}
 
 	receipt := &p2ptypes.InferReceipt{
-		TaskId:           task.TaskId,
-		WorkerPubkey:     w.Pubkey,
-		WorkerLogits:     logProbs,
-		ResultHash:       resultHash[:],
-		FinalSeed:        finalSeedHash[:],
-		SampledTokens:    tokenIDs,
-		InputTokenCount:  inputTokenCount,
-		OutputTokenCount: outputTokenCount,
+		TaskId:             task.TaskId,
+		WorkerPubkey:       w.Pubkey,
+		WorkerLogits:       logProbs,
+		ResultHash:         resultHash[:],
+		FinalSeed:           finalSeedHash[:],
+		SampledTokens:      tokenIDs,
+		InputTokenCount:    inputTokenCount,
+		OutputTokenCount:   outputTokenCount,
+		InferenceLatencyMs: inferMs,
 	}
 
 	// S6: Worker must sign the InferReceipt as proof of work
@@ -444,23 +455,24 @@ func (w *Worker) HandleTask(ctx context.Context, task *p2ptypes.AssignTask, bloc
 		ranked = vrftypes.RankWorkers(verifSeed, ranked, vrftypes.AlphaVerification)
 
 		verifyPayload := VerifyPayload{
-			TaskId:            task.TaskId,
-			Prompt:            task.Prompt,
-			Output:            completeOutput,
-			WorkerLogits:      logProbs,
-			ResultHash:        resultHash[:],
-			Temperature:       temperature,
-			TopP:              topP,
-			FinalSeed:         finalSeedHash[:],
-			SampledTokens:     tokenIDs,
-			InputTokenCount:   inputTokenCount,
-			OutputTokenCount:  outputTokenCount,
-			UserSeed:          userSeed,
-			DispatchBlockHash: blockHash,
-			WorkerAddress:     w.Address,
-			WorkerPubkey:      w.Pubkey,
-			WorkerSig:         receipt.WorkerSig,
-			ModelId:           task.ModelId, // KT: for multi-model topic routing
+			TaskId:             task.TaskId,
+			Prompt:             task.Prompt,
+			Output:             completeOutput,
+			WorkerLogits:       logProbs,
+			ResultHash:         resultHash[:],
+			Temperature:        temperature,
+			TopP:               topP,
+			FinalSeed:          finalSeedHash[:],
+			SampledTokens:      tokenIDs,
+			InputTokenCount:    inputTokenCount,
+			OutputTokenCount:   outputTokenCount,
+			InferenceLatencyMs: inferMs,
+			UserSeed:           userSeed,
+			DispatchBlockHash:  blockHash,
+			WorkerAddress:      w.Address,
+			WorkerPubkey:       w.Pubkey,
+			WorkerSig:          receipt.WorkerSig,
+			ModelId:            task.ModelId, // KT: for multi-model topic routing
 		}
 		// Publish verify payload to each target verifier via model topic
 		// (all nodes subscribe to model topic; verifier filters by TargetVerifier)
@@ -525,43 +537,19 @@ func (w *Worker) StopRebroadcast(taskId []byte) {
 }
 
 // signReceipt produces a secp256k1 signature over the InferReceipt canonical bytes.
-// S6 §7.3, §10.2: the signature proves "Worker actually did the inference".
-// S9: also covers InputTokenCount and OutputTokenCount.
+// S6 §7.3, §10.2: proves "Worker actually did the inference".
+// Delegates the canonical byte layout to InferReceipt.SignBytes so the signer,
+// the verifier (p2p/verifier), and the SDK all read from one definition.
 func (w *Worker) signReceipt(receipt *p2ptypes.InferReceipt) []byte {
-	h := sha256.New()
-	h.Write(receipt.TaskId)
-	h.Write(receipt.WorkerPubkey)
-	h.Write(receipt.ResultHash)
-	h.Write(receipt.FinalSeed)
-	for i := 0; i < 5; i++ {
-		bits := gomath.Float32bits(receipt.WorkerLogits[i])
-		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, bits)
-		h.Write(buf)
+	if len(w.PrivKey) != 32 {
+		return nil
 	}
-	for i := 0; i < 5; i++ {
-		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, receipt.SampledTokens[i])
-		h.Write(buf)
+	var privKey secp256k1.PrivKey = w.PrivKey
+	sig, err := privKey.Sign(receipt.SignBytes())
+	if err != nil {
+		return nil
 	}
-	// S9: include token counts in signature
-	itcBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(itcBuf, receipt.InputTokenCount)
-	h.Write(itcBuf)
-	otcBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(otcBuf, receipt.OutputTokenCount)
-	h.Write(otcBuf)
-	msgHash := h.Sum(nil)
-
-	if len(w.PrivKey) == 32 {
-		var privKey secp256k1.PrivKey = w.PrivKey
-		sig, err := privKey.Sign(msgHash)
-		if err != nil {
-			return nil
-		}
-		return sig
-	}
-	return nil
+	return sig
 }
 
 // sendAcceptTask publishes an AcceptTask response back to the Leader.
@@ -603,6 +591,9 @@ type VerifyPayload struct {
 	SampledTokens     [5]uint32  `json:"sampled_tokens"`
 	InputTokenCount   uint32     `json:"input_token_count"`
 	OutputTokenCount  uint32     `json:"output_token_count"`
+	// Audit KT §5: Worker's signed inference duration; required in the payload so
+	// the Verifier can reconstruct InferReceipt.SignBytes and validate WorkerSig.
+	InferenceLatencyMs uint32     `json:"inference_latency_ms,omitempty"`
 	UserSeed          []byte     `json:"user_seed"`                 // S4: for final_seed verification
 	DispatchBlockHash []byte     `json:"dispatch_block_hash"`       // S4: for final_seed verification
 	WorkerAddress     string     `json:"worker_address"`            // M3: for VRF self-check

@@ -332,12 +332,14 @@ func (p *Proposer) ProcessPending(ctx context.Context, blockHash []byte) (int, [
 			_ = dispatchSeed // seed construction for reference
 		}
 
+		// Audit KT §5: use the Worker's signed inference duration instead of the
+		// proposer's wall-clock (ReceivedAt - user_request_timestamp), which included
+		// P2P dispatch / relay and the user's clock skew — all noise for VRF speed
+		// ranking. InferenceLatencyMs is covered by Worker's secp256k1 signature so
+		// this is tamper-evident end-to-end.
 		var latencyMs uint64
-		if ev.Request != nil {
-			requestMs := ev.Request.Timestamp / 1_000_000 // Timestamp is UnixNano
-			if ev.ReceivedAt > requestMs {
-				latencyMs = ev.ReceivedAt - requestMs
-			}
+		if ev.Receipt != nil && ev.Receipt.InferenceLatencyMs > 0 {
+			latencyMs = uint64(ev.Receipt.InferenceLatencyMs)
 		}
 
 		entry := settlementtypes.SettlementEntry{

@@ -439,38 +439,25 @@ func chacha20Sample(topKLogits []inference.TopTokenInfo, temperature float32, to
 // verifyWorkerPayloadSignature verifies the Worker's InferReceipt signature
 // to ensure the payload was not tampered with by a MITM.
 // P1-4 §9.4 step 1: verify worker_sig over the canonical receipt fields.
+// Reuses InferReceipt.SignBytes so this stays in sync with the signer
+// (p2p/worker.signReceipt) and the SDK's receipt verifier.
 func (v *Verifier) verifyWorkerPayloadSignature(payload *worker.VerifyPayload) bool {
 	if len(payload.WorkerSig) == 0 || len(payload.WorkerPubkey) == 0 {
 		return false
 	}
-
-	// Reconstruct the InferReceipt SignBytes hash
-	h := sha256.New()
-	h.Write(payload.TaskId)
-	h.Write(payload.WorkerPubkey)
-	h.Write(payload.ResultHash)
-	h.Write(payload.FinalSeed)
-	for i := 0; i < 5; i++ {
-		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, gomath.Float32bits(payload.WorkerLogits[i]))
-		h.Write(buf)
+	canonical := &p2ptypes.InferReceipt{
+		TaskId:             payload.TaskId,
+		WorkerPubkey:       payload.WorkerPubkey,
+		WorkerLogits:       payload.WorkerLogits,
+		ResultHash:         payload.ResultHash,
+		FinalSeed:          payload.FinalSeed,
+		SampledTokens:      payload.SampledTokens,
+		InputTokenCount:    payload.InputTokenCount,
+		OutputTokenCount:   payload.OutputTokenCount,
+		InferenceLatencyMs: payload.InferenceLatencyMs,
 	}
-	for i := 0; i < 5; i++ {
-		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, payload.SampledTokens[i])
-		h.Write(buf)
-	}
-	// S9: include token counts in signature
-	itcBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(itcBuf, payload.InputTokenCount)
-	h.Write(itcBuf)
-	otcBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(otcBuf, payload.OutputTokenCount)
-	h.Write(otcBuf)
-	msgHash := h.Sum(nil)
-
 	var pubKey secp256k1.PubKey = payload.WorkerPubkey
-	return pubKey.VerifySignature(msgHash, payload.WorkerSig)
+	return pubKey.VerifySignature(canonical.SignBytes(), payload.WorkerSig)
 }
 
 // E14: degenerateLogitsVarThreshold bounds the minimum acceptable variance across

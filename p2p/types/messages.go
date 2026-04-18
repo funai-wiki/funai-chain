@@ -137,11 +137,19 @@ type InferReceipt struct {
 	// S9: Worker's token count (included in worker_sig coverage)
 	InputTokenCount  uint32 `json:"input_token_count,omitempty"`
 	OutputTokenCount uint32 `json:"output_token_count,omitempty"`
+
+	// Audit KT §5: Worker-measured inference latency in ms, from the start of the
+	// engine call to receipt creation. Replaces the proposer's previous wall-clock
+	// measurement (ReceivedAt - user_request_timestamp) which included P2P dispatch
+	// and user clock skew — noise for VRF speed ranking. Included in worker_sig
+	// coverage so the Worker cannot be MITM-edited to fake a better score.
+	InferenceLatencyMs uint32 `json:"inference_latency_ms,omitempty"`
 }
 
 // SignBytes returns canonical bytes for signing the InferReceipt.
 // S6: covers TaskId, WorkerPubkey, ResultHash, FinalSeed, WorkerLogits, SampledTokens.
 // S9: also covers InputTokenCount, OutputTokenCount.
+// Audit KT §5: also covers InferenceLatencyMs.
 func (r *InferReceipt) SignBytes() []byte {
 	h := sha256.New()
 	h.Write(r.TaskId)
@@ -165,6 +173,10 @@ func (r *InferReceipt) SignBytes() []byte {
 	otcBuf := make([]byte, 4)
 	binary.BigEndian.PutUint32(otcBuf, r.OutputTokenCount)
 	h.Write(otcBuf)
+	// Audit KT §5: inference latency
+	latBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(latBuf, r.InferenceLatencyMs)
+	h.Write(latBuf)
 	return h.Sum(nil)
 }
 

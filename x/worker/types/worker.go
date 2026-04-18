@@ -64,8 +64,17 @@ type Worker struct {
 	// Audit KT §3: consecutive reject counter — 10 rejects without accept → -0.05 penalty
 	ConsecutiveRejects uint32 `protobuf:"varint,24,opt,name=consecutive_rejects,proto3" json:"consecutive_rejects"`
 
-	// Audit KT §5: average first-token latency (ms), updated each settlement.
-	// VRF LatencyFactor = f(AvgLatencyMs, request.MaxLatencyMs)
+	// Audit KT §5: EMA of Worker-reported inference duration (engine call → receipt),
+	// in milliseconds. Updated at SUCCESS settlement from InferReceipt.InferenceLatencyMs,
+	// which is covered by the Worker's secp256k1 signature (tamper-evident).
+	//
+	// Semantic note: this is total inference time, NOT strictly time-to-first-token.
+	// For the deterministic (temperature > 0) path, measuring real TTFT would require
+	// per-token streaming instrumentation that the current engine interface does not
+	// expose. Total inference is always an upper bound on TTFT, so using this value
+	// against request.MaxLatencyMs (first-token deadline) under-approximates — it
+	// over-rejects some valid tasks but never accepts a task we cannot meet.
+	// Proper TTFT + throughput split is tracked as follow-up work.
 	AvgLatencyMs uint32 `protobuf:"varint,25,opt,name=avg_latency_ms,proto3" json:"avg_latency_ms"`
 }
 
