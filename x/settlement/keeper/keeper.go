@@ -1263,7 +1263,8 @@ func (k Keeper) DistributeMultiVerificationFund(ctx sdk.Context, epoch int64) {
 // ProcessFraudProof handles FraudProof submission.
 // V5.2 §12.4: Two time orderings, both result in Worker slash + user refund:
 //   - FraudProof before settlement → mark FRAUD → BatchSettlement skips → user not charged.
-//   - FraudProof after settlement → recover Worker's 95% fee + refund to user → slash 5% → tombstone.
+//   - FraudProof after settlement → recover Worker's executor-fee share (ExecutorFeeRatio,
+//     currently 850/1000 = 85% post PR #2) + refund to user → slash 5% → tombstone.
 func (k Keeper) ProcessFraudProof(ctx sdk.Context, msg *types.MsgFraudProof) error {
 	if k.HasFraudMark(ctx, msg.TaskId) {
 		return types.ErrFraudMarked
@@ -1296,8 +1297,8 @@ func (k Keeper) ProcessFraudProof(ctx sdk.Context, msg *types.MsgFraudProof) err
 		st.Status = types.TaskFraud
 		k.SetSettledTask(ctx, st)
 
-		// M2: recover the 95% executor fee already distributed to Worker.
-		// Claw back from Worker and refund to user.
+		// M2: recover the executor-fee share (ExecutorFeeRatio, 850/1000 = 85% post PR #2)
+		// already distributed to Worker. Claw back from Worker and refund to user.
 		if st.Fee.IsPositive() {
 			params := k.GetParams(ctx)
 			executorAmount := st.Fee.Amount.MulRaw(int64(params.ExecutorFeeRatio)).QuoRaw(1000)
@@ -1607,8 +1608,10 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.SecondVerificatio
 }
 
 // settleAuditedTask settles a task after audit/third_verification completion.
-// alreadyPaidFail: if true, user already paid 5% during initial FAIL settlement,
-// so only charge the remaining 95% (not full fee) to avoid double-charging.
+// alreadyPaidFail: if true, user already paid FailSettlementFeeRatio (150/1000 = 15%
+// post PR #2) during initial FAIL settlement, so only charge the remaining 85% (not full
+// fee) to avoid double-charging. Numbers are for documentation; code reads the dynamic
+// ratio from params.
 func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationPendingTask, asSuccess bool, alreadyPaidFail bool, params types.Params, overrideOutputTokens uint32) {
 	userAddr, err := sdk.AccAddressFromBech32(apt.UserAddress)
 	if err != nil {
@@ -2122,7 +2125,9 @@ func (k Keeper) StoreFrozenTaskMeta(ctx sdk.Context, meta types.FrozenTaskMeta) 
 }
 
 // HandleFrozenBalanceTimeouts processes per-token tasks that have expired without settlement.
-// S9 §4.4: charge timeout_fee = max_fee × 5% to audit fund, refund 95%, jail Worker.
+// S9 §4.4: charge timeout_fee = max_fee × FailSettlementFeeRatio (150/1000 = 15% post
+// PR #2) to the multi-verification fund, refund the remaining 85%, jail Worker.
+// Percentages are for documentation; code uses the dynamic params ratio.
 func (k Keeper) HandleFrozenBalanceTimeouts(ctx sdk.Context) int {
 	params := k.GetParams(ctx)
 	if !params.PerTokenBillingEnabled {

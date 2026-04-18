@@ -198,10 +198,11 @@ func TestMultiVerificationFundDistribution_SingleSecondVerifierMultipleTasks(t *
 
 // ============================================================
 // Fix 2: FAIL→SUCCESS audit overturn — user not double-charged
-// Spec: "FAIL settlement: user pays 5%". When overturned to SUCCESS,
-// P1-NEW-1 fix: Under "no settlement before audit" principle, when audit VRF triggers during batch
-// processing, it `continue`s before ANY fee is collected (neither SUCCESS 100% nor FAIL 5%).
-// So on audit overturn FAIL→SUCCESS, user should pay full 100%, not 95%.
+// Spec post PR #2: "FAIL settlement: user pays FailSettlementFeeRatio (15%)". When
+// overturned to SUCCESS, P1-NEW-1 fix: Under "no settlement before audit" principle,
+// when audit VRF triggers during batch processing, it `continue`s before ANY fee is
+// collected (neither SUCCESS 100% nor FAIL 15%). So on audit overturn FAIL→SUCCESS,
+// user should pay full 100%, not 85% (remainder after the would-be 15% FAIL pre-charge).
 // ============================================================
 
 func TestAuditOverturn_FailToSuccess_UserNotDoubleCharged(t *testing.T) {
@@ -247,7 +248,7 @@ func TestAuditOverturn_FailToSuccess_UserNotDoubleCharged(t *testing.T) {
 		})
 	}
 
-	// P1-NEW-1: user pays full 100% fee (not 95%) because no fee was ever collected before audit.
+	// P1-NEW-1: user pays full 100% fee (not 85%) because no fee was ever collected before audit.
 	ia, _ = k.GetInferenceAccount(ctx, userAddr)
 	expectedFinal := deposit.Amount.Sub(fee.Amount)
 	if !ia.Balance.Amount.Equal(expectedFinal) {
