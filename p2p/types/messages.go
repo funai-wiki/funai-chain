@@ -207,6 +207,42 @@ type AssignTask struct {
 	StreamMode   bool   `json:"stream_mode,omitempty"`    // client needs streaming
 }
 
+// SigDigest returns the canonical 32-byte hash that the Leader signs over the
+// AssignTask fields and the Worker verifies. Any change to the field set or their
+// binary layout MUST be mirrored on both the signer (p2p/leader) and verifier
+// (p2p/worker) sides — keeping one definition avoids drift.
+//
+// P1-5 / S9: coverage includes billing fields (per-token + max_tokens) so a MITM
+// cannot tamper with prompt, fee, seed, or budget bounds.
+func (a *AssignTask) SigDigest() [32]byte {
+	h := sha256.New()
+	h.Write(a.TaskId)
+	h.Write(a.ModelId)
+	h.Write([]byte(a.Prompt))
+	feeBuf := make([]byte, 8)
+	binary.BigEndian.PutUint64(feeBuf, a.MaxFee)
+	h.Write(feeBuf)
+	h.Write(a.UserAddr)
+	tempBuf := make([]byte, 2)
+	binary.BigEndian.PutUint16(tempBuf, a.Temperature)
+	h.Write(tempBuf)
+	h.Write(a.UserSeed)
+	h.Write(a.DispatchBlockHash)
+	fipBuf := make([]byte, 8)
+	binary.BigEndian.PutUint64(fipBuf, a.FeePerInputToken)
+	h.Write(fipBuf)
+	fopBuf := make([]byte, 8)
+	binary.BigEndian.PutUint64(fopBuf, a.FeePerOutputToken)
+	h.Write(fopBuf)
+	mfBuf := make([]byte, 8)
+	binary.BigEndian.PutUint64(mfBuf, a.MaxFee)
+	h.Write(mfBuf)
+	mtBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(mtBuf, a.MaxTokens)
+	h.Write(mtBuf)
+	return sha256.Sum256(h.Sum(nil))
+}
+
 // IsPerToken returns true if this task uses per-token billing (S9).
 func (a *AssignTask) IsPerToken() bool {
 	return a.FeePerInputToken > 0 && a.FeePerOutputToken > 0

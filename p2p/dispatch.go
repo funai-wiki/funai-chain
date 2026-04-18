@@ -465,11 +465,12 @@ func (n *Node) doRefreshWorkerList(ctx context.Context) {
 	n.Verifier.SetActiveWorkers(rankedWorkers)
 	n.Proposer.SetActiveWorkers(rankedWorkers)
 
-	// P0-5: set current leader pubkey on Worker for AssignTask signature verification.
-	// Determine the actual VRF-elected leader for each model and set the pubkey.
-	// For now, Leader signs with its own key; Worker can verify once it knows who the leader is.
-	// TODO: implement proper VRF leader election lookup to set correct leader pubkey.
-	// Currently the check is skipped when CurrentLeaderPubkey is not set (safe default).
+	// S4: compute the top-3 VRF-elected Leader candidates per supported model and
+	// push them into Worker so it can verify AssignTask.LeaderSig against this set.
+	// Storing top-3 (rather than only rank#1) gracefully covers two cases:
+	//   1. Leader failover to rank#2 / rank#3 (§6.2, 1.5s inactivity threshold).
+	//   2. Epoch transitions where old and new Leaders briefly overlap.
+	n.applyLeaderDistributionToWorker(ctx, rankedWorkers)
 
 	n.cachedWorkersMu.Lock()
 	n.cachedWorkers = rankedWorkers
@@ -478,6 +479,68 @@ func (n *Node) doRefreshWorkerList(ctx context.Context) {
 	if len(rankedWorkers) > 0 {
 		log.Printf("dispatch: refreshed %d workers", len(rankedWorkers))
 	}
+}
+
+// applyLeaderDistributionToWorker ranks `rankedWorkers` via VRF with
+// seed = sha256(model_id || 0 || latest_block_hash) for each model supported by
+// this node and publishes the top-3 pubkeys/addresses to the Worker.
+//
+// The seed format mirrors x/vrf/keeper.SelectLeader (V5.2 §23 leader_vrf_seed);
+// sub_topic_id is pinned to 0 until auto-split (P2-3) is wired into P2P.
+func (n *Node) applyLeaderDistributionToWorker(ctx context.Context, rankedWorkers []vrftypes.RankedWorker) {
+	if n.Worker == nil || len(n.Config.ModelIds) == 0 {
+		return
+	}
+	if len(rankedWorkers) == 0 {
+		return // leave previously-seeded leader sets in place
+	}
+
+	var blockHash []byte
+	if n.Chain != nil {
+		if bh, _, err := n.Chain.GetLatestBlockHash(ctx); err == nil {
+			blockHash = bh
+		}
+	}
+	if len(blockHash) == 0 {
+		// Without a block hash we cannot compute a deterministic leader. Skip this
+		// tick so stale leaders are not silently accepted.
+		log.Printf("dispatch: skipping leader distribution — block hash unavailable")
+		return
+	}
+
+	for _, modelId := range n.Config.ModelIds {
+		seedBytes := leaderSeed(modelId, blockHash)
+		candidates := make([]vrftypes.RankedWorker, len(rankedWorkers))
+		copy(candidates, rankedWorkers)
+		ranked := vrftypes.RankWorkers(seedBytes, candidates, vrftypes.AlphaDispatch)
+
+		topN := 3
+		if topN > len(ranked) {
+			topN = len(ranked)
+		}
+		addrs := make([]string, 0, topN)
+		pubkeys := make([][]byte, 0, topN)
+		for i := 0; i < topN; i++ {
+			if len(ranked[i].Pubkey) == 0 {
+				continue
+			}
+			addrs = append(addrs, ranked[i].Address)
+			pubkeys = append(pubkeys, append([]byte(nil), ranked[i].Pubkey...))
+		}
+		n.Worker.SetLeadersForModel(modelId, addrs, pubkeys)
+	}
+}
+
+// leaderSeed reproduces the V5.2 §23 leader_vrf_seed definition:
+// sha256(model_id || sub_topic_id || epoch_block_hash). sub_topic_id = 0 is fixed
+// until multi-sub-topic splitting (P2-3) is implemented.
+func leaderSeed(modelId string, blockHash []byte) []byte {
+	buf := make([]byte, 0, len(modelId)+1+len(blockHash))
+	buf = append(buf, []byte(modelId)...)
+	buf = append(buf, 0)
+	buf = append(buf, blockHash...)
+	out := sha256.Sum256(buf)
+	return out[:]
 }
 
 // ── Batch Settlement Loop ──────────────────────────────────────────────────

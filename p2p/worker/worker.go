@@ -32,34 +32,88 @@ type OutputObserver interface {
 
 // Worker handles inference execution and verification dispatch.
 type Worker struct {
-	Address             string
-	Pubkey              []byte
-	PrivKey             []byte // S6: private key for signing InferReceipts
-	ModelIds            []string
-	Host                *p2phost.Host
-	Engine              inference.Engine
-	ChainClient         *chain.Client
-	CurrentLeader       string // M12: expected leader address for legitimacy check
-	CurrentLeaderPubkey []byte // S4: leader's secp256k1 pubkey for AssignTask signature verification
-	OutputObserver      OutputObserver
-	activeTasks         sync.Map // P2-3: task_id dedup to prevent processing duplicate dispatches
-	rebroadcastCancels  sync.Map // P2-8: task_key → context.CancelFunc for rebroadcast termination
+	Address            string
+	Pubkey             []byte
+	PrivKey            []byte // S6: private key for signing InferReceipts
+	ModelIds           []string
+	Host               *p2phost.Host
+	Engine             inference.Engine
+	ChainClient        *chain.Client
+	OutputObserver     OutputObserver
+	activeTasks        sync.Map // P2-3: task_id dedup to prevent processing duplicate dispatches
+	rebroadcastCancels sync.Map // P2-8: task_key → context.CancelFunc for rebroadcast termination
 	// S1: concurrent inference control
 	activeInferenceTasks atomic.Uint32
 	maxConcurrentTasks   uint32
+
+	// S4: per-model set of accepted Leader pubkeys/addresses for AssignTask signature
+	// verification. Stores the top-3 VRF-ranked candidates so that:
+	//   - Normal dispatch by rank#1 is accepted.
+	//   - Leader failover to rank#2/#3 (§6.2) is accepted without waiting for next refresh.
+	//   - Epoch transitions briefly tolerate both old and new leaders.
+	// A nil/empty set for a model means "not yet known" — during cold start before the
+	// first chain refresh, HandleTask treats this as bootstrap and permits the task.
+	leadersMu      sync.RWMutex
+	leaderPubkeys  map[string][][]byte // modelId → up to 3 pubkeys
+	leaderAddrs    map[string][]string // modelId → up to 3 addresses (for logging / M12)
+	leadersSeeded  bool                // true once SetLeadersForModel has been called at least once
 
 	// Audit KT §4: latency tracking for self-assessment
 	avgFirstTokenMs atomic.Uint32 // exponential moving average of first-token latency (ms)
 }
 
-// SetCurrentLeader updates the expected leader address and pubkey (from VRF rotation).
-func (w *Worker) SetCurrentLeader(leader string) {
-	w.CurrentLeader = leader
+// SetLeadersForModel updates the accepted top-3 VRF-ranked Leader pubkeys / addresses
+// for the given model. Called by dispatch.go after each worker-list refresh.
+// Passing an empty list clears the entry (leaves the model in "unknown" state).
+func (w *Worker) SetLeadersForModel(modelId string, addrs []string, pubkeys [][]byte) {
+	w.leadersMu.Lock()
+	defer w.leadersMu.Unlock()
+	if w.leaderPubkeys == nil {
+		w.leaderPubkeys = make(map[string][][]byte)
+		w.leaderAddrs = make(map[string][]string)
+	}
+	if len(pubkeys) == 0 {
+		delete(w.leaderPubkeys, modelId)
+		delete(w.leaderAddrs, modelId)
+		return
+	}
+	w.leaderPubkeys[modelId] = append([][]byte(nil), pubkeys...)
+	w.leaderAddrs[modelId] = append([]string(nil), addrs...)
+	w.leadersSeeded = true
 }
 
-// SetCurrentLeaderPubkey updates the leader's pubkey for S4 AssignTask signature verification.
-func (w *Worker) SetCurrentLeaderPubkey(pubkey []byte) {
-	w.CurrentLeaderPubkey = pubkey
+// isLeaderAuthorized returns true if any of the top-3 accepted Leader pubkeys for the
+// model validly signs the given AssignTask. The second return value `bootstrap` is true
+// if no leader set has ever been seeded (cold-start) — the caller should treat this as
+// a permit-with-warning rather than a hard reject.
+func (w *Worker) isLeaderAuthorized(task *p2ptypes.AssignTask) (authorized bool, bootstrap bool) {
+	w.leadersMu.RLock()
+	defer w.leadersMu.RUnlock()
+	if !w.leadersSeeded {
+		return false, true
+	}
+	pubkeys := w.leaderPubkeys[string(task.ModelId)]
+	if len(pubkeys) == 0 {
+		// Leaders known for some models but not this one — do NOT treat as bootstrap.
+		return false, false
+	}
+	for _, pk := range pubkeys {
+		if verifyAssignTaskSigWith(task, pk) {
+			return true, false
+		}
+	}
+	return false, false
+}
+
+// KnownLeaderAddrsForModel returns the current accepted Leader address list (for logging).
+func (w *Worker) KnownLeaderAddrsForModel(modelId string) []string {
+	w.leadersMu.RLock()
+	defer w.leadersMu.RUnlock()
+	addrs := w.leaderAddrs[modelId]
+	if len(addrs) == 0 {
+		return nil
+	}
+	return append([]string(nil), addrs...)
 }
 
 // InferenceEngine is the interface for running inference.
@@ -134,20 +188,26 @@ func (w *Worker) HandleTask(ctx context.Context, task *p2ptypes.AssignTask, bloc
 	}
 	defer w.activeTasks.Delete(taskKey)
 
-	// M12: verify sender is the legitimate leader
-	if w.CurrentLeader != "" && leaderAddr != "" && leaderAddr != w.CurrentLeader {
-		// P2-6: send reject AcceptTask
+	// S4: the AssignTask MUST carry a Leader signature that verifies against one of the
+	// top-3 VRF-ranked Leader pubkeys we know for this model. This is the only thing
+	// standing between a random network peer and the ability to forge dispatch for this
+	// Worker (spoofing prompt, fee, billing, task_id, etc.). Semantics:
+	//   - Bootstrap (no leader set has ever been seeded): permit, but log loudly so
+	//     operators notice if refresh is failing in production.
+	//   - Leader set known for other models but empty for this model: hard FAIL (unknown
+	//     Leader for this task's model).
+	//   - Sig missing or doesn't match any of the top-3 known Leader pubkeys: hard FAIL.
+	// The legacy M12 `leaderAddr` string is unreliable (dispatch always passes "") so we
+	// authenticate purely from the signature.
+	authorized, bootstrap := w.isLeaderAuthorized(task)
+	if bootstrap {
+		fmt.Printf("S4: leader set not yet seeded — permitting task %x during cold start\n", task.TaskId[:8])
+	} else if !authorized {
 		w.sendAcceptTask(ctx, task.TaskId, false)
-		return nil, fmt.Errorf("task from non-leader %s, expected %s", leaderAddr, w.CurrentLeader)
+		known := w.KnownLeaderAddrsForModel(string(task.ModelId))
+		return nil, fmt.Errorf("S4: AssignTask for task %x is not signed by any of the top-3 accepted leaders for model %s (known=%v)", task.TaskId[:8], task.ModelId, known)
 	}
-
-	// S4: verify AssignTask signature to prevent MITM tampering of prompt/fee/billing fields
-	if len(task.LeaderSig) > 0 && len(w.CurrentLeaderPubkey) > 0 {
-		if !w.verifyAssignTaskSig(task) {
-			w.sendAcceptTask(ctx, task.TaskId, false)
-			return nil, fmt.Errorf("S4: invalid AssignTask signature from leader")
-		}
-	}
+	_ = leaderAddr // M12 legacy parameter; retained for call-site stability but no longer used
 
 	// Audit KT §4: reject if we cannot meet latency requirement
 	if task.MaxLatencyMs > 0 {
@@ -577,37 +637,16 @@ func shouldStopGeneration(task *p2ptypes.AssignTask, inputTokenCount uint32, cur
 
 // verifyAssignTaskSig verifies the leader's signature on an AssignTask (S4).
 // Replicates the signing logic from leader.go:362-391.
-func (w *Worker) verifyAssignTaskSig(task *p2ptypes.AssignTask) bool {
-	sigData := sha256.New()
-	sigData.Write(task.TaskId)
-	sigData.Write(task.ModelId)
-	sigData.Write([]byte(task.Prompt))
-	feeBuf := make([]byte, 8)
-	binary.BigEndian.PutUint64(feeBuf, task.MaxFee)
-	sigData.Write(feeBuf)
-	sigData.Write(task.UserAddr)
-	tempBuf := make([]byte, 2)
-	binary.BigEndian.PutUint16(tempBuf, task.Temperature)
-	sigData.Write(tempBuf)
-	sigData.Write(task.UserSeed)
-	sigData.Write(task.DispatchBlockHash)
-	fipBuf := make([]byte, 8)
-	binary.BigEndian.PutUint64(fipBuf, task.FeePerInputToken)
-	sigData.Write(fipBuf)
-	fopBuf := make([]byte, 8)
-	binary.BigEndian.PutUint64(fopBuf, task.FeePerOutputToken)
-	sigData.Write(fopBuf)
-	mfBuf := make([]byte, 8)
-	binary.BigEndian.PutUint64(mfBuf, task.MaxFee)
-	sigData.Write(mfBuf)
-	mtBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(mtBuf, task.MaxTokens)
-	sigData.Write(mtBuf)
-	h := sigData.Sum(nil)
-	msgHash := sha256.Sum256(h)
-
-	pubKey := secp256k1.PubKey(w.CurrentLeaderPubkey)
-	return pubKey.VerifySignature(msgHash[:], task.LeaderSig)
+// verifyAssignTaskSigWith verifies the AssignTask's LeaderSig against the given pubkey.
+// Returns false on any malformed input (empty sig, non-33-byte pubkey, etc.).
+// The canonical digest lives on AssignTask.SigDigest() in p2p/types.
+func verifyAssignTaskSigWith(task *p2ptypes.AssignTask, leaderPubkey []byte) bool {
+	if len(task.LeaderSig) == 0 || len(leaderPubkey) != 33 {
+		return false
+	}
+	digest := task.SigDigest()
+	pubKey := secp256k1.PubKey(leaderPubkey)
+	return pubKey.VerifySignature(digest[:], task.LeaderSig)
 }
 
 // pubkeyToBech32 converts a compressed secp256k1 public key to a bech32 "funai1..." address.

@@ -369,39 +369,14 @@ func (l *Leader) dispatchSingle(ctx context.Context, req *p2ptypes.InferRequest,
 				assign.MaxTokens = budgetTokens
 			}
 		}
-		// P1-5: Sign complete AssignTask fields including temperature/seed/blockHash
-		// S9: also covers per-token billing fields to prevent MITM tampering
+		// P1-5 / S9 / S4: sign the canonical AssignTask digest so Worker can verify
+		// prompt, fee, seed, billing, and max_tokens were not tampered with in transit.
+		// The digest definition lives on p2ptypes.AssignTask.SigDigest() so signer and
+		// verifier share one source of truth.
 		if len(l.PrivKey) == 32 {
-			sigData := sha256.New()
-			sigData.Write(taskId)
-			sigData.Write(req.ModelId)
-			sigData.Write([]byte(req.Prompt))
-			feeBuf := make([]byte, 8)
-			binary.BigEndian.PutUint64(feeBuf, req.MaxFee)
-			sigData.Write(feeBuf)
-			sigData.Write(req.UserPubkey)
-			tempBuf := make([]byte, 2)
-			binary.BigEndian.PutUint16(tempBuf, req.Temperature)
-			sigData.Write(tempBuf)
-			sigData.Write(req.UserSeed)
-			sigData.Write(blockHash)
-			fipBuf := make([]byte, 8)
-			binary.BigEndian.PutUint64(fipBuf, req.FeePerInputToken)
-			sigData.Write(fipBuf)
-			fopBuf := make([]byte, 8)
-			binary.BigEndian.PutUint64(fopBuf, req.FeePerOutputToken)
-			sigData.Write(fopBuf)
-			mfBuf := make([]byte, 8)
-			binary.BigEndian.PutUint64(mfBuf, req.MaxFee)
-			sigData.Write(mfBuf)
-			mtBuf := make([]byte, 4)
-			binary.BigEndian.PutUint32(mtBuf, assign.MaxTokens)
-			sigData.Write(mtBuf)
-			h := sigData.Sum(nil)
-			msgHash := sha256.Sum256(h)
+			digest := assign.SigDigest()
 			privKey := secp256k1.PrivKey(l.PrivKey)
-			sig, err := privKey.Sign(msgHash[:])
-			if err == nil {
+			if sig, err := privKey.Sign(digest[:]); err == nil {
 				assign.LeaderSig = sig
 			}
 		}

@@ -3,8 +3,284 @@ package worker
 import (
 	"testing"
 
+	"github.com/cometbft/cometbft/crypto/secp256k1"
+
 	p2ptypes "github.com/funai-wiki/funai-chain/p2p/types"
 )
+
+// ── S4: AssignTask Leader signature verification ─────────────────────────────
+//
+// These tests cover the guard that replaces the old "silent skip when pubkey
+// not set" behavior. Worker now stores the top-3 VRF-elected leader pubkeys
+// per model and must accept ONLY signatures produced by one of them.
+
+func makeSignedAssignTask(t *testing.T, modelId string, priv secp256k1.PrivKey) *p2ptypes.AssignTask {
+	t.Helper()
+	task := &p2ptypes.AssignTask{
+		TaskId:            []byte("task-id-12345678"),
+		ModelId:           []byte(modelId),
+		Prompt:            "hello world",
+		Fee:               1000,
+		UserAddr:          []byte("user-addr-000000"),
+		Temperature:       5000,
+		TopP:              9000,
+		UserSeed:          []byte("seed-1234"),
+		DispatchBlockHash: []byte("block-hash-abcdef0123456789"),
+		FeePerInputToken:  0,
+		FeePerOutputToken: 0,
+		MaxFee:            1000,
+		MaxTokens:         256,
+	}
+	digest := task.SigDigest()
+	sig, err := priv.Sign(digest[:])
+	if err != nil {
+		t.Fatalf("sign task: %v", err)
+	}
+	task.LeaderSig = sig
+	return task
+}
+
+// TestIsLeaderAuthorized_Bootstrap: cold start with no leaders seeded → permits task
+// with `bootstrap=true`. Caller logs a warning; task is allowed through so the Worker
+// doesn't black-hole traffic while waiting for the first chain refresh.
+func TestIsLeaderAuthorized_Bootstrap(t *testing.T) {
+	priv := secp256k1.GenPrivKey()
+	w := &Worker{}
+	task := makeSignedAssignTask(t, "model-A", priv)
+
+	authorized, bootstrap := w.isLeaderAuthorized(task)
+	if !bootstrap {
+		t.Fatal("expected bootstrap=true when no leader set has been seeded")
+	}
+	if authorized {
+		t.Fatal("expected authorized=false during bootstrap (caller uses bootstrap flag to permit)")
+	}
+}
+
+// TestIsLeaderAuthorized_UnknownModel: leaders seeded for model-A, task is for model-B
+// → must hard-fail (not bootstrap, not authorized). An adversary could otherwise publish
+// AssignTasks for a model the Worker doesn't support and exploit the bootstrap path.
+func TestIsLeaderAuthorized_UnknownModel(t *testing.T) {
+	otherPriv := secp256k1.GenPrivKey()
+	attackerPriv := secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("model-A", []string{"addr-A"}, [][]byte{otherPriv.PubKey().Bytes()})
+
+	task := makeSignedAssignTask(t, "model-B", attackerPriv)
+	authorized, bootstrap := w.isLeaderAuthorized(task)
+	if bootstrap {
+		t.Fatal("expected bootstrap=false once any model has been seeded")
+	}
+	if authorized {
+		t.Fatal("expected authorized=false when task's model has no known leaders")
+	}
+}
+
+// TestIsLeaderAuthorized_Rank1Accepted: sig from rank#1 Leader must verify.
+func TestIsLeaderAuthorized_Rank1Accepted(t *testing.T) {
+	p1, p2, p3 := secp256k1.GenPrivKey(), secp256k1.GenPrivKey(), secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1",
+		[]string{"a1", "a2", "a3"},
+		[][]byte{p1.PubKey().Bytes(), p2.PubKey().Bytes(), p3.PubKey().Bytes()},
+	)
+
+	task := makeSignedAssignTask(t, "m1", p1)
+	authorized, bootstrap := w.isLeaderAuthorized(task)
+	if bootstrap {
+		t.Fatal("expected bootstrap=false")
+	}
+	if !authorized {
+		t.Fatal("expected rank#1 leader signature to be authorized")
+	}
+}
+
+// TestIsLeaderAuthorized_Rank2Accepted: Leader failover to rank#2 (§6.2, 1.5s inactivity)
+// must still pass so Worker doesn't reject valid failover dispatches.
+func TestIsLeaderAuthorized_Rank2Accepted(t *testing.T) {
+	p1, p2, p3 := secp256k1.GenPrivKey(), secp256k1.GenPrivKey(), secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1",
+		[]string{"a1", "a2", "a3"},
+		[][]byte{p1.PubKey().Bytes(), p2.PubKey().Bytes(), p3.PubKey().Bytes()},
+	)
+
+	task := makeSignedAssignTask(t, "m1", p2)
+	authorized, _ := w.isLeaderAuthorized(task)
+	if !authorized {
+		t.Fatal("expected rank#2 leader signature to be authorized (failover)")
+	}
+}
+
+// TestIsLeaderAuthorized_Rank3Accepted: third-rank failover also covered.
+func TestIsLeaderAuthorized_Rank3Accepted(t *testing.T) {
+	p1, p2, p3 := secp256k1.GenPrivKey(), secp256k1.GenPrivKey(), secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1",
+		[]string{"a1", "a2", "a3"},
+		[][]byte{p1.PubKey().Bytes(), p2.PubKey().Bytes(), p3.PubKey().Bytes()},
+	)
+
+	task := makeSignedAssignTask(t, "m1", p3)
+	authorized, _ := w.isLeaderAuthorized(task)
+	if !authorized {
+		t.Fatal("expected rank#3 leader signature to be authorized (failover)")
+	}
+}
+
+// TestIsLeaderAuthorized_AttackerKey: a key outside the top-3 set must be rejected.
+// This is the core S4 guarantee — prevents random peers from spoofing dispatch.
+func TestIsLeaderAuthorized_AttackerKey(t *testing.T) {
+	p1, p2, p3 := secp256k1.GenPrivKey(), secp256k1.GenPrivKey(), secp256k1.GenPrivKey()
+	attacker := secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1",
+		[]string{"a1", "a2", "a3"},
+		[][]byte{p1.PubKey().Bytes(), p2.PubKey().Bytes(), p3.PubKey().Bytes()},
+	)
+
+	task := makeSignedAssignTask(t, "m1", attacker)
+	authorized, bootstrap := w.isLeaderAuthorized(task)
+	if bootstrap {
+		t.Fatal("expected bootstrap=false")
+	}
+	if authorized {
+		t.Fatal("expected forged task (signed by attacker) to be rejected")
+	}
+}
+
+// TestIsLeaderAuthorized_TamperedPrompt: the digest covers every mutable field.
+// If a MITM changes the prompt after Leader signs, the sig must stop validating.
+func TestIsLeaderAuthorized_TamperedPrompt(t *testing.T) {
+	p1 := secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1",
+		[]string{"a1"},
+		[][]byte{p1.PubKey().Bytes()},
+	)
+
+	task := makeSignedAssignTask(t, "m1", p1)
+	task.Prompt = "tampered prompt"
+
+	authorized, _ := w.isLeaderAuthorized(task)
+	if authorized {
+		t.Fatal("expected tampered prompt to invalidate leader signature")
+	}
+}
+
+// TestIsLeaderAuthorized_TamperedFee: the billing fields must be signature-covered.
+// S9 billing fields changing should invalidate the sig so a Worker cannot be tricked
+// into charging the wrong fee.
+func TestIsLeaderAuthorized_TamperedFee(t *testing.T) {
+	p1 := secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1", []string{"a1"}, [][]byte{p1.PubKey().Bytes()})
+
+	task := makeSignedAssignTask(t, "m1", p1)
+	task.MaxFee = task.MaxFee * 10
+
+	authorized, _ := w.isLeaderAuthorized(task)
+	if authorized {
+		t.Fatal("expected MaxFee tampering to invalidate leader signature")
+	}
+}
+
+// TestIsLeaderAuthorized_MalformedPubkey: if the stored pubkey is not a valid 33-byte
+// secp256k1 pubkey, verification must not panic and must reject.
+func TestIsLeaderAuthorized_MalformedPubkey(t *testing.T) {
+	p1 := secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1", []string{"a1"}, [][]byte{{0x01, 0x02}}) // 2-byte garbage
+
+	task := makeSignedAssignTask(t, "m1", p1)
+	authorized, _ := w.isLeaderAuthorized(task)
+	if authorized {
+		t.Fatal("expected malformed pubkey to reject")
+	}
+}
+
+// TestIsLeaderAuthorized_MissingSig: empty LeaderSig field must reject under the new
+// regime — the old behavior silently skipped when LeaderSig was empty, which meant an
+// adversary could simply omit the field. The bootstrap carve-out is independent.
+func TestIsLeaderAuthorized_MissingSig(t *testing.T) {
+	p1 := secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1", []string{"a1"}, [][]byte{p1.PubKey().Bytes()})
+
+	task := makeSignedAssignTask(t, "m1", p1)
+	task.LeaderSig = nil
+
+	authorized, _ := w.isLeaderAuthorized(task)
+	if authorized {
+		t.Fatal("expected empty LeaderSig to reject")
+	}
+}
+
+// TestSetLeadersForModel_ClearsWhenEmpty: passing an empty list clears the entry.
+// After clearing one model, queries to THAT model return unknown while other models
+// remain seeded (bootstrap flag stays false — the Worker has seen real data before).
+func TestSetLeadersForModel_ClearsWhenEmpty(t *testing.T) {
+	p1 := secp256k1.GenPrivKey()
+	w := &Worker{}
+	w.SetLeadersForModel("m1", []string{"a1"}, [][]byte{p1.PubKey().Bytes()})
+	w.SetLeadersForModel("m2", []string{"a2"}, [][]byte{p1.PubKey().Bytes()})
+
+	// Clear m1
+	w.SetLeadersForModel("m1", nil, nil)
+
+	task := makeSignedAssignTask(t, "m1", p1)
+	authorized, bootstrap := w.isLeaderAuthorized(task)
+	if bootstrap {
+		t.Fatal("expected bootstrap=false (m2 is still seeded)")
+	}
+	if authorized {
+		t.Fatal("expected unknown model after clear to reject")
+	}
+}
+
+// TestAssignTaskSigDigest_Deterministic: the same task produces the same digest.
+func TestAssignTaskSigDigest_Deterministic(t *testing.T) {
+	p1 := secp256k1.GenPrivKey()
+	task := makeSignedAssignTask(t, "m1", p1)
+	d1 := task.SigDigest()
+	d2 := task.SigDigest()
+	if d1 != d2 {
+		t.Fatal("SigDigest must be deterministic")
+	}
+}
+
+// TestAssignTaskSigDigest_CoversAllCriticalFields: flipping any signature-covered
+// field must change the digest. This guards against accidentally dropping a field
+// from the digest when the AssignTask struct grows.
+func TestAssignTaskSigDigest_CoversAllCriticalFields(t *testing.T) {
+	p1 := secp256k1.GenPrivKey()
+	base := makeSignedAssignTask(t, "m1", p1)
+	baseDigest := base.SigDigest()
+
+	mutators := map[string]func(*p2ptypes.AssignTask){
+		"TaskId":            func(a *p2ptypes.AssignTask) { a.TaskId = []byte("task-id-FFFFFFFF") },
+		"ModelId":           func(a *p2ptypes.AssignTask) { a.ModelId = []byte("other-model") },
+		"Prompt":            func(a *p2ptypes.AssignTask) { a.Prompt = "different prompt" },
+		"UserAddr":          func(a *p2ptypes.AssignTask) { a.UserAddr = []byte("user-addr-999999") },
+		"Temperature":       func(a *p2ptypes.AssignTask) { a.Temperature = 7000 },
+		"UserSeed":          func(a *p2ptypes.AssignTask) { a.UserSeed = []byte("seed-9999") },
+		"DispatchBlockHash": func(a *p2ptypes.AssignTask) { a.DispatchBlockHash = []byte("different-hash-0123") },
+		"FeePerInputToken":  func(a *p2ptypes.AssignTask) { a.FeePerInputToken = 500 },
+		"FeePerOutputToken": func(a *p2ptypes.AssignTask) { a.FeePerOutputToken = 800 },
+		"MaxFee":            func(a *p2ptypes.AssignTask) { a.MaxFee = 9999 },
+		"MaxTokens":         func(a *p2ptypes.AssignTask) { a.MaxTokens = 1024 },
+	}
+	for name, mutate := range mutators {
+		t.Run(name, func(t *testing.T) {
+			tCopy := *base
+			mutate(&tCopy)
+			if tCopy.SigDigest() == baseDigest {
+				t.Fatalf("SigDigest unchanged after mutating %s — field is not signature-covered", name)
+			}
+		})
+	}
+}
+
 
 // TestShouldStopGeneration_PerRequest verifies no truncation in per-request mode.
 // TR2: per-request mode should never stop (relies on max_tokens).
