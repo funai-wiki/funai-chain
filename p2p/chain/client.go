@@ -665,6 +665,85 @@ func (c *Client) BroadcastAuditBatch(ctx context.Context, msg *settlementtypes.M
 	return hash, nil
 }
 
+// BroadcastFraudProof builds, signs, and broadcasts a MsgFraudProof to the
+// chain on behalf of the reporter (SDK user). Mirrors BroadcastSettlement /
+// BroadcastAuditBatch — the earlier implementation sent a raw JSON struct to
+// /broadcast_tx_sync which CometBFT rejects as "tx parse error", so FraudProof
+// submission was silently broken despite the keeper's handler being complete.
+//
+// The tx is signed by the reporter (msg.Reporter must be the bech32 of the
+// privKey's address) so the Cosmos SDK antehandler authenticates the reporter
+// for gas. The H3 check inside the keeper then verifies msg.WorkerContentSig
+// against msg.ContentHash using the worker's on-chain pubkey, which is what
+// actually prevents a user from spamming forged fraud reports.
+func (c *Client) BroadcastFraudProof(ctx context.Context, msg *settlementtypes.MsgFraudProof, privKey []byte, fromAddr string, chainId string) (string, error) {
+	txCfg := c.getTxConfig()
+
+	accNum, seq, err := c.getNextSequence(ctx, fromAddr)
+	if err != nil {
+		return "", fmt.Errorf("get sequence: %w", err)
+	}
+
+	txBuilder := txCfg.NewTxBuilder()
+	if err := txBuilder.SetMsgs(msg); err != nil {
+		return "", fmt.Errorf("set msgs: %w", err)
+	}
+	// FraudProof is small + cheap: one state read (SettledTask), one sig verify,
+	// one state write (fraud mark), optionally one bank SendCoins (clawback).
+	// 200k base is enough; bump slightly for the sig-verify path.
+	const gasLimit uint64 = 250000
+	txBuilder.SetGasLimit(gasLimit)
+	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin("ufai", sdkmath.NewInt(int64(gasLimit/200)))))
+
+	sdkPrivKey := &sdkcrypto.PrivKey{Key: privKey}
+	pubKey := sdkPrivKey.PubKey()
+
+	sigData := &signingtypes.SingleSignatureData{
+		SignMode:  signingtypes.SignMode_SIGN_MODE_DIRECT,
+		Signature: nil,
+	}
+	sig := signingtypes.SignatureV2{
+		PubKey:   pubKey,
+		Data:     sigData,
+		Sequence: seq,
+	}
+	if err := txBuilder.SetSignatures(sig); err != nil {
+		return "", fmt.Errorf("set empty sig: %w", err)
+	}
+
+	signerData := authsigning.SignerData{
+		ChainID:       chainId,
+		AccountNumber: accNum,
+		Sequence:      seq,
+	}
+	sigV2, err := clienttx.SignWithPrivKey(ctx,
+		signingtypes.SignMode_SIGN_MODE_DIRECT,
+		signerData, txBuilder, sdkPrivKey, txCfg, seq)
+	if err != nil {
+		return "", fmt.Errorf("sign tx: %w", err)
+	}
+	if err := txBuilder.SetSignatures(sigV2); err != nil {
+		return "", fmt.Errorf("set final sig: %w", err)
+	}
+
+	txBytes, err := txCfg.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return "", fmt.Errorf("encode tx: %w", err)
+	}
+
+	hash, err := c.BroadcastTx(ctx, txBytes)
+	if err != nil {
+		if strings.Contains(err.Error(), "sequence") {
+			log.Printf("chain: fraud-proof sequence mismatch, resetting")
+			c.ResetSequence()
+		}
+		return "", err
+	}
+
+	log.Printf("chain: FraudProof tx broadcast hash=%s task=%x gas=%d seq=%d", hash, msg.TaskId, gasLimit, seq)
+	return hash, nil
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
