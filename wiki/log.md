@@ -1,5 +1,23 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-18] ingest | FunAI_Leader_Reputation_Design.md (English)
+
+**Operator:** Claude (LLM)
+
+**New source doc ingested:**
+- `docs/protocol/FunAI_Leader_Reputation_Design.md` (234 lines) — P2 post-launch design for a Leader-specific reputation score, independent from inference ReputationScore. Three automatic keeper-side detection scenarios (idle epoch, repeated failover, illegal VRF rank skip), all handled without new Msg types or Worker self-reporting. Folded into Leader VRF election formula as a multiplier alongside stake. 7-phase implementation plan totalling 200–300 lines across x/worker, x/vrf, x/settlement, p2p/proposer.
+
+**Wiki pages updated:**
+- `wiki/index.md` — Added entry in Operations & Status section below the Pre-Launch Audit row.
+- `wiki/log.md` — This entry.
+
+**Known issues flagged for the eventual implementation PRs (preserved unchanged in the ingest):**
+- Proto tags 25/26 in the struct example collide with `AvgLatencyMs` at tag 25 (PR #10). Implementation should use tags 26/27.
+- Scenario 3 (illegal rank skip) reads historical worker list via `GetOnlineWorkersAtBlock`, which the SDK kv-store does not support natively. Options: (A) use current worker list as approximation, (B) epoch snapshot store, (C) skip VRF recompute and only check reject records.
+- Missing `EffectiveLeaderReputation()` helper for the uninitialized-worker default-1.0 contract analogous to `EffectiveReputation()`.
+
+---
+
 ## [2026-04-17] ingest | FunAI_PreLaunch_Final_Audit_KT.md (English)
 
 **Operator:** Claude (LLM)
