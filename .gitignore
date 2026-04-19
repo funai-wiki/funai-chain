@@ -49,3 +49,4 @@ docs/internal/
 docs/reports/
 docs/mainnet-readiness/
 funai-node
+scripts/__pycache__

@@ -59,19 +59,28 @@ Hardware: your 5090 (free)
 Model: Qwen2.5-8B-Instruct FP16
 TGI image: ghcr.io/huggingface/text-generation-inference:3.3.6
 
-Steps:
+Runnable: scripts/c0-logits-consistency.py (stdlib-only; pairs with
+          scripts/tgi-bootstrap-aliyun.sh).
+
+  # Pre-req: TGI is already running on :8080.
+  python3 scripts/c0-logits-consistency.py --endpoint http://<tgi-host>:8080
+
+  Exit codes:  0 PASS   1 INVESTIGATE   2 FAIL   3 ERROR
+
+Steps (what the script does):
   1. Start TGI with its default continuous-batching configuration.
-  2. Send 1 request (prompt A, seed=42, temp=0.7) and record the logits
-     at the 5 sampled positions → logits_single.
-  3. Send 4 requests concurrently (prompts A/B/C/D, each with its own seed).
-     Record the logits for prompt A → logits_batch.
-  4. Diff logits_single against logits_batch.
+  2. Send 1 request (prompt A, seed=42, temp=0.7) and record the top-N
+     logprobs at the generated positions → logits_single.
+  3. Send 4 requests concurrently (prompt A + 3 distractors, each with its
+     own seed). Record the top-N logprobs for prompt A → logits_batch.
+  4. Diff logits_single against logits_batch (per-position, shared top-N ids).
 
 Pass criteria:
-  Identical (relative error < 1e-6)   → PASS; continue with the rest.
-  Non-identical but < 1e-3            → INVESTIGATE; the Verifier may need to
-                                        force single-request mode.
-  > 1e-3                              → FAIL; verification architecture must change.
+  max_rel_err < 1e-6 AND no top-k / sampled-id drift  → PASS;  continue with the rest.
+  max_rel_err < 1e-3                                  → INVESTIGATE; the Verifier may
+                                                        need to force single-request mode.
+  max_rel_err ≥ 1e-3                                  → FAIL;  verification architecture
+                                                        must change.
 
 If it FAILS, candidate mitigations:
   Option A: Run Verifier teacher-forcing inside a batch (match Worker's path)
