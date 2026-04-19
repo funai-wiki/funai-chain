@@ -3,12 +3,6 @@
 > LLM-maintained knowledge base. 24 source documents ingested, 19 wiki pages generated.
 > Last updated: 2026-04-16
 
-## Whitepaper
-
-| Page | Summary | Sources |
-|------|---------|---------|
-| [FunAI Whitepaper](../docs/FunAI_Whitepaper.md) | Public whitepaper covering architecture, Lightning Scheme, verification, VRF, tokenomics, security, privacy, SDK. | V52_Final, codebase |
-
 ## Core Concepts
 
 | Page | Summary | Sources |

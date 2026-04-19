@@ -48,5 +48,6 @@ agency-agents/
 docs/internal/
 docs/reports/
 docs/mainnet-readiness/
+docs/FunAI_Whitepaper.md
 funai-node
 scripts/__pycache__

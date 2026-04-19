@@ -117,7 +117,6 @@ docs/              -- Design documents and guides
 
 ## Documentation
 
-- [Whitepaper](docs/FunAI_Whitepaper.md) -- full protocol specification
 - [SDK Developer Guide](docs/guides/SDK_Developer_Guide.md) -- integrate FunAI inference into your application
 - [Worker Operator Guide](docs/guides/Worker_Operator_Guide.md) -- run a GPU inference Worker
 - [Validator Guide](docs/guides/Validator_Guide.md) -- operate a chain validator node
