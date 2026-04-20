@@ -154,6 +154,10 @@ def extract_positions(resp: dict[str, Any]) -> list[dict[str, Any]]:
         "sampled_logprob":   float,
         "top": {token_id:int -> logprob:float},  # length = top_n_tokens
     }
+
+    Supports both TGI response shapes:
+      - TGI 2.x: details.tokens[i].top_tokens  (nested inside each token)
+      - TGI 3.x: details.top_tokens[i]         (parallel array under details)
     """
     details = resp.get("details")
     if not details:
@@ -161,10 +165,20 @@ def extract_positions(resp: dict[str, Any]) -> list[dict[str, Any]]:
             "TGI response missing `details`. Is `parameters.details=true` supported? "
             "Check TGI version; KT fixes it to 3.3.6."
         )
+    tokens = details.get("tokens", [])
+    top_tokens_parallel = details.get("top_tokens")  # TGI 3.x shape
+
     out = []
-    for tok in details.get("tokens", []):
+    for i, tok in enumerate(tokens):
+        nested = tok.get("top_tokens") or []
+        if nested:
+            source = nested
+        elif top_tokens_parallel and i < len(top_tokens_parallel):
+            source = top_tokens_parallel[i] or []
+        else:
+            source = []
         top_map: dict[int, float] = {}
-        for t in tok.get("top_tokens", []) or []:
+        for t in source:
             top_map[int(t["id"])] = float(t["logprob"])
         out.append(
             {
@@ -182,7 +196,7 @@ def run_single(endpoint: str, args: argparse.Namespace) -> dict[str, Any]:
     info(f"Prompt A, seed={args.seed}, temperature={args.temperature}")
     resp = tgi_generate(
         endpoint,
-        PROMPT_A,
+        args.prompt,
         args.seed,
         args.temperature,
         args.max_new_tokens,
@@ -206,7 +220,7 @@ def run_batch(endpoint: str, args: argparse.Namespace) -> dict[str, Any]:
             f"--concurrent-count ≤ {len(DISTRACTOR_PROMPTS) + 1}"
         )
 
-    prompts = [("A", PROMPT_A, args.seed)] + [
+    prompts = [("A", args.prompt, args.seed)] + [
         (f"D{i+1}", p, args.seed + 1000 + i) for i, p in enumerate(distractors)
     ]
     info(f"Submitting {len(prompts)} requests concurrently")
@@ -327,6 +341,10 @@ def main() -> int:
         description="FunAI Test Plan KT §1.3 C0 — TGI batching logits consistency check.",
     )
     ap.add_argument("--endpoint", default=os.environ.get("TGI_ENDPOINT", "http://localhost:8080"))
+    ap.add_argument("--prompt", default=PROMPT_A,
+                    help="Prompt A (target of the diff). Default is a short factual question; "
+                         "use something generative (e.g. 'Write a short poem:') to force more "
+                         "positions past EOS-early stopping.")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--temperature", type=float, default=0.7)
     ap.add_argument("--max-new-tokens", type=int, default=5)

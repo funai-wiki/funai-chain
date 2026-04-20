@@ -54,6 +54,11 @@ Only these two. We are testing "same-model logits consistency across hardware", 
 
 #### C0: Concurrent batching impact (⚠️ blocking — run first)
 
+> **First result (2026-04-20, Aliyun A10, TGI 3.3.6, Qwen2.5-3B-Instruct): FAIL.**
+> max_rel_err = 2.27 × 10⁻² at position 0, sampled tokens diverge from position 1.
+> Report + raw artifacts: [`reports/2026-04-20-1329-c0-fail/`](reports/2026-04-20-1329-c0-fail/report.md).
+> C1-C4 and TPS-layer testing are paused until a mitigation is selected and re-validated.
+
 ```
 Hardware: your 5090 (free)
 Model: Qwen2.5-8B-Instruct FP16

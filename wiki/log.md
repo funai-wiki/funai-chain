@@ -1,5 +1,29 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-20] ingest | C0 first-run result report (FAIL)
+
+**Operator:** Claude (LLM)
+
+**New source docs ingested:**
+- `docs/testing/reports/2026-04-20-1329-c0-fail/report.md` (~320 lines) — First C0 execution: Aliyun Hangzhou gn7i-c8g1.2xlarge (A10 24GB), TGI 3.3.6, Qwen2.5-3B-Instruct FP16 (substituted for 8B baseline — current HF mirror blocks Qwen2.5-8B, see §2.1 of the report). Verdict: **FAIL**. `max_rel_err = 2.27×10⁻²` at generated position 0, >20× the `1e-3` FAIL threshold. Sampled tokens flip from position 1, generation fully diverges by position 2. Single-vs-single is bit-exact (§3.1 sanity), so drift is genuinely from TGI continuous batching — no ε rescues it. Report recommends Mitigation Option B: Worker runs a separate single-request forward pass to capture the 5 VRF-position logits for the receipt, keeping Verifier's single-request teacher forcing as-is.
+- `docs/testing/reports/2026-04-20-1329-c0-fail/single_response.json`, `batch_response.json`, `verdict.json` — raw TGI responses + stats payload.
+
+**Also in this batch:**
+- `scripts/c0-logits-consistency.py` — `extract_positions` fix for TGI 3.x parallel `details.top_tokens` shape (was only reading 2.x nested shape, silently returning empty top-N → false PASS). Plus `--prompt` CLI flag for driving generations past EOS-early stopping.
+- `docs/testing/FunAI_TPS_Logits_Test_Plan_KT.md` — §1.3 C0 now links the result report and states the blocker.
+- `.gitignore` — adds the `results/` ephemeral output directory.
+
+**Wiki pages updated:**
+- `wiki/test-status.md` — Logits table gains a Status column; C0 marked FAIL with the numeric result, C1-C4 and TPS-layer tests marked paused. Added explanatory paragraph with mitigation recommendation and report link.
+- `wiki/index.md` — Test Plan Status entry reflects C0 FAIL.
+- `wiki/log.md` — This entry.
+
+**Follow-up items (not in this ingest, captured in the report):**
+- P1: re-run with `--max-batch-prefill-tokens=1024` to test Mitigation Option C as a diagnostic; re-run against Qwen2.5-8B via ModelScope to confirm on the KT baseline.
+- P0: architectural decision on Mitigation Option B + design note for `InferReceipt.verification_logits`.
+
+---
+
 ## [2026-04-18] ingest | FunAI_Leader_Reputation_Design.md (English)
 
 **Operator:** Claude (LLM)

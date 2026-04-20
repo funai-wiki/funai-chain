@@ -1,0 +1,35 @@
+{
+  "result": "FAIL",
+  "stats": {
+    "positions": 10,
+    "samples_compared": 10,
+    "max_abs_err": 0.03515630000000014,
+    "max_rel_err": 0.013207523018229908,
+    "sampled_id_drift": 9,
+    "top_membership_drift": 80
+  },
+  "per_position_max_rel": [
+    0.008483562981116877,
+    0.013207523018229908,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "thresholds": {
+    "pass": 1e-06,
+    "investigate": 0.001
+  },
+  "config": {
+    "endpoint": "http://47.96.179.86:8080",
+    "seed": 42,
+    "temperature": 0.7,
+    "max_new_tokens": 10,
+    "concurrent_count": 4,
+    "top_n": 5
+  }
+}
