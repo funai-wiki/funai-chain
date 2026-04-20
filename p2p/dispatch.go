@@ -235,6 +235,14 @@ func (n *Node) handleInferRequest(ctx context.Context, req *p2ptypes.InferReques
 }
 
 func (n *Node) handleAssignTask(ctx context.Context, task *p2ptypes.AssignTask) {
+	// P1 AvgLatencyMs fix: every node that observes AssignTask on the dispatch
+	// topic stamps its Proposer-side wall-clock, so BuildBatch can compute
+	// SettlementLatencyMs from Proposer-observed anchors only (no Worker input).
+	// See docs/protocol/P1_AvgLatencyMs_SelfReport_Bug_KT_1.md.
+	if n.Proposer != nil {
+		n.Proposer.OnAssignTask(task.TaskId)
+	}
+
 	if n.Worker == nil {
 		return
 	}

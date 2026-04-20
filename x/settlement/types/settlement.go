@@ -129,6 +129,15 @@ type SettlementEntry struct {
 	// Dispatch rank verification: which VRF rank the assigned Worker held (0-based).
 	// Proposer re-computes VRF ranking and records this for on-chain audit.
 	DispatchRank uint32 `protobuf:"varint,19,opt,name=dispatch_rank,proto3" json:"dispatch_rank,omitempty"`
+
+	// P1 AvgLatencyMs fix: Proposer-observed unix-ms timestamps used to compute
+	// SettlementLatencyMs on-chain without trusting Worker-self-reported values.
+	// AcceptedAtMs is the Proposer's wall-clock when it observed AssignTask for
+	// this task on the dispatch topic; ReceiptAtMs is its wall-clock when the
+	// InferReceipt arrived. LatencyMs (field 9) is now derived from these two
+	// by the Proposer before submission, instead of from receipt.InferenceLatencyMs.
+	AcceptedAtMs uint64 `protobuf:"varint,20,opt,name=accepted_at_ms,proto3" json:"accepted_at_ms,omitempty"`
+	ReceiptAtMs  uint64 `protobuf:"varint,21,opt,name=receipt_at_ms,proto3" json:"receipt_at_ms,omitempty"`
 }
 
 // IsPerToken returns true if this entry uses per-token billing (S9).

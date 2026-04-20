@@ -66,11 +66,12 @@ type readyAuditEntry struct {
 
 // TaskEvidence holds evidence for a single task.
 type TaskEvidence struct {
-	Receipt    *p2ptypes.InferReceipt
-	Verifiers  []*p2ptypes.VerifyResult
-	Request    *p2ptypes.InferRequest
-	Output     string // complete inference output text (from Worker stream)
-	ReceivedAt uint64 // unix ms when receipt was received (for latency calculation)
+	Receipt      *p2ptypes.InferReceipt
+	Verifiers    []*p2ptypes.VerifyResult
+	Request      *p2ptypes.InferRequest
+	Output       string // complete inference output text (from Worker stream)
+	AcceptedAtMs uint64 // P1: Proposer wall-clock (unix ms) at AssignTask observation
+	ReceivedAt   uint64 // Proposer wall-clock (unix ms) when InferReceipt arrived
 }
 
 const (
@@ -133,6 +134,28 @@ func (p *Proposer) AddRequest(req *p2ptypes.InferRequest) {
 		p.pendingTasks[key] = &TaskEvidence{}
 	}
 	p.pendingTasks[key].Request = req
+}
+
+// OnAssignTask records the Proposer's wall-clock observation of an AssignTask on
+// the dispatch topic. The resulting AcceptedAtMs, together with ReceivedAt in
+// AddReceipt, is used by BuildBatch to compute a tamper-proof SettlementLatencyMs
+// — replacing the previous path that trusted InferReceipt.InferenceLatencyMs
+// (self-signed by the Worker and therefore forgeable for dispatch-rank advantage).
+// See docs/protocol/P1_AvgLatencyMs_SelfReport_Bug_KT_1.md.
+//
+// If Leader re-broadcasts AssignTask on failover, the first observation is kept
+// so that a re-dispatch does not shorten the measured window.
+func (p *Proposer) OnAssignTask(taskId []byte) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	key := hex.EncodeToString(taskId)
+	if _, exists := p.pendingTasks[key]; !exists {
+		p.pendingTasks[key] = &TaskEvidence{}
+	}
+	if p.pendingTasks[key].AcceptedAtMs == 0 {
+		p.pendingTasks[key].AcceptedAtMs = uint64(time.Now().UnixMilli())
+	}
 }
 
 // AddOutput stores the complete inference output text for a task.
@@ -347,14 +370,20 @@ func (p *Proposer) ProcessPending(ctx context.Context, blockHash []byte) (int, [
 			_ = dispatchSeed // seed construction for reference
 		}
 
-		// Audit KT §5: use the Worker's signed inference duration instead of the
-		// proposer's wall-clock (ReceivedAt - user_request_timestamp), which included
-		// P2P dispatch / relay and the user's clock skew — all noise for VRF speed
-		// ranking. InferenceLatencyMs is covered by Worker's secp256k1 signature so
-		// this is tamper-evident end-to-end.
+		// P1 AvgLatencyMs fix: derive latency from Proposer-observed timestamps
+		// (AcceptedAtMs = when AssignTask was seen on the dispatch topic; ReceivedAt =
+		// when the Worker's receipt arrived). Both are Proposer wall-clock, so neither
+		// is under Worker control. The earlier path read Worker-self-reported
+		// InferenceLatencyMs from the receipt — tamper-evident only against MITM, not
+		// against the Worker itself, which allowed up to 1.5× dispatch boost via
+		// under-reporting. See docs/protocol/P1_AvgLatencyMs_SelfReport_Bug_KT_1.md.
+		//
+		// If AcceptedAtMs is zero (Proposer joined the topic late or missed the
+		// dispatch), latencyMs stays zero and the keeper skips the AvgLatencyMs EMA
+		// update for this entry — safe graceful degradation.
 		var latencyMs uint64
-		if ev.Receipt != nil && ev.Receipt.InferenceLatencyMs > 0 {
-			latencyMs = uint64(ev.Receipt.InferenceLatencyMs)
+		if ev.AcceptedAtMs > 0 && ev.ReceivedAt > ev.AcceptedAtMs {
+			latencyMs = ev.ReceivedAt - ev.AcceptedAtMs
 		}
 
 		entry := settlementtypes.SettlementEntry{
@@ -367,6 +396,8 @@ func (p *Proposer) ProcessPending(ctx context.Context, blockHash []byte) (int, [
 			ExpireBlock:     int64(expireBlock),
 			ModelId:         modelId,
 			LatencyMs:       latencyMs,
+			AcceptedAtMs:    ev.AcceptedAtMs,
+			ReceiptAtMs:     ev.ReceivedAt,
 			UserSigHash:     userSigHash,
 			WorkerSigHash:   workerSigHash,
 			VerifySigHashes: verifySigHashes,

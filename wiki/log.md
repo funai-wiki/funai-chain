@@ -1,5 +1,28 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-20] ingest + impl | P1 AvgLatencyMs self-report bug (KT)
+
+**Operator:** Claude (LLM)
+
+**New source doc ingested:**
+- `docs/protocol/P1_AvgLatencyMs_SelfReport_Bug_KT_1.md` (~240 lines) — English translation of KT's P1 vulnerability note. Worker self-measures `inferMs` at `p2p/worker/worker.go:383`, signs it into `InferReceipt.InferenceLatencyMs`, chain consumes it at `x/settlement/keeper/keeper.go:1027` → `UpdateAvgLatency()` EMA → VRF `rankSpeedMultiplier`. The secp256k1 signature defeats MITM but not self-forgery. Exploit: malicious Worker hardcodes `inferMs = 50` (truth ~3000), wins ~50 % more dispatch. Fix: replace with Proposer-recorded `AcceptedAtMs` and `ReceiptAtMs` on `SettlementEntry`, compute `SettlementLatencyMs = ReceiptAtMs - AcceptedAtMs` on-chain. **Translation added review §7 "Known limitations"** flagging 5 gaps: (7.1) `AcceptTask` has no timestamp field → Worker can still compress the window by delaying `AcceptTask`; the implementation chose to anchor on the Proposer's own wall-clock at AssignTask observation instead of adding fields to AssignTask, keeping `SigDigest` untouched. (7.2) Leader vs Proposer observation point — resolved in the implementation by letting every node's dispatch loop notify the Proposer on AssignTask. (7.3) Cross-Proposer cross-validation is aspirational, not implemented. (7.4) Per-`model_id` physical floor assumes `x/modelreg` tracks latency stats — not today. (7.5) Wall-clock skew noise <50 ms.
+
+**Implementation included in this PR:**
+- `x/settlement/types/settlement.go` — new `AcceptedAtMs` and `ReceiptAtMs` proto fields on `SettlementEntry` (tags 20/21).
+- `p2p/proposer/proposer.go` — `TaskEvidence.AcceptedAtMs`; new `OnAssignTask(taskId)` hook; `BuildBatch` now computes `LatencyMs = ReceivedAt - AcceptedAtMs` and populates both new entry fields; deletes the old self-reported path.
+- `p2p/dispatch.go` — `handleAssignTask` notifies `n.Proposer.OnAssignTask(task.TaskId)` on every observed dispatch.
+- Tests in `p2p/proposer/` covering happy path, reversed-timestamps anomaly, and "Worker self-report no longer drives the latency update".
+
+**Wiki pages updated:**
+- `wiki/index.md` — Added row under Operations & Status; header bumped to 25 sources / 2026-04-20.
+- `wiki/vrf.md` — Annotated `latency_factor` section with a pointer to the fix.
+- `wiki/log.md` — This entry.
+
+**Original Chinese source removed per English-only convention:**
+- Root-level `P1_AvgLatencyMs_SelfReport_Bug_KT_1.md` (Chinese) — replaced by the English version at `docs/protocol/`.
+
+---
+
 ## [2026-04-20] ingest | C0 first-run result report (FAIL)
 
 **Operator:** Claude (LLM)

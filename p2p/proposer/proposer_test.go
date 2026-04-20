@@ -2,7 +2,9 @@ package proposer
 
 import (
 	"context"
+	"encoding/hex"
 	"testing"
+	"time"
 
 	"github.com/cometbft/cometbft/crypto/secp256k1"
 
@@ -269,5 +271,189 @@ func TestAuditBatch_MultipleTasksDrainTogether(t *testing.T) {
 	p.CommitAuditBatch()
 	if n := p.ReadyAuditCount(); n != 0 {
 		t.Fatalf("ReadyAuditCount after commit: want 0, got %d", n)
+	}
+}
+
+// ── P1: AvgLatencyMs fix — Proposer-observed timestamps ──────────────────────
+
+// makeVerifyResultsForTest returns 3 Pass=true results so ProcessPending will
+// follow the normal settlement path and emit a cleared entry.
+func makeVerifyResultsForTest(taskId []byte) []*p2ptypes.VerifyResult {
+	results := make([]*p2ptypes.VerifyResult, 3)
+	for i := range results {
+		v := secp256k1.GenPrivKey()
+		results[i] = &p2ptypes.VerifyResult{
+			TaskId:       taskId,
+			VerifierAddr: v.PubKey().Bytes(),
+			Pass:         true,
+		}
+	}
+	return results
+}
+
+// TestOnAssignTask_RecordsFirstWallClock verifies that OnAssignTask stamps
+// AcceptedAtMs on first observation and keeps the earliest value on repeat
+// calls (relevant when Leader re-broadcasts on failover).
+//
+// docs/protocol/P1_AvgLatencyMs_SelfReport_Bug_KT_1.md.
+func TestOnAssignTask_RecordsFirstWallClock(t *testing.T) {
+	p := New("funai1test", nil, nil, 0, 100)
+	taskId := []byte("task-p1-assign")
+
+	before := uint64(time.Now().UnixMilli())
+	p.OnAssignTask(taskId)
+	after := uint64(time.Now().UnixMilli())
+
+	key := hex.EncodeToString(taskId)
+	p.mu.Lock()
+	ev, ok := p.pendingTasks[key]
+	firstStamp := ev.AcceptedAtMs
+	p.mu.Unlock()
+	if !ok {
+		t.Fatal("expected pending task entry after OnAssignTask")
+	}
+	if firstStamp < before || firstStamp > after {
+		t.Fatalf("AcceptedAtMs %d not within [%d, %d]", firstStamp, before, after)
+	}
+
+	time.Sleep(5 * time.Millisecond) // ensure wall-clock advances
+	p.OnAssignTask(taskId)
+	p.mu.Lock()
+	second := p.pendingTasks[key].AcceptedAtMs
+	p.mu.Unlock()
+	if second != firstStamp {
+		t.Fatalf("AcceptedAtMs must not advance on repeat OnAssignTask: first=%d, second=%d", firstStamp, second)
+	}
+}
+
+// TestProcessPending_LatencyFromProposerTimestamps verifies the happy path:
+// LatencyMs is computed from Proposer-observed anchors, and the raw timestamps
+// are preserved on the entry for on-chain visibility.
+func TestProcessPending_LatencyFromProposerTimestamps(t *testing.T) {
+	p := New("funai1test", nil, nil, 0, 100) // auditRate=0 → always settle
+
+	taskId := []byte("task-p1-happy")
+	workerPriv := secp256k1.GenPrivKey()
+
+	receipt := &p2ptypes.InferReceipt{
+		TaskId:             taskId,
+		WorkerPubkey:       workerPriv.PubKey().Bytes(),
+		ResultHash:         []byte("result-hash"),
+		InferenceLatencyMs: 9999, // attacker's inflated claim — must be ignored
+	}
+
+	acceptedAt := uint64(time.Now().UnixMilli())
+	receivedAt := acceptedAt + 200
+
+	key := hex.EncodeToString(taskId)
+	p.mu.Lock()
+	p.pendingTasks[key] = &TaskEvidence{
+		Receipt:      receipt,
+		Verifiers:    makeVerifyResultsForTest(taskId),
+		AcceptedAtMs: acceptedAt,
+		ReceivedAt:   receivedAt,
+	}
+	p.mu.Unlock()
+
+	processed, _ := p.ProcessPending(context.Background(), []byte("blockhash"))
+	if processed != 1 {
+		t.Fatalf("expected 1 processed, got %d", processed)
+	}
+
+	msg := p.BuildBatch()
+	if msg == nil || len(msg.Entries) != 1 {
+		t.Fatalf("expected 1 entry in batch, got %v", msg)
+	}
+	entry := msg.Entries[0]
+	if entry.LatencyMs != 200 {
+		t.Fatalf("LatencyMs: expected 200 (ReceivedAt - AcceptedAtMs), got %d", entry.LatencyMs)
+	}
+	if entry.AcceptedAtMs != acceptedAt {
+		t.Fatalf("AcceptedAtMs: expected %d, got %d", acceptedAt, entry.AcceptedAtMs)
+	}
+	if entry.ReceiptAtMs != receivedAt {
+		t.Fatalf("ReceiptAtMs: expected %d, got %d", receivedAt, entry.ReceiptAtMs)
+	}
+}
+
+// TestProcessPending_LatencyZeroOnReversedTimestamps ensures that a ReceiptAt
+// earlier than AcceptedAt (anomalous; shouldn't happen in practice) does not
+// produce a nonsense latency. Raw timestamps are still preserved for forensics.
+func TestProcessPending_LatencyZeroOnReversedTimestamps(t *testing.T) {
+	p := New("funai1test", nil, nil, 0, 100)
+
+	taskId := []byte("task-p1-reversed")
+	workerPriv := secp256k1.GenPrivKey()
+
+	receipt := &p2ptypes.InferReceipt{
+		TaskId:       taskId,
+		WorkerPubkey: workerPriv.PubKey().Bytes(),
+		ResultHash:   []byte("result-hash"),
+	}
+
+	accepted := uint64(1_000_000)
+	received := uint64(999_000) // earlier than accepted — anomaly
+
+	key := hex.EncodeToString(taskId)
+	p.mu.Lock()
+	p.pendingTasks[key] = &TaskEvidence{
+		Receipt:      receipt,
+		Verifiers:    makeVerifyResultsForTest(taskId),
+		AcceptedAtMs: accepted,
+		ReceivedAt:   received,
+	}
+	p.mu.Unlock()
+
+	p.ProcessPending(context.Background(), []byte("blockhash"))
+	msg := p.BuildBatch()
+	if msg == nil || len(msg.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %v", msg)
+	}
+	entry := msg.Entries[0]
+	if entry.LatencyMs != 0 {
+		t.Fatalf("reversed timestamps: expected LatencyMs=0, got %d", entry.LatencyMs)
+	}
+	if entry.AcceptedAtMs != accepted || entry.ReceiptAtMs != received {
+		t.Fatalf("raw timestamps must be preserved on anomaly: accepted=%d, receipt=%d",
+			entry.AcceptedAtMs, entry.ReceiptAtMs)
+	}
+}
+
+// TestProcessPending_WorkerSelfReportIgnored is the load-bearing security test:
+// a task whose AssignTask was never observed by the Proposer (AcceptedAtMs == 0)
+// must produce LatencyMs == 0, regardless of InferReceipt.InferenceLatencyMs.
+// Before the P1 fix, a malicious Worker signing a small InferenceLatencyMs value
+// gained up to 1.5× dispatch boost via VRF rankSpeedMultiplier.
+func TestProcessPending_WorkerSelfReportIgnored(t *testing.T) {
+	p := New("funai1test", nil, nil, 0, 100)
+
+	taskId := []byte("task-p1-selfreport")
+	workerPriv := secp256k1.GenPrivKey()
+
+	receipt := &p2ptypes.InferReceipt{
+		TaskId:             taskId,
+		WorkerPubkey:       workerPriv.PubKey().Bytes(),
+		ResultHash:         []byte("result-hash"),
+		InferenceLatencyMs: 50, // the forged "I'm super fast!" value
+	}
+
+	key := hex.EncodeToString(taskId)
+	p.mu.Lock()
+	p.pendingTasks[key] = &TaskEvidence{
+		Receipt:      receipt,
+		Verifiers:    makeVerifyResultsForTest(taskId),
+		AcceptedAtMs: 0, // never observed the dispatch
+		ReceivedAt:   uint64(time.Now().UnixMilli()),
+	}
+	p.mu.Unlock()
+
+	p.ProcessPending(context.Background(), []byte("blockhash"))
+	msg := p.BuildBatch()
+	if msg == nil || len(msg.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %v", msg)
+	}
+	entry := msg.Entries[0]
+	if entry.LatencyMs != 0 {
+		t.Fatalf("Worker self-report must not drive LatencyMs: expected 0, got %d (attack value was 50)", entry.LatencyMs)
 	}
 }

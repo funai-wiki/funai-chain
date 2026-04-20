@@ -17,6 +17,7 @@ effective_repspeed = reputation × latency_factor        (stake excluded)
 
 - `reputation` is on-chain node reliability in range [0.0, 1.2], default 1.0.
 - `latency_factor` is the latency multiplier derived from the node's on-chain `avg_latency_ms`: reference = 3000 ms, clamped to [0.1, 1.5]. Missing data (new node) → 1.0.
+- **Known bug (P1, 2026-04-20):** `avg_latency_ms` is currently sourced from the Worker's self-signed `InferReceipt.InferenceLatencyMs`, which the secp256k1 signature authenticates but does not prove truthful. A malicious Worker can hardcode a low value to gain up to 1.5× dispatch boost. Fix scheduled: compute `latency_ms` on-chain as `ReceiptAtMs - AcceptedAtMs` (both recorded by the Proposer). See [P1_AvgLatencyMs_SelfReport_Bug_KT_1.md](../docs/protocol/P1_AvgLatencyMs_SelfReport_Bug_KT_1.md).
 
 **VRF score** depends on the role:
 
