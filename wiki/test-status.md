@@ -80,15 +80,15 @@ Two parallel test tracks on pinned TGI `3.3.6` + Qwen2.5-8B-Instruct FP16.
 
 ### Logits consistency (C0–C4)
 
-| ID | Scope | Scale | Pass criterion |
-|----|-------|-------|----------------|
-| **C0** | Concurrent batching vs single-request logits (⚠ blocking) | 1 GPU, 10 min | `< 1e-6` rel error |
-| C1 | Same-hardware bit-exactness | 2 × 4090, 2 hr | 100% identical |
-| C2 | Cross-hardware tolerance (4090 vs A100) | 4090 + A100, 2 hr | Curve vs prompt length drives `logits_match_threshold` |
-| C3 | FP16 vs INT4 must diverge (register as distinct `model_id`) | 1 × 4090 | `> 0.01` rel error (inverse check) |
-| C4 | TGI v2 vs v3 mixability | 1 × 4090 | Identical → mixable; diverge → lock version |
+| ID | Scope | Scale | Pass criterion | Status |
+|----|-------|-------|----------------|--------|
+| **C0** | Concurrent batching vs single-request logits (⚠ blocking) | 1 GPU, 10 min | `< 1e-6` rel error | **FAIL** 2026-04-20 (A10 / TGI 3.3.6 / Qwen2.5-3B, `rel_err = 2.27×10⁻²`) |
+| C1 | Same-hardware bit-exactness | 2 × 4090, 2 hr | 100% identical | paused (C0 blocker) |
+| C2 | Cross-hardware tolerance (4090 vs A100) | 4090 + A100, 2 hr | Curve vs prompt length drives `logits_match_threshold` | paused |
+| C3 | FP16 vs INT4 must diverge (register as distinct `model_id`) | 1 × 4090 | `> 0.01` rel error (inverse check) | paused |
+| C4 | TGI v2 vs v3 mixability | 1 × 4090 | Identical → mixable; diverge → lock version | paused |
 
-If **C0 FAILs**, verifier may need to bypass continuous batching; see doc §1.3 for mitigations A/B/C.
+**C0 is failing as of 2026-04-20** — batched logits diverge from single-request logits at the first generated position (~2.3% relative), sampled tokens flip from position 1, generation fully diverges by position 2. Single-vs-single is bit-exact; drift is genuinely caused by TGI continuous batching. Full report + raw artifacts: [`docs/testing/reports/2026-04-20-1329-c0-fail/`](../docs/testing/reports/2026-04-20-1329-c0-fail/report.md). Recommended mitigation: Option B (Worker runs a separate single-request forward pass for the 5 VRF verification positions). C1-C4 and TPS-layer tests are paused pending that architectural change.
 
 ### TPS stress (5 layers)
 
