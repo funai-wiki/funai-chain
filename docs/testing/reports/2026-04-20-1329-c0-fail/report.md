@@ -26,6 +26,15 @@ no ε tolerance rescues this case:
 > "If they do not match, this is a systemic bias that no tolerance can fix — the entire
 > verification architecture must be revisited."
 
+Two follow-up diagnostic runs in the same session (§4.4) isolate the dominant cascade
+contributor: **`--max-batch-prefill-tokens` drives the sampling divergence**, not the
+attention kernel or prefix caching. Quartering the prefill budget from 4096 to 1024
+preserves the sampled token trajectory (same output) but leaves residual ~3 % logprob
+drift — still > FAIL threshold. Switching to paged attention + no prefix cache leaves
+the cascade essentially unchanged. Bit-exact verification therefore requires the
+architectural fix in §5 Option B, optionally combined with the Option C knob for
+defence in depth.
+
 C0 is a precondition gate. All downstream tests are paused until a mitigation is
 selected and re-validated.
 
@@ -179,7 +188,7 @@ be reproduced by a single-request Verifier.
     producing the correct batched output will fail the check because the Verifier's
     single-request trajectory has diverged.
 
-### 4.3 Root-cause hypotheses (not yet isolated)
+### 4.3 Root-cause hypotheses
 
 Any of the following is individually sufficient to explain the drift. All three are on
 by default in TGI 3.3.6:
@@ -193,7 +202,54 @@ by default in TGI 3.3.6:
    requests are grouped into the same prefill pass depends on arrival order and prompt
    sizes.
 
-Mitigation Option B below is robust against all three root causes.
+§4.4 below empirically isolates the dominant contributor. Mitigation Option B
+(§5) is robust against all three root causes.
+
+### 4.4 Root-cause diagnostics (same session, 2026-04-20)
+
+Two follow-up C0 runs were executed to isolate which §4.3 hypothesis drives the
+cascade behavior — i.e., generation divergence from position 1 onward, which is the
+load-bearing failure mode (vs. the residual logprob noise which cascade-independent).
+
+**Test A.** Default TGI config except `--max-batch-prefill-tokens=1024` (one-quarter of
+the default 4096). FlashInfer and prefix caching left on. Targets hypothesis #3.
+
+**Test B.** `ATTENTION=paged` environment variable, which switches off FlashInfer **and**
+auto-disables prefix caching (TGI startup log: `Using attention paged - Prefix caching 0`).
+`max_batch_prefill_tokens` left at default 4096. Targets hypotheses #1 and #2 jointly.
+
+Same prompt A / seed 42 / temp 0.7 / 10 tokens / 4-way concurrent batch as §3.2:
+
+| Config | `max_rel_err` | Top-5 drift | Sampled-id drift | Generation cascade? |
+|---|---:|---:|---:|:---:|
+| Default (FlashInfer, prefix cache on, prefill=4096) | 2.27 × 10⁻² | 80 / 100 | 9 / 10 | **yes** |
+| **Test A** (FlashInfer, prefix cache on, **prefill=1024**) | 3.27 × 10⁻² | **0 / 50** | **0 / 10** | **no** |
+| **Test B** (**paged**, **prefix cache off**, prefill=4096) | 1.32 × 10⁻² | 80 / 100 | 9 / 10 | **yes** |
+
+**Interpretation:**
+
+1. **`max-batch-prefill-tokens` is the dominant cascade contributor.** Quartering it from
+   4096 to 1024 eliminates sampling divergence — same 10 sampled token ids, same top-5
+   set at every position. Logprob values still drift ~1–3 % per position, but the token
+   trajectory is preserved.
+2. **Attention kernel and prefix caching are not the cascade drivers.** Test B disables
+   both and the cascade reappears unchanged (9 of 10 positions past position 0 sample
+   different tokens, and the batch generates ` The inky blackness of the night sky was`
+   — the exact same divergent path as the default-config run).
+3. **Residual ~1–3 % logprob noise is present in every configuration tested.** That is
+   the floor — the numeric cost of having any batching at all. Option B (§5) is what
+   eliminates it.
+
+Artifacts from both follow-up runs are captured in
+[`mitigations/`](mitigations/) alongside this report:
+`A_prefill1024_*` and `B_paged_noprefix_*`.
+
+**Operational consequence.** The Option C knob (`max-batch-prefill-tokens` at 1024 or
+below) raises the probability that Worker and Verifier see the same sampled output,
+so the Verifier can at least be *asked* to re-derive the logits for that output. But
+the residual ~3 % logprob error still violates KT §1.3's 1 × 10⁻³ FAIL threshold, so
+bit-exact verification still requires Option B. Option C is useful as defence-in-depth
+on the Worker, not as a substitute for the architectural fix.
 
 ---
 
@@ -203,7 +259,7 @@ Mitigation Option B below is robust against all three root causes.
 |---|---|---|
 | **A** | Verifier runs teacher forcing inside a batch, mimicking the Worker path. | Infeasible. A Verifier validates one task at a time and is structurally single-request. Fabricating peer traffic opens a fresh attack surface. **Reject.** |
 | **B** | Worker runs a **separate, single-request** forward pass on (prompt + completed output) to record logits at the 5 VRF-selected positions, attaches them to the receipt. Verifier's single-request teacher forcing then compares against those bit-exact logits. | Cost is one extra forward pass per task (~100-300 ms on A10 FP16, dwarfed by the primary generation). Robust against all three root-cause hypotheses. Keeps Worker's continuous-batching throughput intact for the actual generation. **Recommend.** |
-| **C** | Start TGI with `--max-batch-prefill-tokens=1024` (or lower) to reduce batch granularity. | Indirect — still batches inside the limit. Shrinks, does not eliminate, the FP-order variance. Useful as a **diagnostic** (if drift is cut by 10× with a 4× smaller cap, prefill fusion is a dominant contributor) but not a principled mitigation. |
+| **C** | Start TGI with `--max-batch-prefill-tokens=1024` (or lower) to reduce batch granularity. | Empirically (§4.4): quartering to 1024 **preserves the sampled token trajectory** across single-vs-batch — same 10 ids, same top-5 set — but residual logprob drift rises to ~3 %, still > 1 × 10⁻³. Useful as defence-in-depth on the Worker to stabilize outputs; insufficient alone for bit-exact verification. **Pairs well with Option B.** |
 
 ### 5.1 Recommended architectural change (Option B)
 
@@ -251,14 +307,20 @@ for choosing the final mitigation.
    covering the `InferReceipt.verification_logits` field, Worker extra-pass scheduling,
    and Verifier comparison logic.
 
-### P1 — diagnostic validation
+### P1 — remaining diagnostic validation
 
-1. Re-run C0 with TGI started with `--max-batch-prefill-tokens=1024` (Option C).
-   If drift drops to < 1 × 10⁻³, prefill fusion is a dominant contributor; if it
-   persists, Option B is structurally necessary.
-2. Re-run C0 with prefix caching disabled (subject to TGI flag support in 3.3.6).
+1. ✅ ~~Re-run C0 with TGI started with `--max-batch-prefill-tokens=1024` (Option C).~~
+   Completed in this session — see §4.4 Test A. Prefill batching is the dominant
+   cascade contributor; reducing it preserves the trajectory but still misses the
+   bit-exact threshold (residual ~3 %).
+2. ✅ ~~Re-run C0 with prefix caching disabled.~~ Completed as §4.4 Test B
+   (`ATTENTION=paged` in TGI 3.3.6 auto-disables prefix caching). Cascade persisted,
+   confirming prefix caching is not the primary driver.
 3. Re-run C0 once on Qwen2.5-8B (obtained via ModelScope or an authenticated HF
    download) to confirm the result carries over to the KT baseline.
+4. Test the **combination** `--max-batch-prefill-tokens=1024` + `paged` attention —
+   does applying both mitigations together reduce the residual ~3 % drift, or is that
+   noise floor architectural (i.e., inherent to batching regardless of config)?
 
 ### P2 — follow-ups
 
@@ -279,10 +341,17 @@ Captured alongside this report:
 
 ```
 docs/testing/reports/2026-04-20-1329-c0-fail/
-├── report.md               this file
-├── single_response.json    full TGI response for single-request run (8.1 KB)
-├── batch_response.json     full TGI response for prompt A in the batched run (8.1 KB)
-└── verdict.json            stats + thresholds + verdict summary (0.6 KB)
+├── report.md                              this file
+├── single_response.json                   default-config single run, full TGI response
+├── batch_response.json                    default-config batch run, prompt A's response
+├── verdict.json                           default-config stats + verdict (FAIL)
+└── mitigations/
+    ├── A_prefill1024_single_response.json Test A (§4.4), prefill-tokens=1024
+    ├── A_prefill1024_batch_response.json
+    ├── A_prefill1024_verdict.json         FAIL (but no sampling cascade)
+    ├── B_paged_noprefix_single_response.json  Test B (§4.4), paged + no prefix cache
+    ├── B_paged_noprefix_batch_response.json
+    └── B_paged_noprefix_verdict.json      FAIL (cascade reappears)
 ```
 
 `verdict.json` key fields:

@@ -1,0 +1,393 @@
+{
+  "generated_text": " The stars twinkle like diamonds scattered across the velvet",
+  "details": {
+    "finish_reason": "length",
+    "generated_tokens": 10,
+    "seed": 42,
+    "prefill": [],
+    "tokens": [
+      {
+        "id": 576,
+        "text": " The",
+        "logprob": -0.55908203,
+        "special": false
+      },
+      {
+        "id": 9759,
+        "text": " stars",
+        "logprob": -0.8676758,
+        "special": false
+      },
+      {
+        "id": 4384,
+        "text": " tw",
+        "logprob": -0.72314453,
+        "special": false
+      },
+      {
+        "id": 35144,
+        "text": "inkle",
+        "logprob": -0.00018084049,
+        "special": false
+      },
+      {
+        "id": 1075,
+        "text": " like",
+        "logprob": -0.0067214966,
+        "special": false
+      },
+      {
+        "id": 48051,
+        "text": " diamonds",
+        "logprob": -0.08276367,
+        "special": false
+      },
+      {
+        "id": 36967,
+        "text": " scattered",
+        "logprob": -0.7631836,
+        "special": false
+      },
+      {
+        "id": 3941,
+        "text": " across",
+        "logprob": -0.010101318,
+        "special": false
+      },
+      {
+        "id": 279,
+        "text": " the",
+        "logprob": -0.2524414,
+        "special": false
+      },
+      {
+        "id": 71326,
+        "text": " velvet",
+        "logprob": -0.007385254,
+        "special": false
+      }
+    ],
+    "top_tokens": [
+      [
+        {
+          "id": 576,
+          "text": " The",
+          "logprob": -0.55908203,
+          "special": false
+        },
+        {
+          "id": 1634,
+          "text": " As",
+          "logprob": -1.2148438,
+          "special": false
+        },
+        {
+          "id": 4710,
+          "text": " \n\n",
+          "logprob": -2.6523438,
+          "special": false
+        },
+        {
+          "id": 330,
+          "text": " \"",
+          "logprob": -3.6523438,
+          "special": false
+        },
+        {
+          "id": 88689,
+          "text": " Amid",
+          "logprob": -4.3867188,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 9759,
+          "text": " stars",
+          "logprob": -0.8676758,
+          "special": false
+        },
+        {
+          "id": 96400,
+          "text": " twink",
+          "logprob": -1.4453125,
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "logprob": -2.0703125,
+          "special": false
+        },
+        {
+          "id": 17788,
+          "text": " moon",
+          "logprob": -3.3203125,
+          "special": false
+        },
+        {
+          "id": 733,
+          "text": " const",
+          "logprob": -3.5078125,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 4384,
+          "text": " tw",
+          "logprob": -0.72314453,
+          "special": false
+        },
+        {
+          "id": 96400,
+          "text": " twink",
+          "logprob": -1.5048828,
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "logprob": -1.9736328,
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "logprob": -3.4882812,
+          "special": false
+        },
+        {
+          "id": 75361,
+          "text": " shimmer",
+          "logprob": -3.5507812,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 35144,
+          "text": "inkle",
+          "logprob": -0.00018084049,
+          "special": false
+        },
+        {
+          "id": 2811,
+          "text": "irl",
+          "logprob": -9.25,
+          "special": false
+        },
+        {
+          "id": 404,
+          "text": "ir",
+          "logprob": -9.5625,
+          "special": false
+        },
+        {
+          "id": 766,
+          "text": "ink",
+          "logprob": -11.21875,
+          "special": false
+        },
+        {
+          "id": 16754,
+          "text": "erk",
+          "logprob": -14.03125,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 1075,
+          "text": " like",
+          "logprob": -0.0067214966,
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "logprob": -5.8515625,
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "logprob": -5.8828125,
+          "special": false
+        },
+        {
+          "id": 438,
+          "text": " as",
+          "logprob": -7.4765625,
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "logprob": -8.9921875,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 48051,
+          "text": " diamonds",
+          "logprob": -0.08276367,
+          "special": false
+        },
+        {
+          "id": 13673,
+          "text": " tiny",
+          "logprob": -3.5351562,
+          "special": false
+        },
+        {
+          "id": 23594,
+          "text": " secrets",
+          "logprob": -4.1445312,
+          "special": false
+        },
+        {
+          "id": 36967,
+          "text": " scattered",
+          "logprob": -5.0507812,
+          "special": false
+        },
+        {
+          "id": 28727,
+          "text": " distant",
+          "logprob": -5.0507812,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 304,
+          "text": " in",
+          "logprob": -0.7319336,
+          "special": false
+        },
+        {
+          "id": 36967,
+          "text": " scattered",
+          "logprob": -0.7631836,
+          "special": false
+        },
+        {
+          "id": 389,
+          "text": " on",
+          "logprob": -3.8574219,
+          "special": false
+        },
+        {
+          "id": 21612,
+          "text": " suspended",
+          "logprob": -4.3554688,
+          "special": false
+        },
+        {
+          "id": 64804,
+          "text": " amidst",
+          "logprob": -5.3867188,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 3941,
+          "text": " across",
+          "logprob": -0.010101318,
+          "special": false
+        },
+        {
+          "id": 389,
+          "text": " on",
+          "logprob": -6.0742188,
+          "special": false
+        },
+        {
+          "id": 5193,
+          "text": " upon",
+          "logprob": -6.1679688,
+          "special": false
+        },
+        {
+          "id": 6814,
+          "text": " throughout",
+          "logprob": -6.5429688,
+          "special": false
+        },
+        {
+          "id": 1526,
+          "text": " through",
+          "logprob": -6.7304688,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 279,
+          "text": " the",
+          "logprob": -0.2524414,
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "logprob": -2.1894531,
+          "special": false
+        },
+        {
+          "id": 458,
+          "text": " an",
+          "logprob": -2.3769531,
+          "special": false
+        },
+        {
+          "id": 71326,
+          "text": " velvet",
+          "logprob": -4.0039062,
+          "special": false
+        },
+        {
+          "id": 32333,
+          "text": " midnight",
+          "logprob": -9.828125,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 71326,
+          "text": " velvet",
+          "logprob": -0.007385254,
+          "special": false
+        },
+        {
+          "id": 9054,
+          "text": " vel",
+          "logprob": -5.1640625,
+          "special": false
+        },
+        {
+          "id": 10041,
+          "text": " canvas",
+          "logprob": -7.1640625,
+          "special": false
+        },
+        {
+          "id": 6319,
+          "text": " dark",
+          "logprob": -8.2109375,
+          "special": false
+        },
+        {
+          "id": 5538,
+          "text": " deep",
+          "logprob": -8.4765625,
+          "special": false
+        }
+      ]
+    ]
+  }
+}

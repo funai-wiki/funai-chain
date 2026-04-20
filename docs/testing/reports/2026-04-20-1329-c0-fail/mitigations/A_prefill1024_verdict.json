@@ -1,0 +1,35 @@
+{
+  "result": "FAIL",
+  "stats": {
+    "positions": 10,
+    "samples_compared": 50,
+    "max_abs_err": 0.0625,
+    "max_rel_err": 0.03274940736495187,
+    "sampled_id_drift": 0,
+    "top_membership_drift": 0
+  },
+  "per_position_max_rel": [
+    0.0,
+    0.016009177473778564,
+    0.012303482464786988,
+    0.0,
+    0.013437844733666635,
+    0.03274940736495187,
+    0.021813224073840072,
+    0.0030120897830157567,
+    0.016216174430978503,
+    0.007688356876466332
+  ],
+  "thresholds": {
+    "pass": 1e-06,
+    "investigate": 0.001
+  },
+  "config": {
+    "endpoint": "http://47.96.179.86:8080",
+    "seed": 42,
+    "temperature": 0.7,
+    "max_new_tokens": 10,
+    "concurrent_count": 4,
+    "top_n": 5
+  }
+}

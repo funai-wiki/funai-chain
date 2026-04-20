@@ -1,0 +1,393 @@
+{
+  "generated_text": " The inky blackness of the night sky was",
+  "details": {
+    "finish_reason": "length",
+    "generated_tokens": 10,
+    "seed": 42,
+    "prefill": [],
+    "tokens": [
+      {
+        "id": 576,
+        "text": " The",
+        "logprob": -0.5595703,
+        "special": false
+      },
+      {
+        "id": 304,
+        "text": " in",
+        "logprob": -2.0976562,
+        "special": false
+      },
+      {
+        "id": 7891,
+        "text": "ky",
+        "logprob": 0.0,
+        "special": false
+      },
+      {
+        "id": 3691,
+        "text": " black",
+        "logprob": -0.32421875,
+        "special": false
+      },
+      {
+        "id": 2090,
+        "text": "ness",
+        "logprob": -0.5131836,
+        "special": false
+      },
+      {
+        "id": 315,
+        "text": " of",
+        "logprob": -0.013710022,
+        "special": false
+      },
+      {
+        "id": 279,
+        "text": " the",
+        "logprob": -0.0067367554,
+        "special": false
+      },
+      {
+        "id": 3729,
+        "text": " night",
+        "logprob": -0.0027561188,
+        "special": false
+      },
+      {
+        "id": 12884,
+        "text": " sky",
+        "logprob": -0.0004620552,
+        "special": false
+      },
+      {
+        "id": 572,
+        "text": " was",
+        "logprob": -0.4033203,
+        "special": false
+      }
+    ],
+    "top_tokens": [
+      [
+        {
+          "id": 576,
+          "text": " The",
+          "logprob": -0.5595703,
+          "special": false
+        },
+        {
+          "id": 1634,
+          "text": " As",
+          "logprob": -1.2158203,
+          "special": false
+        },
+        {
+          "id": 4710,
+          "text": " \n\n",
+          "logprob": -2.6523438,
+          "special": false
+        },
+        {
+          "id": 330,
+          "text": " \"",
+          "logprob": -3.6523438,
+          "special": false
+        },
+        {
+          "id": 88689,
+          "text": " Amid",
+          "logprob": -4.3710938,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 9759,
+          "text": " stars",
+          "logprob": -0.86376953,
+          "special": false
+        },
+        {
+          "id": 96400,
+          "text": " twink",
+          "logprob": -1.4414062,
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "logprob": -2.0976562,
+          "special": false
+        },
+        {
+          "id": 17788,
+          "text": " moon",
+          "logprob": -3.3164062,
+          "special": false
+        },
+        {
+          "id": 733,
+          "text": " const",
+          "logprob": -3.5039062,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 7891,
+          "text": "ky",
+          "logprob": 0.0,
+          "special": false
+        },
+        {
+          "id": 2413,
+          "text": "num",
+          "logprob": -16.9375,
+          "special": false
+        },
+        {
+          "id": 9202,
+          "text": "quis",
+          "logprob": -20.828125,
+          "special": false
+        },
+        {
+          "id": 1024,
+          "text": "const",
+          "logprob": -22.71875,
+          "special": false
+        },
+        {
+          "id": 38649,
+          "text": "extr",
+          "logprob": -22.734375,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 3691,
+          "text": " black",
+          "logprob": -0.32421875,
+          "special": false
+        },
+        {
+          "id": 26298,
+          "text": " darkness",
+          "logprob": -1.5742188,
+          "special": false
+        },
+        {
+          "id": 71326,
+          "text": " velvet",
+          "logprob": -3.6054688,
+          "special": false
+        },
+        {
+          "id": 10041,
+          "text": " canvas",
+          "logprob": -4.1679688,
+          "special": false
+        },
+        {
+          "id": 505,
+          "text": " ex",
+          "logprob": -4.5117188,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 2090,
+          "text": "ness",
+          "logprob": -0.5131836,
+          "special": false
+        },
+        {
+          "id": 10041,
+          "text": " canvas",
+          "logprob": -1.6699219,
+          "special": false
+        },
+        {
+          "id": 71326,
+          "text": " velvet",
+          "logprob": -2.2949219,
+          "special": false
+        },
+        {
+          "id": 505,
+          "text": " ex",
+          "logprob": -2.7636719,
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "logprob": -4.1054688,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 315,
+          "text": " of",
+          "logprob": -0.013710022,
+          "special": false
+        },
+        {
+          "id": 3403,
+          "text": " above",
+          "logprob": -4.328125,
+          "special": false
+        },
+        {
+          "id": 572,
+          "text": " was",
+          "logprob": -8.203125,
+          "special": false
+        },
+        {
+          "id": 40298,
+          "text": " stretched",
+          "logprob": -9.765625,
+          "special": false
+        },
+        {
+          "id": 9324,
+          "text": " seemed",
+          "logprob": -11.171875,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 279,
+          "text": " the",
+          "logprob": -0.0067367554,
+          "special": false
+        },
+        {
+          "id": 3729,
+          "text": " night",
+          "logprob": -5.0390625,
+          "special": false
+        },
+        {
+          "id": 3550,
+          "text": " space",
+          "logprob": -8.5703125,
+          "special": false
+        },
+        {
+          "id": 6774,
+          "text": " star",
+          "logprob": -11.4921875,
+          "special": false
+        },
+        {
+          "id": 11458,
+          "text": " evening",
+          "logprob": -11.7890625,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 3729,
+          "text": " night",
+          "logprob": -0.0027561188,
+          "special": false
+        },
+        {
+          "id": 12884,
+          "text": " sky",
+          "logprob": -6.2070312,
+          "special": false
+        },
+        {
+          "id": 6774,
+          "text": " star",
+          "logprob": -8.015625,
+          "special": false
+        },
+        {
+          "id": 11458,
+          "text": " evening",
+          "logprob": -9.046875,
+          "special": false
+        },
+        {
+          "id": 15494,
+          "text": " universe",
+          "logprob": -9.765625,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 12884,
+          "text": " sky",
+          "logprob": -0.0004620552,
+          "special": false
+        },
+        {
+          "id": 572,
+          "text": " was",
+          "logprob": -7.890625,
+          "special": false
+        },
+        {
+          "id": 53185,
+          "text": " envelop",
+          "logprob": -10.59375,
+          "special": false
+        },
+        {
+          "id": 75682,
+          "text": " unfolded",
+          "logprob": -11.703125,
+          "special": false
+        },
+        {
+          "id": 6551,
+          "text": " gave",
+          "logprob": -12.015625,
+          "special": false
+        }
+      ],
+      [
+        {
+          "id": 572,
+          "text": " was",
+          "logprob": -0.4033203,
+          "special": false
+        },
+        {
+          "id": 15186,
+          "text": " spark",
+          "logprob": -1.8720703,
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "logprob": -2.8242188,
+          "special": false
+        },
+        {
+          "id": 9324,
+          "text": " seemed",
+          "logprob": -3.4023438,
+          "special": false
+        },
+        {
+          "id": 96400,
+          "text": " twink",
+          "logprob": -3.7148438,
+          "special": false
+        }
+      ]
+    ]
+  }
+}
