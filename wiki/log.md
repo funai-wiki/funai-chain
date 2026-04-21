@@ -1,5 +1,38 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-21] ingest | V6 Batch-Replay design note (English) + PoC scaffold
+
+**Operator:** Claude (LLM)
+
+**New source doc ingested:**
+- `docs/protocol/FunAI_V6_BatchReplay_Design.md` (~190 lines) — English translation of the V6 Batch Log-Replay verification proposal. Supersedes the V5.2 verification path in response to the C0 FAIL (2026-04-20). Core idea: Verifier replays the Worker's exact per-step batch composition instead of trying to re-derive logits single-request, reducing the verification claim to "same engine + same schedule + deterministic kernels → bit-exact". 11 items split P0 (replay scheduler, Worker batch log, batch-mode dispatch, settlement lock) / P1 (jail decay 1000, 3-consecutive-miss jail, no-log-= FAIL, Verifier collective punishment, capacity over-statement) / P2 (per-model epsilon unchanged, ChaCha20 restored to 100 % coverage). Deprecates 9 items from earlier drafts including verification proxy, 7 % VRF sampling fallback, top-K rank check, TaskCache, SGLang determinism, hardware-partitioned subnets, clawback.
+
+**Reviewer findings flagged in this ingest (not in the source note):**
+- A1 (engineering): TGI and vLLM both lack a "replay this schedule" API; implementation path needs to pick among fork-TGI / fork-vLLM / transformers-based custom runtime.
+- A2 (cross-hardware bit-exactness): source note claims "T4/5090 0.000000" from an informal engineer test. Evidence not in the repo. Needs a C0-style report before becoming P0.
+- B1 (verifier compute): Verifier replays the entire batch to verify one task → ~48× original cost at batch=16 × 3 verifiers. 85/12/3 fee split can't clear; needs economic-model refresh.
+- C1 (log forgery): no mechanism today rejects fabricated partner tasks in a batch log. Critical gap. Proposed fix: every `task_id` in the log must resolve to a real on-chain `InferRequest`.
+- C2 (adversarial partners): even with C1 fixed, Worker picking which real tasks to batch can steer target logits. Partial mitigation: Leader-driven batch composition.
+- D1: Item 3 "no upper bound on capacity" conflicts with S1's `max_concurrent_tasks` range [1, 32].
+- D2: V6's deprecation of the "verification proxy" concept also retires the in-progress Option B design. User decision: V6-only, not V6 + Option B bridging.
+
+**PoC scaffold added (Phase 0, `research/v6-replay-poc` branch):**
+- `scripts/v6-replay/README.md` — 3-phase plan, hard PASS / INVESTIGATE / KILL conditions per phase, engine-choice rationale (transformers-based, not TGI/vLLM).
+- `scripts/v6-replay/{replay_types.py, worker_simulator.py, replay_engine.py}` — signature-only stubs with determinism contracts documented in docstrings.
+- `scripts/v6-replay/{test_phase1.py, test_phase2.py}` — pytest skeletons that fail with `NotImplementedError` until Phase 1 lands; serve as executable acceptance criteria.
+- `scripts/v6-replay/requirements.txt`, `__init__.py`.
+
+**Wiki pages updated:**
+- `wiki/index.md` — Added row under Operations & Status; header bumped to 26 sources / 2026-04-21.
+- `wiki/log.md` — This entry.
+
+**Superseded (removed from working tree, never merged):**
+- `docs/protocol/FunAI_V52_Option_B_Verification_Logits.md` — Option B single-request teacher-forcing path. V6 batch-replay chosen as the single verification scheme going forward.
+
+**Phase 0 gate:** PoC scaffolding exists, tests fail cleanly with `NotImplementedError`, determinism contracts documented. Phase 1 (2–4 weeks) begins once compute is provisioned and the engine-route selection is confirmed.
+
+---
+
 ## [2026-04-20] ingest + impl | P1 AvgLatencyMs self-report bug (KT)
 
 **Operator:** Claude (LLM)

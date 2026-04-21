@@ -1,7 +1,7 @@
 # FunAI Chain Wiki — Index
 
-> LLM-maintained knowledge base. 25 source documents ingested, 19 wiki pages generated.
-> Last updated: 2026-04-20
+> LLM-maintained knowledge base. 26 source documents ingested, 19 wiki pages generated.
+> Last updated: 2026-04-21
 
 ## Core Concepts
 
@@ -37,6 +37,7 @@
 | [Pre-Launch Final Audit](../docs/protocol/FunAI_PreLaunch_Final_Audit_KT.md) | 12 protocol-level decisions (jms/KT, 2026-04-14) required before mainnet: rank 10→21, top-p, Reputation, AssignTask fields, latency-weighted VRF, long-tail model gates, 48h retention, 85/12/3 distribution, weights-hash in model_id, balance-check-first in Leader. Effort: 2.5–3 weeks. | PreLaunch_Audit_KT |
 | [Leader Reputation Design](../docs/protocol/FunAI_Leader_Reputation_Design.md) | P2 post-launch design (2026-04-18): Leader-specific reputation score folded into VRF election formula alongside stake. Independent from inference ReputationScore. Three automatic keeper-side detection scenarios (idle epoch / repeated failover / illegal rank skip), no new Msg types. Effort: 200–300 lines across 3 modules, 7-phase plan. | Leader_Reputation_Design |
 | [P1: AvgLatencyMs Self-Report Fix](../docs/protocol/P1_AvgLatencyMs_SelfReport_Bug_KT_1.md) | P1 bug (2026-04-20, KT): Worker self-measures `inferMs`, signs it into receipt, chain consumes for VRF speed ranking. Signature defeats MITM but not self-forgery; exploit yields up to 1.5× dispatch boost. Fix: replace with Proposer-recorded `AcceptedAtMs` and `ReceiptAtMs`. Translation added §7 flagging 5 open gaps — notably `AcceptTask` has no timestamp so Worker can compress by delaying AcceptTask; the implementation PR anchors on Proposer's own wall-clock at AssignTask observation, avoiding AssignTask field / SigDigest changes. | P1_AvgLatencyMs_SelfReport_Bug_KT_1 |
+| [V6 Batch-Replay Design](../docs/protocol/FunAI_V6_BatchReplay_Design.md) | P0 research-stage design (2026-04-21): fix C0's batched-vs-single logits drift by having the Verifier replay the Worker's exact per-step batch schedule instead of running single-request teacher forcing. Rests on claims A1 (engine can be driven to replay) and A2 (cross-hardware bit-exactness). Validated ahead of protocol rewrite via the PoC at `scripts/v6-replay/` (transformers-based, 3-phase plan). 11 design items total; reviewer flagged blockers (compute amplification, log forgery via fabricated partner tasks, Option B coexistence). | V6_BatchReplay_Design + review |
 | [Testnet Configuration](testnet.md) | Chain ID funai-testnet-1, seed 34.87.21.99, TGI 34.143.145.204:8080. 11-step join guide. | Join_Testnet, ops-runbook |
 | [Operations Runbook](operations.md) | Env vars, monitoring metrics, troubleshooting, deployment, emergency procedures. | ops-runbook, Phase4_Guide |
 | [Worker Operator Guide](../docs/guides/Worker_Operator_Guide.md) | Setup, registration, staking, GPU config, model management, reputation, penalties. | Worker_Operator_Guide |
