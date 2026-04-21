@@ -161,3 +161,133 @@ class WorkerSimulator:
         step_logits = out.logits[:, -1, :]
         next_tokens = torch.argmax(step_logits, dim=-1)
         return step_logits, out.past_key_values, attention_mask, next_tokens
+
+    # ── Phase 1c: dynamic batch composition ──────────────────────────────────
+    #
+    # `run_batch_dynamic` is the load-bearing V6 validation path. Unlike Phase
+    # 1a's `run_batch`, it honours a per-task schedule so each task can join
+    # and leave the batch at different steps, producing a BatchLog with
+    # non-uniform per-step `active_task_ids`. The ReplayEngine then replays
+    # that exact schedule and must recover bit-identical logits for any
+    # target task.
+    #
+    # Implementation style: recompute-from-scratch at every decode step
+    # (no shared KV cache across steps). This is 5-10x slower than true
+    # continuous batching on a per-step basis but avoids the complexity of
+    # slicing per-task KV tensors in/out of a shared cache when composition
+    # changes. Same result; simpler code; sufficient for a determinism PoC.
+    # Production engines (TGI, vLLM) will use proper cache management.
+    #
+    # Both Worker and Replayer use the same recompute path, so bit-exactness
+    # is a function of PyTorch determinism (seeds, algorithms flag, eager
+    # attention) — not of whether the two paths match some external engine.
+
+    @torch.no_grad()
+    def run_batch_dynamic(
+        self,
+        task_prompts: dict[str, str],
+        task_schedule: dict[str, tuple[int, int]],
+        *,
+        temperature: float,
+        top_p: float,
+        seed: int,
+    ) -> tuple[dict[str, str], BatchLog, dict[str, TaskLogits]]:
+        """
+        Run inference with a dynamic per-task schedule.
+
+        Args:
+            task_prompts: ``task_id -> prompt``.
+            task_schedule: ``task_id -> (start_step, end_step)``; task is active
+                at step K iff ``start_step <= K < end_step``. Keys must match
+                ``task_prompts``.
+            temperature, top_p, seed: sampling params (Phase 1c still argmax).
+
+        Returns: same shape as ``run_batch``.
+        """
+        if temperature != 0.0:
+            raise NotImplementedError(
+                "Phase 1c currently supports temperature=0 (argmax). "
+                "Temperature>0 with ChaCha20 sampling is Phase 1b, and will "
+                "compose with dynamic schedules once both land."
+            )
+        if set(task_schedule) != set(task_prompts):
+            missing = set(task_prompts) - set(task_schedule)
+            extra = set(task_schedule) - set(task_prompts)
+            raise ValueError(
+                f"task_schedule keys must match task_prompts; "
+                f"missing={missing}, extra={extra}"
+            )
+
+        configure_determinism(seed)
+
+        # Pre-tokenize each prompt once. Returned list of ints, no padding —
+        # padding happens per-step because active contexts have varying length.
+        prompt_ids: dict[str, list[int]] = {
+            tid: list(self.tokenizer(prompt, add_special_tokens=True)["input_ids"])
+            for tid, prompt in task_prompts.items()
+        }
+
+        max_step = max(end for _, end in task_schedule.values())
+        sampled_tokens: dict[str, list[int]] = {tid: [] for tid in task_prompts}
+        per_task_logits: dict[str, list[Any]] = {tid: [] for tid in task_prompts}
+        steps: list[BatchStep] = []
+
+        pad_id = self.tokenizer.pad_token_id
+
+        for step in range(max_step):
+            active = tuple(
+                tid
+                for tid in task_prompts
+                if task_schedule[tid][0] <= step < task_schedule[tid][1]
+            )
+            if not active:
+                continue
+
+            # One forward pass over active tasks; contexts are left-padded to
+            # the max active context length.
+            contexts = [prompt_ids[tid] + sampled_tokens[tid] for tid in active]
+            max_len = max(len(c) for c in contexts)
+            padded = [[pad_id] * (max_len - len(c)) + c for c in contexts]
+            attn = [[0] * (max_len - len(c)) + [1] * len(c) for c in contexts]
+
+            input_ids = torch.tensor(padded, dtype=torch.long, device=self.device)
+            attention_mask = torch.tensor(attn, dtype=torch.long, device=self.device)
+
+            out = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_cache=False,
+            )
+            step_logits = out.logits[:, -1, :]
+            next_tokens = torch.argmax(step_logits, dim=-1)
+
+            for i, tid in enumerate(active):
+                per_task_logits[tid].append(
+                    step_logits[i].detach().float().cpu().numpy()
+                )
+                sampled_tokens[tid].append(int(next_tokens[i]))
+
+            steps.append(BatchStep(step_index=step, active_task_ids=active))
+
+        outputs = {
+            tid: self.tokenizer.decode(sampled_tokens[tid], skip_special_tokens=True)
+            for tid in task_prompts
+        }
+
+        log = BatchLog(
+            model_id=self.model_id,
+            seed=seed,
+            temperature=temperature,
+            top_p=top_p,
+            max_new_tokens=max_step,
+            task_prompts=dict(task_prompts),
+            steps=steps,
+            dtype="bfloat16",
+        )
+
+        task_logits = {
+            tid: TaskLogits(task_id=tid, logits=per_task_logits[tid])
+            for tid in task_prompts
+        }
+
+        return outputs, log, task_logits

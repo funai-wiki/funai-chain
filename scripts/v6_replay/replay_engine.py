@@ -109,3 +109,88 @@ class ReplayEngine:
                     "membership (step "
                     f"{step.step_index} differs from step 0) is Phase 1c+ work."
                 )
+
+    # ── Phase 1c: dynamic batch composition ──────────────────────────────────
+    #
+    # `replay_dynamic` pairs with `WorkerSimulator.run_batch_dynamic`. Both
+    # use the recompute-from-scratch path: at each step listed in
+    # `batch_log.steps`, rebuild the active tasks' contexts (prompt +
+    # sampled tokens so far) and do one forward pass. The target's logits
+    # are collected at each step where it was active.
+    #
+    # Symmetric with the Worker: same tokenization, same padding, same
+    # attention mask layout, same determinism flags. Bit-exactness is
+    # a consequence of both sides walking the same deterministic code path
+    # with the same inputs (driven by BatchLog.steps).
+
+    @torch.no_grad()
+    def replay_dynamic(self, batch_log: BatchLog, *, target_task_id: str) -> TaskLogits:
+        """
+        Replay a dynamic-composition ``BatchLog`` and return logits for the
+        designated target. Honours per-step ``active_task_ids`` exactly.
+
+        Returned ``TaskLogits.logits`` contains one entry per step where
+        ``target_task_id`` appeared in the active roster; the entries are
+        in step order (monotonically increasing ``step_index``).
+
+        Raises:
+            ValueError: target not in the log, or model/seed mismatch.
+            NotImplementedError: temperature > 0 (Phase 1b composition).
+        """
+        if target_task_id not in batch_log.task_prompts:
+            raise ValueError(
+                f"target_task_id={target_task_id} not in batch_log.task_prompts "
+                f"(have {sorted(batch_log.task_prompts)})"
+            )
+        if batch_log.temperature != 0.0:
+            raise NotImplementedError(
+                "Phase 1c currently supports temperature=0 (argmax). "
+                f"Log has temperature={batch_log.temperature}."
+            )
+        if batch_log.model_id != self.model_id:
+            raise ValueError(
+                f"batch_log.model_id={batch_log.model_id!r} does not match "
+                f"ReplayEngine.model_id={self.model_id!r}"
+            )
+        if not batch_log.steps:
+            raise ValueError("batch_log.steps is empty")
+
+        configure_determinism(batch_log.seed)
+
+        prompt_ids: dict[str, list[int]] = {
+            tid: list(self.tokenizer(prompt, add_special_tokens=True)["input_ids"])
+            for tid, prompt in batch_log.task_prompts.items()
+        }
+        sampled_tokens: dict[str, list[int]] = {tid: [] for tid in batch_log.task_prompts}
+        target_logits: list = []
+        pad_id = self.tokenizer.pad_token_id
+
+        for step in batch_log.steps:
+            active = step.active_task_ids
+            if not active:
+                continue
+
+            contexts = [prompt_ids[tid] + sampled_tokens[tid] for tid in active]
+            max_len = max(len(c) for c in contexts)
+            padded = [[pad_id] * (max_len - len(c)) + c for c in contexts]
+            attn = [[0] * (max_len - len(c)) + [1] * len(c) for c in contexts]
+
+            input_ids = torch.tensor(padded, dtype=torch.long, device=self.device)
+            attention_mask = torch.tensor(attn, dtype=torch.long, device=self.device)
+
+            out = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_cache=False,
+            )
+            step_logits = out.logits[:, -1, :]
+            next_tokens = torch.argmax(step_logits, dim=-1)
+
+            for i, tid in enumerate(active):
+                if tid == target_task_id:
+                    target_logits.append(
+                        step_logits[i].detach().float().cpu().numpy()
+                    )
+                sampled_tokens[tid].append(int(next_tokens[i]))
+
+        return TaskLogits(task_id=target_task_id, logits=target_logits)

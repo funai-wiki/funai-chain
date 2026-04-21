@@ -114,3 +114,139 @@ def test_replay_three_repeats_stable(worker_run):
                     f"repeat {repeat + 1} {task_id} step {i}: non-deterministic "
                     f"max_abs_err={diff:g}"
                 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 1c — dynamic batch composition
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Phase 1c is the load-bearing V6 validation step: tasks join and leave the
+# batch at different decode steps, so `BatchLog.steps[k].active_task_ids`
+# varies across k. A replay that honors the per-step roster must still
+# produce bit-exact logits for every target at every step where it was
+# active.
+#
+# Two schedule shapes cover the interesting transitions:
+#   LEAVE_SCHEDULE: all tasks start at step 0; leave at different steps.
+#       Exercises KV-cache-pruning equivalent scenarios.
+#   JOIN_SCHEDULE: some tasks enter the batch mid-run (prefill while others
+#       are already decoding). Exercises the "new task arrives" path.
+
+
+# Leave-only schedule: all start at 0, staggered exits.
+LEAVE_SCHEDULE = {
+    "task-p1-001": (0, 4),
+    "task-p1-002": (0, 6),
+    "task-p1-003": (0, 8),
+    "task-p1-004": (0, 10),
+}
+
+# Join+leave schedule: some tasks arrive late.
+JOIN_SCHEDULE = {
+    "task-p1-001": (0, 5),
+    "task-p1-002": (0, 8),
+    "task-p1-003": (2, 9),   # joins at step 2
+    "task-p1-004": (4, 10),  # joins at step 4
+}
+
+
+def _assert_roster_varies(log, schedule_name: str) -> None:
+    rosters = [s.active_task_ids for s in log.steps]
+    assert any(r != rosters[0] for r in rosters), (
+        f"{schedule_name}: composition never changes — degenerated to Phase 1a, "
+        "test does not actually exercise Phase 1c"
+    )
+
+
+def _assert_log_matches_schedule(log, schedule, schedule_name: str) -> None:
+    """Worker honours the schedule faithfully."""
+    step_map = {s.step_index: set(s.active_task_ids) for s in log.steps}
+    max_step = max(end for _, end in schedule.values())
+    for k in range(max_step):
+        expected = {
+            tid for tid, (start, end) in schedule.items() if start <= k < end
+        }
+        got = step_map.get(k, set())
+        assert got == expected, (
+            f"{schedule_name}: step {k} active set mismatch — expected {expected}, got {got}"
+        )
+
+
+def _assert_bit_exact_per_target(schedule, worker_logits, replay_engine, log, schedule_name: str):
+    for tid, (start, end) in schedule.items():
+        expected_step_count = end - start
+        replayed = replay_engine.replay_dynamic(log, target_task_id=tid)
+        w = worker_logits[tid].logits
+        rp = replayed.logits
+        assert len(w) == expected_step_count, (
+            f"{schedule_name} target={tid}: worker logits length "
+            f"{len(w)} != schedule active steps {expected_step_count}"
+        )
+        assert len(rp) == len(w), (
+            f"{schedule_name} target={tid}: replay length {len(rp)} != worker length {len(w)}"
+        )
+        for i, (w_step, r_step) in enumerate(zip(w, rp)):
+            diff = float(np.max(np.abs(np.asarray(w_step) - np.asarray(r_step))))
+            assert diff == 0.0, (
+                f"{schedule_name} KILL: target={tid} step={i} max_abs_err={diff:g} "
+                "— Phase 1c bit-exactness broken"
+            )
+
+
+@pytest.fixture(scope="module")
+def leave_worker_run():
+    """Worker runs the leave-only schedule once; all Phase-1c-leave tests reuse."""
+    w = WorkerSimulator(MODEL, DEVICE)
+    return w.run_batch_dynamic(
+        PROMPTS,
+        LEAVE_SCHEDULE,
+        temperature=0.0,
+        top_p=1.0,
+        seed=42,
+    )
+
+
+@pytest.fixture(scope="module")
+def join_worker_run():
+    w = WorkerSimulator(MODEL, DEVICE)
+    return w.run_batch_dynamic(
+        PROMPTS,
+        JOIN_SCHEDULE,
+        temperature=0.0,
+        top_p=1.0,
+        seed=42,
+    )
+
+
+def test_1c_leave_roster_varies(leave_worker_run):
+    _, log, _ = leave_worker_run
+    _assert_roster_varies(log, "LEAVE_SCHEDULE")
+
+
+def test_1c_leave_log_matches_schedule(leave_worker_run):
+    _, log, _ = leave_worker_run
+    _assert_log_matches_schedule(log, LEAVE_SCHEDULE, "LEAVE_SCHEDULE")
+
+
+def test_1c_leave_replay_bit_exact(leave_worker_run):
+    """Load-bearing Phase 1c claim for leave-only dynamic composition."""
+    _, log, worker_logits = leave_worker_run
+    r = ReplayEngine(MODEL, DEVICE)
+    _assert_bit_exact_per_target(LEAVE_SCHEDULE, worker_logits, r, log, "LEAVE")
+
+
+def test_1c_join_roster_varies(join_worker_run):
+    _, log, _ = join_worker_run
+    _assert_roster_varies(log, "JOIN_SCHEDULE")
+
+
+def test_1c_join_log_matches_schedule(join_worker_run):
+    _, log, _ = join_worker_run
+    _assert_log_matches_schedule(log, JOIN_SCHEDULE, "JOIN_SCHEDULE")
+
+
+def test_1c_join_replay_bit_exact(join_worker_run):
+    """Load-bearing Phase 1c claim for join+leave dynamic composition."""
+    _, log, worker_logits = join_worker_run
+    r = ReplayEngine(MODEL, DEVICE)
+    _assert_bit_exact_per_target(JOIN_SCHEDULE, worker_logits, r, log, "JOIN")
