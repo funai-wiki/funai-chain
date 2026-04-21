@@ -1,5 +1,45 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-21 17:40 CST] ingest | V6 Batch Replay Verification (KT v2)
+
+**Operator:** Claude (LLM), dmldevai
+
+**New source doc ingested:**
+- `docs/protocol/FunAI_V6_Batch_Replay_Verification_KT.md` (~200 lines) — KT's more polished V6 execution spec, English translation. Successor to `FunAI_V6_BatchReplay_Design.md` with three notable additions, one update, and renumbered sections:
+  - **(new)** §2.5 **Engine-version declaration at model registration**: model proposer declares vLLM / SGLang / TGI + version as part of `model_id` registration (alongside weight_hash, quant_config_hash). Upgrading engine version = register a new `model_id`. Addresses the cross-engine bit-exact concern at protocol level.
+  - **(new)** §4.3 **VRAM filter on VRF Verifier selection**: Verifier must replay entire batch; VRF selection filters by available VRAM. Worker can lower `batch_capacity` to widen the Verifier pool — throughput vs verifier availability is a market trade-off.
+  - **(new)** §7 **Issues GPU testing will surface**: 6-item list of concrete concerns (scheduler hidden state, chunked prefill, join/leave boundaries, engine version, VRAM, log bandwidth) — becomes the Phase 3 engine-transition backlog.
+  - **(new)** §8 **Execution order**: explicit 5-step phased plan; §2.1 + §2.2 first, end-to-end test, then rest.
+  - **(new)** §9 **V6 vs V5.2 advantages table**: cross-hardware, throughput loss (0% vs 34%), coverage (100% vs 7%), engine dependency.
+  - **(updated)** §3.2 Sliding-window miss jail (10 tasks / 3 misses, both chain-adjustable). Replaces earlier doc's strict-consecutive rule.
+
+**Items NOT in KT v2 that earlier V6 doc had:**
+- **Leader-side request bundling** (item #12 in `FunAI_V6_BatchReplay_Design.md`). KT v2 §2.3 keeps the original Worker-side `batch_wait_timeout`. Operator-proposed refinement that argued Worker-side wait windows close empty at low traffic (forcing `batch=1`) and that Leader-side bundling both fixes that and reduces C2 (adversarial partner selection). Design-level decision, flagged for KT review.
+
+**Review cross-check vs. earlier operator findings:**
+- A1 engineering: addressed partially (§7.1 admits "core engineering bottleneck"; §8 stages validation); not fully scoped.
+- A2 cross-hardware evidence: still cited as "engineer-side measurement", no on-repo report link. Action: Phase 2 PoC will produce that evidence.
+- B1 compute amplification: partially addressed (§4.3 VRAM filter is operational), but 85/12/3 fee split vs ~48× verifier cost is still open economically.
+- C1 log forgery: NOT addressed. "No log = FAIL" handles withholding but not submitting a fabricated log that would replay to a fake output.
+- C2 adversarial-partner: NOT addressed in KT v2 (would have been by item #12 Leader-side bundling; not adopted).
+- D1 S1 conflict: still present (§2.3 "no upper bound" vs on-chain `max_concurrent_tasks` range [1, 32]).
+- D2 Option B deprecation: confirmed (§5 lists "verification proxy" as deprecated).
+- Engine version pinning: NEW (§2.5). Good addition — tightens bit-exactness claim.
+
+**Relationship to `FunAI_V6_BatchReplay_Design.md`:**
+Not deleted. Operator-side decision pending — KT v2 is more complete and current, but the older doc's item #12 (Leader-side bundling) has no equivalent in KT v2 and may still warrant adoption. A follow-up commit will either fold item #12 into KT v2, supersede the older doc outright, or mark it deprecated with a pointer.
+
+**Phase 1 PoC evidence relevant to KT v2:**
+- §1 "no throughput loss" — PoC engine (transformers recompute-from-scratch) is 10-20× slower than TGI. KT v2's claim applies to production engines (vLLM/SGLang/TGI) once Phase 3 port happens; the PoC's throughput number is not a measurement of V6.
+- §4.1 "expected diff = 0.000000" under batch replay — **confirmed on single machine** (Phase 1a + 1c + 1b, Qwen2.5-3B, `max_abs_err == 0.0` across ~400 comparisons).
+- §9 "inference engine dependency: none" — subject to §2.5's same-engine constraint. The table's phrasing could mislead readers into thinking arbitrary engines interoperate without pinning. Worth clarifying inline.
+
+**Wiki pages updated:**
+- `wiki/index.md` — V6 row updated to reference the new KT v2 doc as the canonical execution spec; the earlier design-note row retained for historical reference with a superseded note.
+- `wiki/log.md` — This entry.
+
+---
+
 ## [2026-04-21 17:10 CST] result | V6 Phase 1b lands — ChaCha20 sampling replay bit-exact on Qwen2.5-3B
 
 **Operator:** Claude (LLM), dmldevai
