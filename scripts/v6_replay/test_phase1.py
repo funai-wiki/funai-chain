@@ -250,3 +250,88 @@ def test_1c_join_replay_bit_exact(join_worker_run):
     _, log, worker_logits = join_worker_run
     r = ReplayEngine(MODEL, DEVICE)
     _assert_bit_exact_per_target(JOIN_SCHEDULE, worker_logits, r, log, "JOIN")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 1b — temperature > 0 with ChaCha20 sampling, dynamic batch
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Phase 1b composes on top of Phase 1c: the Worker uses the same dynamic
+# batch path (join+leave schedule) but samples tokens via V5.2 §9.3's
+# ChaCha20-seeded inverse CDF instead of argmax. Bit-exactness now has two
+# components:
+#
+#   1. Logits bit-exact (inherited from Phase 1c's numerical determinism).
+#   2. Sampled tokens identical between Worker and Replayer (because both
+#      apply the same chacha20_sample to the same logits with the same
+#      per-task final_seed + per-step nonce).
+#
+# The "not-argmax" guard below verifies that sampling actually diverges
+# from argmax — without it, temperature=0.7 could degenerate to argmax by
+# coincidence on a small test set and we'd be re-testing Phase 1c.
+
+
+PHASE1B_SAMPLING = dict(
+    temperature=0.7,
+    top_p=0.9,
+    seed=42,
+)
+
+
+@pytest.fixture(scope="module")
+def phase1b_worker_run():
+    """Worker runs JOIN_SCHEDULE under temperature=0.7 once; tests reuse."""
+    w = WorkerSimulator(MODEL, DEVICE)
+    return w.run_batch_dynamic(PROMPTS, JOIN_SCHEDULE, **PHASE1B_SAMPLING)
+
+
+def test_1b_sampling_not_argmax(phase1b_worker_run):
+    """Guard: sampling must actually diverge from argmax somewhere, else
+    temperature=0.7 has coincidentally reduced to greedy and this test
+    stops exercising ChaCha20."""
+    _, _, worker_logits = phase1b_worker_run
+    saw_divergence = False
+    for tl in worker_logits.values():
+        for i, (tok, logit_vec) in enumerate(zip(tl.sampled_tokens, tl.logits)):
+            if tok != int(np.argmax(np.asarray(logit_vec))):
+                saw_divergence = True
+                break
+        if saw_divergence:
+            break
+    assert saw_divergence, (
+        "Phase 1b test degenerated: all sampled tokens matched argmax. "
+        "ChaCha20 sampling path is not being exercised — increase "
+        "temperature, expand prompts, or widen top_p."
+    )
+
+
+@pytest.mark.parametrize("target", list(PROMPTS))
+def test_1b_replay_is_bit_exact_logits(phase1b_worker_run, target):
+    """Logits must remain bit-exact under temperature > 0 (sampling only
+    affects which token is chosen, not the logits that feed it)."""
+    _, log, worker_logits = phase1b_worker_run
+    r = ReplayEngine(MODEL, DEVICE)
+    replayed = r.replay_dynamic(log, target_task_id=target)
+    w = worker_logits[target].logits
+    rp = replayed.logits
+    assert len(w) == len(rp), (
+        f"{target}: step count differs — worker={len(w)}, replay={len(rp)}"
+    )
+    for i, (w_step, r_step) in enumerate(zip(w, rp)):
+        diff = float(np.max(np.abs(np.asarray(w_step) - np.asarray(r_step))))
+        assert diff == 0.0, (
+            f"Phase 1b KILL (logits): target={target} step={i} max_abs_err={diff:g}"
+        )
+
+
+@pytest.mark.parametrize("target", list(PROMPTS))
+def test_1b_replay_sampled_tokens_match(phase1b_worker_run, target):
+    """Load-bearing Phase 1b assertion: Worker and Replayer agree on every
+    ChaCha20-sampled token, at every step the target was active."""
+    _, log, worker_logits = phase1b_worker_run
+    r = ReplayEngine(MODEL, DEVICE)
+    replayed = r.replay_dynamic(log, target_task_id=target)
+    assert worker_logits[target].sampled_tokens == replayed.sampled_tokens, (
+        f"Phase 1b KILL (sampling): target={target} "
+        f"worker={worker_logits[target].sampled_tokens} != replay={replayed.sampled_tokens}"
+    )

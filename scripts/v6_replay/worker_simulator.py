@@ -31,10 +31,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import torch
 
 from ._common import configure_determinism, load_model_and_tokenizer
 from .replay_types import BatchLog, BatchStep, TaskLogits
+from .sampling import chacha20_sample, derive_final_seed
 
 
 class WorkerSimulator:
@@ -200,16 +202,18 @@ class WorkerSimulator:
             task_schedule: ``task_id -> (start_step, end_step)``; task is active
                 at step K iff ``start_step <= K < end_step``. Keys must match
                 ``task_prompts``.
-            temperature, top_p, seed: sampling params (Phase 1c still argmax).
+            temperature: ``0.0`` → argmax (Phase 1c). ``> 0`` → ChaCha20-seeded
+                inverse-CDF sampling (Phase 1b). See ``sampling.py``.
+            top_p: nucleus threshold. Ignored when temperature == 0.
+            seed: Worker seed, fed to ``configure_determinism`` and to
+                ``derive_final_seed`` for per-task ChaCha20 key derivation.
 
         Returns: same shape as ``run_batch``.
         """
-        if temperature != 0.0:
-            raise NotImplementedError(
-                "Phase 1c currently supports temperature=0 (argmax). "
-                "Temperature>0 with ChaCha20 sampling is Phase 1b, and will "
-                "compose with dynamic schedules once both land."
-            )
+        if temperature < 0:
+            raise ValueError(f"temperature must be >= 0, got {temperature}")
+        if temperature > 0 and not (0.0 < top_p <= 1.0):
+            raise ValueError(f"top_p must be in (0, 1] when temperature > 0, got {top_p}")
         if set(task_schedule) != set(task_prompts):
             missing = set(task_prompts) - set(task_schedule)
             extra = set(task_schedule) - set(task_prompts)
@@ -233,6 +237,11 @@ class WorkerSimulator:
         steps: list[BatchStep] = []
 
         pad_id = self.tokenizer.pad_token_id
+        # Per-task ChaCha20 key — pre-derived so the ChaCha stream for each task
+        # is independent of other tasks' activity.
+        final_seeds: dict[str, bytes] = {
+            tid: derive_final_seed(tid, seed) for tid in task_prompts
+        }
 
         for step in range(max_step):
             active = tuple(
@@ -259,13 +268,21 @@ class WorkerSimulator:
                 use_cache=False,
             )
             step_logits = out.logits[:, -1, :]
-            next_tokens = torch.argmax(step_logits, dim=-1)
 
             for i, tid in enumerate(active):
-                per_task_logits[tid].append(
-                    step_logits[i].detach().float().cpu().numpy()
-                )
-                sampled_tokens[tid].append(int(next_tokens[i]))
+                logit_vec = step_logits[i].detach().float().cpu().numpy()
+                per_task_logits[tid].append(logit_vec)
+                if temperature == 0.0:
+                    tok = int(np.argmax(logit_vec))
+                else:
+                    tok = chacha20_sample(
+                        logit_vec,
+                        temperature=temperature,
+                        top_p=top_p,
+                        final_seed=final_seeds[tid],
+                        step_index=step,
+                    )
+                sampled_tokens[tid].append(tok)
 
             steps.append(BatchStep(step_index=step, active_task_ids=active))
 
@@ -286,7 +303,11 @@ class WorkerSimulator:
         )
 
         task_logits = {
-            tid: TaskLogits(task_id=tid, logits=per_task_logits[tid])
+            tid: TaskLogits(
+                task_id=tid,
+                logits=per_task_logits[tid],
+                sampled_tokens=list(sampled_tokens[tid]),
+            )
             for tid in task_prompts
         }
 

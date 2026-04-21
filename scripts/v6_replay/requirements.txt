@@ -6,3 +6,5 @@ torch>=2.1,<3
 transformers>=4.40,<5
 numpy>=1.24,<2
 pytest>=7
+# ChaCha20 for Phase 1b deterministic sampling (V5.2 §9.3).
+cryptography>=42

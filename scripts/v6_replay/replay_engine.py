@@ -18,8 +18,11 @@ from __future__ import annotations
 
 import torch
 
+import numpy as np
+
 from ._common import configure_determinism, load_model_and_tokenizer
 from .replay_types import BatchLog, TaskLogits
+from .sampling import chacha20_sample, derive_final_seed
 
 
 class ReplayEngine:
@@ -134,18 +137,22 @@ class ReplayEngine:
         in step order (monotonically increasing ``step_index``).
 
         Raises:
-            ValueError: target not in the log, or model/seed mismatch.
-            NotImplementedError: temperature > 0 (Phase 1b composition).
+            ValueError: target not in the log, model/seed mismatch, or
+                malformed sampling params for ``temperature > 0``.
         """
         if target_task_id not in batch_log.task_prompts:
             raise ValueError(
                 f"target_task_id={target_task_id} not in batch_log.task_prompts "
                 f"(have {sorted(batch_log.task_prompts)})"
             )
-        if batch_log.temperature != 0.0:
-            raise NotImplementedError(
-                "Phase 1c currently supports temperature=0 (argmax). "
-                f"Log has temperature={batch_log.temperature}."
+        if batch_log.temperature < 0:
+            raise ValueError(
+                f"batch_log.temperature must be >= 0, got {batch_log.temperature}"
+            )
+        if batch_log.temperature > 0 and not (0.0 < batch_log.top_p <= 1.0):
+            raise ValueError(
+                "batch_log.top_p must be in (0, 1] when temperature > 0, "
+                f"got {batch_log.top_p}"
             )
         if batch_log.model_id != self.model_id:
             raise ValueError(
@@ -163,7 +170,12 @@ class ReplayEngine:
         }
         sampled_tokens: dict[str, list[int]] = {tid: [] for tid in batch_log.task_prompts}
         target_logits: list = []
+        target_sampled: list[int] = []
         pad_id = self.tokenizer.pad_token_id
+        # Re-derive per-task ChaCha20 keys from the log — symmetric with Worker.
+        final_seeds: dict[str, bytes] = {
+            tid: derive_final_seed(tid, batch_log.seed) for tid in batch_log.task_prompts
+        }
 
         for step in batch_log.steps:
             active = step.active_task_ids
@@ -184,13 +196,26 @@ class ReplayEngine:
                 use_cache=False,
             )
             step_logits = out.logits[:, -1, :]
-            next_tokens = torch.argmax(step_logits, dim=-1)
 
             for i, tid in enumerate(active):
-                if tid == target_task_id:
-                    target_logits.append(
-                        step_logits[i].detach().float().cpu().numpy()
+                logit_vec = step_logits[i].detach().float().cpu().numpy()
+                if batch_log.temperature == 0.0:
+                    tok = int(np.argmax(logit_vec))
+                else:
+                    tok = chacha20_sample(
+                        logit_vec,
+                        temperature=batch_log.temperature,
+                        top_p=batch_log.top_p,
+                        final_seed=final_seeds[tid],
+                        step_index=step.step_index,
                     )
-                sampled_tokens[tid].append(int(next_tokens[i]))
+                sampled_tokens[tid].append(tok)
+                if tid == target_task_id:
+                    target_logits.append(logit_vec)
+                    target_sampled.append(tok)
 
-        return TaskLogits(task_id=target_task_id, logits=target_logits)
+        return TaskLogits(
+            task_id=target_task_id,
+            logits=target_logits,
+            sampled_tokens=target_sampled,
+        )

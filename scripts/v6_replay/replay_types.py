@@ -52,14 +52,23 @@ class BatchLog:
 @dataclass
 class TaskLogits:
     """
-    Logits captured at every decode step for one task.
+    Logits captured at every decode step for one task, plus the token
+    sampled at each of those steps.
 
     ``logits[i]`` is the vocabulary logprob vector produced at the i-th step
     where this task was active (not the i-th step of the whole batch).
     Concrete type is ``numpy.ndarray`` with shape ``[vocab_size]`` and dtype
     matching ``BatchLog.dtype``; typed as ``Any`` here to avoid a hard numpy
     dependency at type-check time.
+
+    ``sampled_tokens[i]`` is the token id the Worker / Replayer sampled
+    from ``logits[i]``. Phase 1a/1c (temperature=0) → argmax; Phase 1b
+    (temperature>0) → ChaCha20-seeded inverse-CDF. Both sides must agree
+    on every entry for the Phase 1b bit-exactness assertion to pass.
+    ``default_factory=list`` keeps the field backward-compatible with
+    Phase 1a/1c code that does not populate it.
     """
 
     task_id: str
     logits: list[Any]  # list[np.ndarray], shape [vocab_size] per entry
+    sampled_tokens: list[int] = field(default_factory=list)
