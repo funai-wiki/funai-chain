@@ -1,5 +1,30 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-21 17:55 CST] cleanup | V6 docs consolidated to KT v2
+
+**Operator:** Claude (LLM), dmldevai
+
+User directive: proceed per `FunAI_V6_Batch_Replay_Verification_KT.md` (KT v2). Item #12 (Leader-side request bundling) from the earlier `FunAI_V6_BatchReplay_Design.md` is therefore not adopted — KT v2 §2.3 retains Worker-side `batch_wait_timeout` as the canonical dispatch timing.
+
+**Changes:**
+- Deleted `docs/protocol/FunAI_V6_BatchReplay_Design.md`. Item #12 history preserved in git (commit `f3b6a46`) for anyone who wants to revisit the Leader-side-bundling argument later.
+- `wiki/index.md` — removed the "older design note" row; KT v2 is now the single V6 entry under Operations & Status.
+- `wiki/log.md` — this entry.
+
+**Open design items from earlier review still not addressed by KT v2**, flagged for future attention (no action in this commit):
+- D1: KT v2 §2.3 says "no upper bound on `batch_capacity`"; on-chain S1 has `max_concurrent_tasks` range [1, 32]. Either relax S1 or tighten KT v2.
+- C1: Log forgery defence (every `task_id` in the log must resolve to a real on-chain `InferRequest`) — proposed in earlier review, not in KT v2 §2.2.
+- Minor: §1 / §9 / §4.1 wording could be tightened where KT v2's claims exceed what the PoC has demonstrated vs what has been claimed via informal engineer-side measurement.
+
+Next up per KT v2 §8 execution order:
+1. §2.1 + §2.2 already validated at PoC level (Phase 1 PASS on Qwen2.5-3B single machine, 2026-04-21).
+2. Phase 2 (cross-hardware A2) — the PoC gate before protocol-layer work; provision second GPU ECS (L20 Ada preferred over A10's Ampere).
+3. §2.3 dispatch→batch mode (Go protocol PR).
+4. §2.4 + §2.5 (settlement + engine-version pinning).
+5. §3 + §4 (penalty / verification logic parameters).
+
+---
+
 ## [2026-04-21 17:40 CST] ingest | V6 Batch Replay Verification (KT v2)
 
 **Operator:** Claude (LLM), dmldevai
