@@ -58,10 +58,24 @@ BRANCH="${BRANCH:-research/v6-replay-poc}"
 VENV_DIR="${VENV_DIR:-/data/v6-replay-venv}"
 RESULTS_DIR="${RESULTS_DIR:-/data/v6-replay-results}"
 TORCH_CUDA="${TORCH_CUDA:-cu121}"
+# TORCH_VERSION pins torch to a version AVAILABLE ON THE FIND-LINKS MIRROR
+# as a CUDA wheel. Default matches Aliyun mirror's current newest CUDA build
+# (2.5.1+cu121). Without a pin, pip sees PyPI's newer CPU-only wheel (e.g.
+# 2.11.0) and picks it over 2.5.1+cu121 by major.minor ordering — pulling
+# a CPU wheel even when find-links has the CUDA variant.
+TORCH_VERSION="${TORCH_VERSION:-2.5.1}"
 DEVICE="${DEVICE:-cuda}"
 # PYTHON lets you pick the interpreter used to create the venv. Set to
 # python3.11 on Alibaba Cloud Linux 3 (system python3 is 3.6.8, too old).
 PYTHON="${PYTHON:-python3}"
+
+# pip mirror overrides for China mainland egress (where pypi.org and
+# download.pytorch.org are routinely rate-limited to ~10-50 kB/s). Defaults
+# keep the official endpoints; on Aliyun mainland, set both to Aliyun's
+# mirror for ~5 MB/s sustained download.
+PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.org/simple/}"
+PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST:-}"
+TORCH_FIND_LINKS="${TORCH_FIND_LINKS:-https://download.pytorch.org/whl/${TORCH_CUDA}}"
 
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
 RUN_DIR="${RESULTS_DIR}/phase1a-${STAMP}"
@@ -204,10 +218,21 @@ install_deps() {
   log_phase "Install PyTorch (${TORCH_CUDA}) + transformers + deps"
   # shellcheck source=/dev/null
   source "${VENV_DIR}/bin/activate"
-  # torch must come first so its pinned CUDA wheel resolves against the
-  # PyTorch index, not PyPI (PyPI ships a CPU-only wheel).
+
+  # Export pip env vars so every pip invocation in this function honors them.
+  # PIP_FIND_LINKS adds torch's CUDA wheels to pip's candidate pool — pip
+  # prefers the "+cu121" local-version tag over plain PyPI CPU wheels due to
+  # PEP 440 ordering (local segment > no local segment).
+  export PIP_INDEX_URL
+  export PIP_FIND_LINKS="${TORCH_FIND_LINKS}"
+  if [ -n "${PIP_TRUSTED_HOST}" ]; then
+    export PIP_TRUSTED_HOST
+  fi
+  log_info "PIP_INDEX_URL=${PIP_INDEX_URL}"
+  log_info "PIP_FIND_LINKS=${PIP_FIND_LINKS}"
+
   if ! python3 -c 'import torch; assert torch.cuda.is_available()' 2>/dev/null; then
-    pip install --index-url "https://download.pytorch.org/whl/${TORCH_CUDA}" "torch>=2.1,<3"
+    pip install "torch==${TORCH_VERSION}"
   else
     log_info "PyTorch already installed with CUDA"
   fi

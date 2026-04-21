@@ -69,7 +69,7 @@ class ReplayEngine:
         )
         cache = out.past_key_values
         step_logits = out.logits[:, -1, :]
-        collected = [step_logits[target_index].detach().cpu().numpy()]
+        collected = [step_logits[target_index].detach().float().cpu().numpy()]
         next_tokens = torch.argmax(step_logits, dim=-1)
 
         for _ in range(1, batch_log.max_new_tokens):
@@ -92,7 +92,7 @@ class ReplayEngine:
             )
             cache = out.past_key_values
             step_logits = out.logits[:, -1, :]
-            collected.append(step_logits[target_index].detach().cpu().numpy())
+            collected.append(step_logits[target_index].detach().float().cpu().numpy())
             next_tokens = torch.argmax(step_logits, dim=-1)
 
         return TaskLogits(task_id=target_task_id, logits=collected)

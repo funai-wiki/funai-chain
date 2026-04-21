@@ -42,12 +42,21 @@ def configure_determinism(seed: int) -> None:
 
 def load_model_and_tokenizer(model_id: str, device: str):
     """
-    Load model in fp16 eager-attention eval mode; tokenizer with left padding.
+    Load model in bfloat16 eager-attention eval mode; tokenizer with left padding.
 
-    Eager attention (``attn_implementation="eager"``) disables SDPA fused
-    backends, which on some hardware can pick non-deterministic kernels
-    depending on batch size. Slower than SDPA but the determinism floor
-    for Phase 1a.
+    dtype choice — bfloat16:
+        Qwen2.5 is trained in bfloat16. Running it as float16 triggers NaNs
+        in attention softmax on some prompt / batch patterns because fp16's
+        max representable value (~65504) is easy to overflow in attention
+        logits. bfloat16 shares fp32's exponent range, so no overflow, at
+        the cost of reduced mantissa precision — which is the right
+        tradeoff for determinism work where we want the model to produce
+        valid (non-NaN) outputs regardless of prompt.
+
+    attn_implementation=eager:
+        Disables SDPA fused backends, which on some hardware pick
+        non-deterministic kernels depending on batch size. Slower than
+        SDPA but the determinism floor for Phase 1a.
     """
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     if tokenizer.pad_token is None:
@@ -56,7 +65,7 @@ def load_model_and_tokenizer(model_id: str, device: str):
 
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         attn_implementation="eager",
     ).to(device)
     model.eval()

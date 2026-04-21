@@ -80,7 +80,7 @@ class WorkerSimulator:
         per_task_logits: dict[str, list[Any]] = {tid: [] for tid in task_ids}
         per_task_tokens: dict[str, list[int]] = {tid: [] for tid in task_ids}
         for i, tid in enumerate(task_ids):
-            per_task_logits[tid].append(next_logits[i].detach().cpu().numpy())
+            per_task_logits[tid].append(next_logits[i].detach().float().cpu().numpy())
             per_task_tokens[tid].append(int(first_tok[i]))
 
         steps = [BatchStep(step_index=0, active_task_ids=task_ids)]
@@ -91,7 +91,7 @@ class WorkerSimulator:
                 next_tokens, cache, attention_mask
             )
             for i, tid in enumerate(task_ids):
-                per_task_logits[tid].append(step_logits[i].detach().cpu().numpy())
+                per_task_logits[tid].append(step_logits[i].detach().float().cpu().numpy())
                 per_task_tokens[tid].append(int(next_tokens[i]))
             steps.append(BatchStep(step_index=step_idx, active_task_ids=task_ids))
 
@@ -108,7 +108,7 @@ class WorkerSimulator:
             max_new_tokens=max_new_tokens,
             task_prompts=dict(task_prompts),
             steps=steps,
-            dtype="float16",
+            dtype="bfloat16",
         )
 
         task_logits = {
