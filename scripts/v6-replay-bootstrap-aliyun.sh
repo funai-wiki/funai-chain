@@ -59,6 +59,9 @@ VENV_DIR="${VENV_DIR:-/data/v6-replay-venv}"
 RESULTS_DIR="${RESULTS_DIR:-/data/v6-replay-results}"
 TORCH_CUDA="${TORCH_CUDA:-cu121}"
 DEVICE="${DEVICE:-cuda}"
+# PYTHON lets you pick the interpreter used to create the venv. Set to
+# python3.11 on Alibaba Cloud Linux 3 (system python3 is 3.6.8, too old).
+PYTHON="${PYTHON:-python3}"
 
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
 RUN_DIR="${RESULTS_DIR}/phase1a-${STAMP}"
@@ -106,21 +109,50 @@ check_gpu() {
 }
 
 install_python_toolchain() {
-  log_phase "Install Python 3.10+"
-  if ! command -v python3 >/dev/null 2>&1; then
-    apt-get update
-    apt-get install -y python3 python3-venv python3-pip
+  log_phase "Install Python 3.10+ and git (PYTHON=${PYTHON})"
+  local pkg_mgr=""
+  if command -v dnf >/dev/null 2>&1; then
+    pkg_mgr=dnf
+  elif command -v apt-get >/dev/null 2>&1; then
+    pkg_mgr=apt-get
   fi
+
+  if ! command -v "${PYTHON}" >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
+    case "${pkg_mgr}" in
+      dnf)
+        # Alibaba Cloud Linux 3 / RHEL-family. System python3 ships as 3.6.x
+        # which fails the version gate below; explicitly install 3.11 and
+        # set PYTHON=python3.11 so the venv is created from a modern interpreter.
+        dnf install -y python3.11 python3.11-pip git
+        PYTHON=python3.11
+        ;;
+      apt-get)
+        apt-get update
+        apt-get install -y python3 python3-venv python3-pip git
+        ;;
+      *)
+        log_fail "Neither dnf nor apt-get found. Install ${PYTHON} (>=3.10) and git manually, then re-run."
+        exit 1
+        ;;
+    esac
+  fi
+
   local ver
-  ver=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
-  if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
-    log_fail "Python ${ver} too old. Need >= 3.10. Upgrade the distro Python or install python3.10."
+  ver=$("${PYTHON}" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+  if ! "${PYTHON}" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+    log_fail "${PYTHON} is ${ver}, need >= 3.10. Install python3.11 (dnf install python3.11) and re-run with PYTHON=python3.11."
     exit 1
   fi
-  if ! python3 -c 'import venv' 2>/dev/null; then
-    apt-get install -y python3-venv
+  # python3-venv may ship separately on apt-based distros
+  if ! "${PYTHON}" -c 'import venv' 2>/dev/null; then
+    if [ "${pkg_mgr}" = "apt-get" ]; then
+      apt-get install -y python3-venv
+    else
+      log_fail "${PYTHON} venv module missing. Install the venv package for your distro."
+      exit 1
+    fi
   fi
-  log_pass "Python ${ver}"
+  log_pass "${PYTHON} ${ver}"
 }
 
 # ── Repo ─────────────────────────────────────────────────────────────────────
@@ -144,14 +176,14 @@ sync_repo() {
 # ── Python venv ──────────────────────────────────────────────────────────────
 
 setup_venv() {
-  log_phase "Set up Python venv at ${VENV_DIR}"
+  log_phase "Set up Python venv at ${VENV_DIR} (from ${PYTHON})"
   if [ ! -d "${VENV_DIR}" ]; then
-    python3 -m venv "${VENV_DIR}"
+    "${PYTHON}" -m venv "${VENV_DIR}"
   fi
   # shellcheck source=/dev/null
   source "${VENV_DIR}/bin/activate"
   pip install --upgrade pip wheel setuptools >/dev/null
-  log_pass "Venv active: $(which python3)"
+  log_pass "Venv active: $(which python3) ($(python3 --version))"
 }
 
 install_deps() {
