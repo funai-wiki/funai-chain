@@ -1,0 +1,16 @@
+{
+  "phase": "1a",
+  "result": "PASS",
+  "pytest_exit_code": 0,
+  "max_abs_err_seen": "none",
+  "config": {
+    "model": "Qwen/Qwen2.5-3B-Instruct",
+    "device": "cuda",
+    "branch": "research/v6-replay-poc",
+    "commit": "b4c59ce03d8e46599bd9aa7aa5f1b56aa9e532bd",
+    "hf_endpoint": "https://hf-mirror.com",
+    "torch_cuda": "cu121",
+    "timestamp_utc": "20260421-073528"
+  },
+  "artifacts_dir": "/root/v6-results/phase1a-20260421-073528"
+}

@@ -1,0 +1,88 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /root/v6-venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /root/funai-chain
+collecting ... collected 6 items
+
+scripts/v6_replay/test_phase1.py::test_worker_emits_log_and_logits PASSED [ 16%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-001] PASSED [ 33%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-002] FAILED [ 50%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-003] PASSED [ 66%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-004] PASSED [ 83%]
+scripts/v6_replay/test_phase1.py::test_replay_three_repeats_stable FAILED [100%]
+
+=================================== FAILURES ===================================
+________________ test_replay_is_bit_exact_same_gpu[task-p1-002] ________________
+
+worker_run = ({'task-p1-001': ' The stars twinkle in the dark sky. The', 'task-p1-002': '!!!!!!!!!!', 'task-p1-003': ' To determine...2.537, -2.54 , -2.537], dtype=float16), array([ 3.574,  3.775,  5.625, ..., -3.746, -3.746, -3.748], dtype=float16)])})
+target = 'task-p1-002'
+
+    @pytest.mark.parametrize("target", list(PROMPTS))
+    def test_replay_is_bit_exact_same_gpu(worker_run, target):
+        """
+        Load-bearing Phase 1 assertion.
+    
+        Worker's per-step logits for ``target`` must match ReplayEngine's
+        per-step logits bit-exactly. Any non-zero drift → KILL Phase 1 until
+        determinism defect is fixed.
+        """
+        _, log, worker_logits = worker_run
+    
+        r = ReplayEngine(MODEL, DEVICE)
+        replayed = r.replay(log, target_task_id=target)
+    
+        w = worker_logits[target].logits
+        rp = replayed.logits
+        assert len(w) == len(rp), (
+            f"{target}: step count differs — worker={len(w)}, replay={len(rp)}"
+        )
+        for i, (w_step, r_step) in enumerate(zip(w, rp)):
+            diff = float(np.max(np.abs(np.asarray(w_step) - np.asarray(r_step))))
+>           assert diff == 0.0, (
+                f"Phase 1 KILL: target={target} step={i} max_abs_err={diff:g} "
+                f"— determinism defect or V6 A1 claim failure"
+            )
+E           AssertionError: Phase 1 KILL: target=task-p1-002 step=0 max_abs_err=nan — determinism defect or V6 A1 claim failure
+E           assert nan == 0.0
+
+scripts/v6_replay/test_phase1.py:89: AssertionError
+----------------------------- Captured stderr call -----------------------------
+'(ReadTimeoutError("HTTPSConnectionPool(host='hf-mirror.com', port=443): Read timed out. (read timeout=10)"), '(Request ID: 3a8e80cf-9c3a-4be4-a64b-a7addbe9330b)')' thrown while requesting HEAD https://hf-mirror.com/api/resolve-cache/models/Qwen/Qwen2.5-0.5B-Instruct/7ae557604adf67be50417f59c2c2f167def9a775/generation_config.json
+Retrying in 1s [Retry 1/5].
+------------------------------ Captured log call -------------------------------
+WARNING  huggingface_hub.utils._http:_http.py:320 '(ReadTimeoutError("HTTPSConnectionPool(host='hf-mirror.com', port=443): Read timed out. (read timeout=10)"), '(Request ID: 3a8e80cf-9c3a-4be4-a64b-a7addbe9330b)')' thrown while requesting HEAD https://hf-mirror.com/api/resolve-cache/models/Qwen/Qwen2.5-0.5B-Instruct/7ae557604adf67be50417f59c2c2f167def9a775/generation_config.json
+WARNING  huggingface_hub.utils._http:_http.py:329 Retrying in 1s [Retry 1/5].
+_______________________ test_replay_three_repeats_stable _______________________
+
+worker_run = ({'task-p1-001': ' The stars twinkle in the dark sky. The', 'task-p1-002': '!!!!!!!!!!', 'task-p1-003': ' To determine...2.537, -2.54 , -2.537], dtype=float16), array([ 3.574,  3.775,  5.625, ..., -3.746, -3.746, -3.748], dtype=float16)])})
+
+    def test_replay_three_repeats_stable(worker_run):
+        """
+        Running ``run_batch`` three times with the same inputs must produce
+        identical logits every time. Flaky here → fix determinism before
+        testing replay.
+        """
+        _, log, base_logits = worker_run
+        w = WorkerSimulator(MODEL, DEVICE)
+        for repeat in range(2):
+            _, log2, logits2 = w.run_batch(PROMPTS, **SAMPLING)
+            assert [s.active_task_ids for s in log2.steps] == [
+                s.active_task_ids for s in log.steps
+            ], f"batch schedule differs on repeat {repeat + 1}"
+            for task_id in PROMPTS:
+                for i, (a, b) in enumerate(
+                    zip(base_logits[task_id].logits, logits2[task_id].logits)
+                ):
+                    diff = float(np.max(np.abs(np.asarray(a) - np.asarray(b))))
+>                   assert diff == 0.0, (
+                        f"repeat {repeat + 1} {task_id} step {i}: non-deterministic "
+                        f"max_abs_err={diff:g}"
+                    )
+E                   AssertionError: repeat 1 task-p1-002 step 0: non-deterministic max_abs_err=nan
+E                   assert nan == 0.0
+
+scripts/v6_replay/test_phase1.py:113: AssertionError
+=========================== short test summary info ============================
+FAILED scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-002]
+FAILED scripts/v6_replay/test_phase1.py::test_replay_three_repeats_stable - A...
+=================== 2 failed, 4 passed in 118.57s (0:01:58) ====================

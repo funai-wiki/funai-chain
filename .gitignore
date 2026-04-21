@@ -44,6 +44,8 @@ agency-agents/
 *.log
 *.tmp
 *.bak
+# Exception: evidence logs inside versioned testing reports.
+!docs/testing/reports/**/*.log
 
 docs/internal/
 docs/reports/

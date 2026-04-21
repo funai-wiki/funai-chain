@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /root/v6-venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /root/funai-chain
+collecting ... collected 12 items
+
+scripts/v6_replay/test_phase1.py::test_worker_emits_log_and_logits PASSED [  8%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-001] PASSED [ 16%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-002] PASSED [ 25%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-003] PASSED [ 33%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-004] PASSED [ 41%]
+scripts/v6_replay/test_phase1.py::test_replay_three_repeats_stable PASSED [ 50%]
+scripts/v6_replay/test_phase1.py::test_1c_leave_roster_varies PASSED     [ 58%]
+scripts/v6_replay/test_phase1.py::test_1c_leave_log_matches_schedule PASSED [ 66%]
+scripts/v6_replay/test_phase1.py::test_1c_leave_replay_bit_exact PASSED  [ 75%]
+scripts/v6_replay/test_phase1.py::test_1c_join_roster_varies PASSED      [ 83%]
+scripts/v6_replay/test_phase1.py::test_1c_join_log_matches_schedule PASSED [ 91%]
+scripts/v6_replay/test_phase1.py::test_1c_join_replay_bit_exact PASSED   [100%]
+
+======================== 12 passed in 140.42s (0:02:20) ========================

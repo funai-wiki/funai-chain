@@ -1,5 +1,32 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-21 16:05 CST] result | V6 Phase 1 PASS — single-machine replay bit-exact on Qwen2.5-3B
+
+**Operator:** Claude (LLM), dmldevai
+
+**New source doc ingested:**
+- `docs/testing/reports/2026-04-21-v6-phase1a/report.md` — Phase 1 result report. Verdict: **PASS** on single machine. All 12 acceptance tests green on Aliyun A10 + Qwen2.5-3B-Instruct + bf16 + eager attention + HuggingFace transformers: Phase 1a (fixed batch, 6/6), Phase 1c.1 (leave-only dynamic batch, 3/3), Phase 1c.2 (join+leave dynamic batch, 3/3). `max_abs_err == 0.0` across ~200 bit-exact Worker-vs-Replay comparisons. V6 A1 claim (an engine can be driven to replay a pre-recorded batch schedule and produce matching logits) is reproducible on this stack.
+
+**Scope boundaries captured in the report:**
+- A1 proven; A2 (cross-hardware bit-exactness) still open — Phase 2 needs a second GPU of a different SM architecture (4090 Ada or A100 Ampere-L).
+- temperature=0 only; temperature>0 with ChaCha20 seeded sampling is Phase 1b.
+- transformers path, not TGI or vLLM — production engine transition is Phase 3+ (2-3 months).
+- One historical detour captured: fp16 produced NaN logits on task-p1-002 (Qwen2.5 native bf16 → fp16 overflow in attention softmax); switching to bfloat16 resolved it without compromising the PoC. fp16 failure archive retained at `phase1a-20260421-070618-prefix-nan-fp16/`.
+
+**Wiki pages updated:**
+- `wiki/test-status.md` — Logits table: new "V6 Batch-Replay PoC — Phase 1 PASS 2026-04-21" subsection under Logits consistency; the C0 status text trimmed to reference the new PoC as the adopted mitigation path. C1-C4 / TPS tests marked superseded by V6's engine-transition track.
+- `wiki/log.md` — This entry.
+
+**Implementation commits on `research/v6-replay-poc`:**
+- `06cc89a` Phase 1c dynamic batch composition (recompute-from-scratch Worker + ReplayEngine; 3 test schedules).
+- Full chain of 9 commits from scaffold to Phase 1c implementation and bootstrap hardening — see report §9 References.
+
+**Status on current Aliyun A10 ECS (118.31.108.187):**
+- Custom-image snapshot in progress at report time (operator-initiated; not released).
+- venv + model weights + test code all ready for Phase 1b extension or Phase 2 rsync to a second ECS.
+
+---
+
 ## [2026-04-21] update | V6 design note — item #12 Leader-side request bundling
 
 **Operator:** Claude (LLM)

@@ -88,7 +88,21 @@ Two parallel test tracks on pinned TGI `3.3.6` + Qwen2.5-8B-Instruct FP16.
 | C3 | FP16 vs INT4 must diverge (register as distinct `model_id`) | 1 × 4090 | `> 0.01` rel error (inverse check) | paused |
 | C4 | TGI v2 vs v3 mixability | 1 × 4090 | Identical → mixable; diverge → lock version | paused |
 
-**C0 is failing as of 2026-04-20** — batched logits diverge from single-request logits at the first generated position (~2.3% relative), sampled tokens flip from position 1, generation fully diverges by position 2. Single-vs-single is bit-exact; drift is genuinely caused by TGI continuous batching. Two same-session diagnostic runs isolate the root cause: `--max-batch-prefill-tokens` drives the sampling divergence (quartering it eliminates the cascade but leaves ~3% residual logprob drift); attention backend and prefix caching are not the dominant factors. Full report + artifacts: [`docs/testing/reports/2026-04-20-1329-c0-fail/`](../docs/testing/reports/2026-04-20-1329-c0-fail/report.md). Recommended mitigation: Option B (Worker runs a separate single-request forward pass to record bit-exact logits for the 5 VRF positions), optionally paired with Option C (`--max-batch-prefill-tokens=1024`) for defence in depth. C1-C4 and TPS-layer tests are paused pending that architectural change.
+**C0 is failing as of 2026-04-20** — batched logits diverge from single-request logits at the first generated position (~2.3% relative), sampled tokens flip from position 1, generation fully diverges by position 2. Single-vs-single is bit-exact; drift is genuinely caused by TGI continuous batching. Two same-session diagnostic runs isolate the root cause: `--max-batch-prefill-tokens` drives the sampling divergence (quartering it eliminates the cascade but leaves ~3% residual logprob drift); attention backend and prefix caching are not the dominant factors. Full report + artifacts: [`docs/testing/reports/2026-04-20-1329-c0-fail/`](../docs/testing/reports/2026-04-20-1329-c0-fail/report.md).
+
+### V6 Batch-Replay PoC — Phase 1 (single machine) PASS 2026-04-21
+
+The V6 Batch-Replay design ([`docs/protocol/FunAI_V6_BatchReplay_Design.md`](../docs/protocol/FunAI_V6_BatchReplay_Design.md)) replaces the V5.2 single-request-Verifier scheme with a log-driven replay: Worker records per-step batch composition, Verifier replays that exact schedule. The PoC at `scripts/v6_replay/` validates this ahead of any protocol rewrite. Phase 1 (single machine) complete:
+
+| Sub-phase | Scope | Model | Result |
+|---|---|---|---|
+| **1a** | temperature=0, fixed-batch, prefill+decode KV cache | Qwen2.5-3B-Instruct | PASS 6/6, 62 s |
+| **1c.1** | dynamic batch, leave-only schedule, recompute-from-scratch | Qwen2.5-3B-Instruct | PASS 3/3 |
+| **1c.2** | dynamic batch, join+leave schedule | Qwen2.5-3B-Instruct | **PASS 3/3 — V6 A1 claim validated on single machine** |
+
+All on Aliyun A10 + bfloat16 + HuggingFace transformers + eager attention + strict determinism flags. 12 / 12 tests PASS, `max_abs_err == 0.0` across ~200 bit-exact comparisons. Full report: [`docs/testing/reports/2026-04-21-v6-phase1a/report.md`](../docs/testing/reports/2026-04-21-v6-phase1a/report.md).
+
+**C1-C4 and TPS-layer tests remain paused** — V6 supersedes them pending the engine-transition work in Phase 3+. Next open gate is **Phase 2** (cross-hardware A2 validation — same replay path on a different SM architecture, expected 4090 or A100). Phase 1b (ChaCha20 sampling under dynamic batch) parallelisable.
 
 ### TPS stress (5 layers)
 

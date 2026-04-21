@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.0.3, pluggy-1.6.0 -- /root/v6-venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /root/funai-chain
+collecting ... collected 6 items
+
+scripts/v6_replay/test_phase1.py::test_worker_emits_log_and_logits PASSED [ 16%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-001] PASSED [ 33%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-002] PASSED [ 50%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-003] PASSED [ 66%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-004] PASSED [ 83%]
+scripts/v6_replay/test_phase1.py::test_replay_three_repeats_stable PASSED [100%]
+
+========================= 6 passed in 62.13s (0:01:02) =========================
