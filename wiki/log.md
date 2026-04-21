@@ -1,6 +1,6 @@
 # FunAI Chain Wiki — Operations Log
 
-## [2026-04-21 18:30 CST] result + summary | V6 Phase 1d PASS on 3B + non-technical SUMMARY
+## [2026-04-21 18:30 CST] result | V6 Phase 1d PASS on Qwen2.5-3B
 
 **Operator:** Claude (LLM), dmldevai
 
@@ -10,17 +10,15 @@
 - `max_abs_err == 0.0` on every Worker-vs-Replay comparison across ~500 checks.
 - Verdict archive: `docs/testing/reports/2026-04-21-v6-phase1a/phase1a-20260421-092348/`.
 
-**New source doc ingested:**
-- `docs/testing/reports/2026-04-21-v6-phase1a/SUMMARY.md` — plain-language summary of the V6 single-machine Phase 1 results, written for team members and non-technical collaborators. Covers: why V6 exists (C0 failure); what assumption A1 vs A2 is; how Phase 1a/1c/1b/1d were staged; the full 26/26 PASS matrix on both 0.5B and 3B; honest scope boundaries (cross-hardware A2 still open; 2-3 month production-engine port still ahead; log-forgery defence and Verifier-cost economics still unresolved); timeline-ish next-step table; and a technical appendix for developers who want mechanics.
-
 **Report updated:**
 - `docs/testing/reports/2026-04-21-v6-phase1a/report.md` §8 artifacts list adds `phase1a-20260421-092348/` as the FINAL archive (26 tests, 672 s, PASS) alongside the earlier intermediate runs.
-- `SUMMARY.md` footer notes the 3B Phase 1d completion timestamp and archive path.
 
 **Wiki pages updated:**
 - `wiki/log.md` — this entry.
 
 **V6 Phase 1 status:** Single-machine complete. All 26 tests PASS on both Qwen2.5-0.5B (3:19) and Qwen2.5-3B-Instruct (11:11). Next open gate is Phase 2 (cross-hardware A2).
+
+*Note: a non-technical SUMMARY.md was drafted alongside this run but per operator direction is kept local-only, not tracked in git. The canonical record is `report.md`.*
 
 ---
 
