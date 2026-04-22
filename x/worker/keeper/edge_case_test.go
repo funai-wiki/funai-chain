@@ -411,7 +411,7 @@ func TestMsgServer_RegisterWorker_ColdStartExactBoundary(t *testing.T) {
 	addr := sdk.AccAddress([]byte("boundary_worker_____"))
 	msg := types.NewMsgRegisterWorker(
 		addr.String(), "pk1", []string{"m1"}, "localhost:8080",
-		"H100", 80, 1, "op1",
+		"H100", 80, 1, "op1", 0,
 	)
 	_, err := ms.RegisterWorker(ctx, msg)
 	if err != nil {
@@ -463,7 +463,7 @@ func TestMsgServer_RegisterWorker_InsufficientStake(t *testing.T) {
 	addr := sdk.AccAddress([]byte("postcs_worker_______"))
 	msg := types.NewMsgRegisterWorker(
 		addr.String(), "pk_postcs", []string{"m1"}, "localhost:9090",
-		"A100", 40, 1, "op_postcs",
+		"A100", 40, 1, "op_postcs", 0,
 	)
 
 	// Mock bank keeper always returns nil (success), so registration succeeds.

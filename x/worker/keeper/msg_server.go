@@ -48,6 +48,14 @@ func (m msgServer) RegisterWorker(goCtx context.Context, msg *types.MsgRegisterW
 		initialStake = minStake
 	}
 
+	// V6 / KT v2 §2.3: honour operator-declared batch capacity; default to 1
+	// when omitted so a legacy registration keeps its busy/idle-equivalent
+	// behaviour without any Worker-side change.
+	maxConcurrentTasks := msg.MaxConcurrentTasks
+	if maxConcurrentTasks == 0 {
+		maxConcurrentTasks = 1
+	}
+
 	worker := types.Worker{
 		Address:             msg.Creator,
 		Pubkey:              msg.Pubkey,
@@ -69,7 +77,7 @@ func (m msgServer) RegisterWorker(goCtx context.Context, msg *types.MsgRegisterW
 		TotalTasks:          0,
 		TotalFeeEarned:      sdk.NewCoin(minStake.Denom, math.ZeroInt()),
 		LastActiveBlock:     currentHeight,
-		MaxConcurrentTasks:  1,
+		MaxConcurrentTasks:  maxConcurrentTasks,
 		MaxConcurrentVerify: 2,
 	}
 

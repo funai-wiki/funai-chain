@@ -481,14 +481,25 @@ print(raw.hex())
   done
   log_info "Extracted $NODES validator keypairs for P2P workers"
 
+  # V6 / KT v2 §2.3: Worker capacity per node. Comma-separated list maps to
+  # node indices (NODE_CAPACITIES="1,2,4" → node0=1, node1=2, node2=4). A
+  # shorter list means remaining nodes use default (unset → keeper defaults
+  # to 1). Empty = legacy behaviour (every node default).
+  IFS=',' read -ra NODE_CAPS <<< "${NODE_CAPACITIES:-}"
+
   # Register each validator as a worker
   for i in $(seq 0 $((NODES - 1))); do
     local addr=$(get_addr $i)
     local pubkey_hex=$(cat "$BASE_DIR/worker${i}.pubkey")
     local libp2p_port=$((P2P_LIBP2P_PORT_BASE + i))
+    local node_cap="${NODE_CAPS[$i]:-0}"  # 0 → omit flag, keeper defaults to 1
 
-    log_info "Registering worker $i ($addr) for model $MODEL_ID..."
+    log_info "Registering worker $i ($addr) for model $MODEL_ID capacity=${node_cap}..."
     local reg_result
+    local cap_flag=()
+    if [ "$node_cap" -gt 0 ] 2>/dev/null; then
+      cap_flag=(--max-concurrent-tasks "$node_cap")
+    fi
     reg_result=$(cli_node $i tx worker register \
       --pubkey "$pubkey_hex" \
       --models "$MODEL_ID" \
@@ -497,6 +508,7 @@ print(raw.hex())
       --gpu-vram 15 \
       --gpu-count 1 \
       --operator-id "e2e-op-${i}" \
+      "${cap_flag[@]}" \
       --from "validator$i" --gas 300000 --fees 1000ufai -y --output json 2>&1)
 
     if echo "$reg_result" | grep -q "code\|txhash"; then

@@ -305,12 +305,10 @@ func (l *Leader) dispatchSingle(ctx context.Context, req *p2ptypes.InferRequest,
 
 	var ranked []vrftypes.RankedWorker
 	for _, w := range l.Workers {
-		// S1: skip workers that have reached their inference concurrency limit
-		maxTasks := w.MaxConcurrentTasks
-		if maxTasks == 0 {
-			maxTasks = 1 // default for unset/legacy workers
-		}
-		if l.activeInferenceTasks[w.Address] >= maxTasks {
+		// S1 / V6 §2.3: skip workers whose in-flight count is at or above
+		// their declared capacity. `hasInferenceCapacity` centralises the
+		// rule so tests + production agree.
+		if !l.hasInferenceCapacity(w.Address, w.MaxConcurrentTasks) {
 			continue
 		}
 		stake := w.Stake
@@ -500,6 +498,28 @@ func (l *Leader) HandleReceiptBusyRelease(workerPubkey []byte, userAddr string, 
 		l.activeInferenceTasks[workerAddr]--
 		l.removePendingEntry(userAddr, taskId)
 	}
+}
+
+// hasInferenceCapacity reports whether a worker's in-flight inference task
+// count is strictly below its declared batch capacity. Encapsulates V6 /
+// KT v2 §2.3's capacity-aware admission rule so the same logic is used in
+// `dispatchSingle` and in tests.
+//
+// Caller must hold l.mu (read or write).
+func (l *Leader) hasInferenceCapacity(workerAddr string, maxConcurrentTasks uint32) bool {
+	if maxConcurrentTasks == 0 {
+		maxConcurrentTasks = 1
+	}
+	return l.activeInferenceTasks[workerAddr] < maxConcurrentTasks
+}
+
+// ActiveInferenceTasks returns the current in-flight inference count for a
+// worker. Exposed for tests and operator tooling; production dispatch uses
+// hasInferenceCapacity (which is lock-aware).
+func (l *Leader) ActiveInferenceTasks(workerAddr string) uint32 {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.activeInferenceTasks[workerAddr]
 }
 
 // removePendingEntry removes a specific task from the user's pending list.

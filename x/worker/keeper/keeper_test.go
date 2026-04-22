@@ -700,7 +700,7 @@ func TestMsgServer_RegisterWorker_ColdStart(t *testing.T) {
 
 	msg := types.NewMsgRegisterWorker(
 		addr.String(), "pubkey1", []string{"model1"}, "localhost:8080",
-		"H100", 80, 1, "op1",
+		"H100", 80, 1, "op1", 0,
 	)
 
 	_, err := ms.RegisterWorker(ctx, msg)
@@ -731,7 +731,7 @@ func TestMsgServer_RegisterWorker_NormalStake(t *testing.T) {
 
 	msg := types.NewMsgRegisterWorker(
 		addr.String(), "pubkey1", []string{"model1"}, "localhost:8080",
-		"H100", 80, 1, "op1",
+		"H100", 80, 1, "op1", 0,
 	)
 
 	_, err := ms.RegisterWorker(ctx, msg)
@@ -751,7 +751,7 @@ func TestMsgServer_RegisterWorker_AlreadyRegistered(t *testing.T) {
 
 	msg := types.NewMsgRegisterWorker(
 		addr.String(), "pubkey1", []string{"model1"}, "localhost:8080",
-		"H100", 80, 1, "op1",
+		"H100", 80, 1, "op1", 0,
 	)
 
 	_, _ = ms.RegisterWorker(ctx, msg)
@@ -767,7 +767,7 @@ func TestMsgServer_RegisterWorker_InvalidAddress(t *testing.T) {
 
 	msg := types.NewMsgRegisterWorker(
 		"invalid", "pubkey1", []string{"model1"}, "localhost:8080",
-		"H100", 80, 1, "op1",
+		"H100", 80, 1, "op1", 0,
 	)
 
 	_, err := ms.RegisterWorker(ctx, msg)

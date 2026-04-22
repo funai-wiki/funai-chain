@@ -35,18 +35,24 @@ type MsgRegisterWorker struct {
 	GpuVramGb       uint32   `protobuf:"varint,6,opt,name=gpu_vram_gb,proto3" json:"gpu_vram_gb"`
 	GpuCount        uint32   `protobuf:"varint,7,opt,name=gpu_count,proto3" json:"gpu_count"`
 	OperatorId      string   `protobuf:"bytes,8,opt,name=operator_id,proto3" json:"operator_id"`
+	// V6 / KT v2 §2.3: Worker-declared batch capacity. 0 → keeper defaults to
+	// 1 (legacy busy/idle equivalent). No on-chain upper bound per KT v2
+	// ("技术在进步，硬编码上限会过时"); market punishes misrepresentation via
+	// capacity→timeout→§3.2 sliding-window miss→jail.
+	MaxConcurrentTasks uint32 `protobuf:"varint,9,opt,name=max_concurrent_tasks,proto3" json:"max_concurrent_tasks"`
 }
 
-func NewMsgRegisterWorker(creator, pubkey string, models []string, endpoint, gpuModel string, gpuVramGb uint32, gpuCount uint32, operatorId string) *MsgRegisterWorker {
+func NewMsgRegisterWorker(creator, pubkey string, models []string, endpoint, gpuModel string, gpuVramGb uint32, gpuCount uint32, operatorId string, maxConcurrentTasks uint32) *MsgRegisterWorker {
 	return &MsgRegisterWorker{
-		Creator:         creator,
-		Pubkey:          pubkey,
-		SupportedModels: models,
-		Endpoint:        endpoint,
-		GpuModel:        gpuModel,
-		GpuVramGb:       gpuVramGb,
-		GpuCount:        gpuCount,
-		OperatorId:      operatorId,
+		Creator:            creator,
+		Pubkey:             pubkey,
+		SupportedModels:    models,
+		Endpoint:           endpoint,
+		GpuModel:           gpuModel,
+		GpuVramGb:          gpuVramGb,
+		GpuCount:           gpuCount,
+		OperatorId:         operatorId,
+		MaxConcurrentTasks: maxConcurrentTasks,
 	}
 }
 

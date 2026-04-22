@@ -47,6 +47,7 @@ func CmdRegister() *cobra.Command {
 			gpuVram, _ := cmd.Flags().GetUint32("gpu-vram")
 			gpuCount, _ := cmd.Flags().GetUint32("gpu-count")
 			operatorId, _ := cmd.Flags().GetString("operator-id")
+			maxConcurrent, _ := cmd.Flags().GetUint32("max-concurrent-tasks")
 
 			msg := types.NewMsgRegisterWorker(
 				clientCtx.GetFromAddress().String(),
@@ -57,6 +58,7 @@ func CmdRegister() *cobra.Command {
 				gpuVram,
 				gpuCount,
 				operatorId,
+				maxConcurrent,
 			)
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
 		},
@@ -69,6 +71,10 @@ func CmdRegister() *cobra.Command {
 	cmd.Flags().Uint32("gpu-vram", 0, "GPU VRAM in GB")
 	cmd.Flags().Uint32("gpu-count", 1, "Number of GPUs")
 	cmd.Flags().String("operator-id", "", "Operator identifier")
+	cmd.Flags().Uint32(
+		"max-concurrent-tasks", 0,
+		"V6 batch capacity: concurrent inference tasks this worker can accept (0 → chain defaults to 1)",
+	)
 	_ = cmd.MarkFlagRequired("pubkey")
 	_ = cmd.MarkFlagRequired("models")
 

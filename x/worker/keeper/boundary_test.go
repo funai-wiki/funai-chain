@@ -360,7 +360,7 @@ func TestBoundary_MsgServer_RegisterWorker_Duplicate(t *testing.T) {
 
 	msg := types.NewMsgRegisterWorker(
 		addr.String(), "pk2", []string{"m1"}, "localhost:9090",
-		"A100", 40, 1, "op2",
+		"A100", 40, 1, "op2", 0,
 	)
 	_, err := ms.RegisterWorker(ctx, msg)
 	if err == nil {
@@ -538,17 +538,17 @@ func TestBoundary_GetWorkerPubkey(t *testing.T) {
 func TestBoundary_ValidateBasic_Messages(t *testing.T) {
 	validAddr := sdk.AccAddress([]byte("valid_address_______")).String()
 
-	msg1 := types.NewMsgRegisterWorker(validAddr, "", []string{"m1"}, "ep", "gpu", 80, 1, "op")
+	msg1 := types.NewMsgRegisterWorker(validAddr, "", []string{"m1"}, "ep", "gpu", 80, 1, "op", 0)
 	if err := msg1.ValidateBasic(); err == nil {
 		t.Fatal("empty pubkey should fail")
 	}
 
-	msg2 := types.NewMsgRegisterWorker(validAddr, "pk", []string{}, "ep", "gpu", 80, 1, "op")
+	msg2 := types.NewMsgRegisterWorker(validAddr, "pk", []string{}, "ep", "gpu", 80, 1, "op", 0)
 	if err := msg2.ValidateBasic(); err == nil {
 		t.Fatal("empty models should fail")
 	}
 
-	msg3 := types.NewMsgRegisterWorker(validAddr, "pk", []string{"m1", ""}, "ep", "gpu", 80, 1, "op")
+	msg3 := types.NewMsgRegisterWorker(validAddr, "pk", []string{"m1", ""}, "ep", "gpu", 80, 1, "op", 0)
 	if err := msg3.ValidateBasic(); err == nil {
 		t.Fatal("model with empty string should fail")
 	}
@@ -564,7 +564,7 @@ func TestBoundary_ValidateBasic_Messages(t *testing.T) {
 	}
 
 	// Invalid address in all message types
-	if err := types.NewMsgRegisterWorker("invalid", "pk", []string{"m1"}, "ep", "gpu", 80, 1, "op").ValidateBasic(); err == nil {
+	if err := types.NewMsgRegisterWorker("invalid", "pk", []string{"m1"}, "ep", "gpu", 80, 1, "op", 0).ValidateBasic(); err == nil {
 		t.Fatal("invalid address should fail for MsgRegisterWorker")
 	}
 	if err := types.NewMsgExitWorker("invalid").ValidateBasic(); err == nil {
