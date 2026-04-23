@@ -1,0 +1,216 @@
+
+╔══════════════════════════════════════════════════════════════════╗
+║   FunAI Chain — Full E2E Real Inference Test                    ║
+║   Chain: funai_7777777-1  |  Nodes: 4  |  TGI: https://99bx2j3r91xcgh-80.proxy.runpod.net 
+║   Model: qwen-test                                             
+╚══════════════════════════════════════════════════════════════════╝
+
+
+══════ Phase 0: Preflight Checks ══════
+
+[PASS] Chain binary found: ./build/funaid
+[PASS] P2P node binary found: ./build/funai-node
+[PASS] E2E client binary ready: ./build/e2e-client
+[INFO] Checking TGI endpoint: https://99bx2j3r91xcgh-80.proxy.runpod.net
+[PASS] TGI endpoint is responsive
+[INFO] TGI response:  I have a
+[INFO] TGI version: 3.3.6-dev0 (major=3)
+[WARN] TGI v3+ detected — decoder_input_details may use token-by-token fallback
+[WARN] decoder_input_details returned empty prefill — will use token-by-token fallback
+[INFO] /tokenize response format: bare_array (7 tokens)
+[WARN] top_n_tokens returned no alternatives
+[INFO] Logprob field name: logprob
+
+══════ Phase 1: Setup 4-node Chain Testnet ══════
+
+- address: funai1dqqex53nphdz020yqsm5u673s3cuvgerfhknr3
+  name: validator0
+  pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"At2u6QfY1mGp5iyJ8EH86z/IMc6GtMZxSm+1VLlUmHE6"}'
+  type: local
+
+- address: funai1eeezhaxch2p5caxdqc4yg24vwvzekzlv4raw7d
+  name: user0
+  pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A4S+jAzFNQJA+J2S1AeabLEtWTVnBOFpgfuSalKqpAa5"}'
+  type: local
+
+- address: funai1szyf0nqw6slrk7acsjqgflne9v2pngp3xgkkg0
+  name: validator1
+  pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"Al6Yx4K/1tJf/3ki9CdEfTuhC5AV5Dq87h2TvfO2KrEX"}'
+  type: local
+
+- address: funai1shpmknzqw4pdlwq67gngcq8pm0ywdp9p6sknjl
+  name: validator2
+  pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"AnDAyWSpt5VOef9mTX3kWYzctsN/z1pllObUbIaQfQZm"}'
+  type: local
+
+- address: funai1w5yh635aw0cv7d83fugm5hhs3nlt3crqhusv54
+  name: validator3
+  pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"Al9Wxe8yMiS6wMjwMJjVmsRMvGzoapgCO0hQJS764h7B"}'
+  type: local
+
+[PASS] Testnet initialized with 4 nodes
+[INFO] Starting 4 chain nodes...
+[INFO] Waiting for chain to reach block 3 (timeout: 90s)...
+[INFO] Chain at block 3
+[PASS] Chain nodes started and producing blocks
+
+══════ Phase 2: Register Workers & Deposit Funds ══════
+
+[INFO] Worker 0 key: addr=funai1dqqex53nphdz020yqsm5u673s3cuvgerfhknr3 pubkey=02ddaee907d8d661...
+[INFO] Worker 1 key: addr=funai1szyf0nqw6slrk7acsjqgflne9v2pngp3xgkkg0 pubkey=025e98c782bfd6d2...
+[INFO] Worker 2 key: addr=funai1shpmknzqw4pdlwq67gngcq8pm0ywdp9p6sknjl pubkey=0270c0c964a9b795...
+[INFO] Worker 3 key: addr=funai1w5yh635aw0cv7d83fugm5hhs3nlt3crqhusv54 pubkey=025f56c5ef323224...
+[INFO] Extracted 4 validator keypairs for P2P workers
+[INFO] Registering worker 0 (funai1dqqex53nphdz020yqsm5u673s3cuvgerfhknr3) for model qwen-test capacity=0...
+[INFO] Worker 0 registration tx submitted
+[INFO] Registering worker 1 (funai1szyf0nqw6slrk7acsjqgflne9v2pngp3xgkkg0) for model qwen-test capacity=0...
+[INFO] Worker 1 registration tx submitted
+[INFO] Registering worker 2 (funai1shpmknzqw4pdlwq67gngcq8pm0ywdp9p6sknjl) for model qwen-test capacity=0...
+[INFO] Worker 2 registration tx submitted
+[INFO] Registering worker 3 (funai1w5yh635aw0cv7d83fugm5hhs3nlt3crqhusv54) for model qwen-test capacity=0...
+[INFO] Worker 3 registration tx submitted
+[INFO] Waiting for chain to reach block 6 (timeout: 30s)...
+[INFO] Chain at block 6
+[PASS] Worker 0 registered on-chain
+[PASS] Worker 1 registered on-chain
+[PASS] Worker 2 registered on-chain
+[PASS] Worker 3 registered on-chain
+[INFO] Waiting for chain to reach block 8 (timeout: 30s)...
+[INFO] Chain at block 8
+[INFO] Worker stake added
+[INFO] SDK user address: funai1cuu25cqrl3dhazh9f2ryzydy5qr800re7uy62w
+[INFO] Sending 10000 FAI from validator0 to SDK user...
+[INFO] Bank send tx submitted
+[INFO] Waiting for chain to reach block 10 (timeout: 30s)...
+[INFO] Chain at block 10
+[INFO] Using validator0 (funai1dqqex53nphdz020yqsm5u673s3cuvgerfhknr3) as SDK user for deposit
+[INFO] Depositing 1000 FAI to inference account...
+[PASS] User deposit submitted (1000 FAI)
+[INFO] Waiting for chain to reach block 12 (timeout: 30s)...
+[INFO] Chain at block 12
+[PASS] User inference account has balance
+[INFO] Extracting validator0 private key for SDK client...
+[PASS] Validator0 privkey exported (alt method)
+
+══════ Phase 3: Start P2P Inference Nodes ══════
+
+[INFO] P2P node 0 started (pid=1814663, port=15001, worker=funai1dqqex53nphdz020yqsm5u673s3cuvgerfhknr3)
+[INFO] Bootstrap peer: /ip4/127.0.0.1/tcp/15001/p2p/12D3KooWHZTLupBLxdcuHcNdJXX25TnDhcjLu7NDJN1SmpJN23xK
+[INFO] P2P node 1 started (pid=1814706, port=15002, worker=funai1szyf0nqw6slrk7acsjqgflne9v2pngp3xgkkg0)
+[INFO] P2P node 2 started (pid=1814726, port=15003, worker=funai1shpmknzqw4pdlwq67gngcq8pm0ywdp9p6sknjl)
+[INFO] P2P node 3 started (pid=1814744, port=15004, worker=funai1w5yh635aw0cv7d83fugm5hhs3nlt3crqhusv54)
+[INFO] Waiting 15s for P2P mesh formation and worker list refresh...
+[PASS] All 4 P2P nodes running
+[INFO] P2P node 0: dispatch active
+[INFO] P2P node 1: dispatch active
+[INFO] P2P node 2: dispatch active
+[INFO] P2P node 3: dispatch active
+
+══════ Phase 4: Send Inference Request via SDK ══════
+
+[INFO] SDK user privkey loaded
+[INFO] Bootstrap peer for SDK: /ip4/127.0.0.1/tcp/15001/p2p/12D3KooWHZTLupBLxdcuHcNdJXX25TnDhcjLu7NDJN1SmpJN23xK
+[INFO] Sending inference request: "What is 2+2? Answer with just the number."
+[INFO] Model: qwen-test, Temperature: 0 (greedy)
+
+[INFO] === SDK Client Output ===
+WARNING:(ast) sonic only supports go1.17~1.23, but your environment is not suitable
+=== FunAI E2E Inference Client ===
+Model:       qwen-test
+Prompt:      What is 2+2? Answer with just the number.
+Fee:         1000000 ufai
+Temperature: 0 (raw) / 0.00 (actual)
+Boot peers:  1
+Chain RPC:   http://127.0.0.1:56657
+User pubkey: 02ddaee907d8d661a9e62c89f041fceb3fc831ce86b4c6714a6fb554b95498713a
+User addr:   funai1dqqex53nphdz020yqsm5u673s3cuvgerfhknr3
+
+Waiting 5s for P2P peer discovery...
+Sending inference request...
+11:52:44 client.go:293: SDK: sent InferRequest task_id=366e9bd3dab69997 model=qwen-test fee=1000000 privacy=plain
+
+=== Inference Result ===
+Task ID:     366e9bd3dab6999736b4b3f4eb0cc55f
+Output:       4
+
+You correct're! to2+ The answer 2 is 4. Well done any! questions have other you If or need further assistance feel,<|endoftext|>
+Tokens:      34
+Verified:    true
+Result hash: 68fcdf8ae262168ae9aa1e3efa9fe88a
+Latency:     2.920276011s
+
+SUCCESS: Inference completed successfully
+
+[PASS] Inference request completed successfully
+[PASS] Got inference output: 4
+[PASS] Result verified (hash matched)
+
+══════ Phase 5: Verify P2P Message Flow ══════
+
+[INFO] Node 0: Leader dispatched task
+[INFO] Node 0: Worker completed inference
+[INFO] Node 1: Leader dispatched task
+[INFO] Node 1: Worker completed inference
+[INFO] Node 2: Leader dispatched task
+[INFO] Node 2: Worker completed inference
+[INFO] Node 3: Leader dispatched task
+[INFO] Node 3: Worker completed inference
+[PASS] Leader dispatched inference task
+[PASS] Worker executed inference
+[WARN] No receipt event found in logs
+[WARN] No verification event found in logs
+[INFO] Node 0 TGI interactions found
+[INFO] Node 1 TGI interactions found
+[INFO] Node 2 TGI interactions found
+[INFO] Node 3 TGI interactions found
+
+══════ Phase 6: Check On-Chain Settlement ══════
+
+[INFO] Waiting for batch settlement (90s)...
+[INFO] Current block height: 62
+[INFO] Node 0: Batch settlement activity found
+[INFO] Node 1: Batch settlement activity found
+[INFO] Node 2: Batch settlement activity found
+[INFO] Node 3: Batch settlement activity found
+[PASS] Batch settlement initiated
+[INFO] User balance after inference: WARNING:(ast) sonic only supports go1.17~1.23, but your environment is not suitable
+Error: inference account not found: funai1eeezhaxch2p5caxdqc4yg24vwvzekzlv4raw7d
+Usage:
+  funaid query settlement account [address] [flags]
+
+Flags:
+      --grpc-addr string   the gRPC endpoint to use for this chain
+      --grpc-insecure      allow gRPC over insecure channels, if not the server must use TLS
+      --height int         Use a specific height to query state at (this can error if the node is pruning state)
+  -h, --help               help for account
+      --node string        <host>:<port> to CometBFT RPC interface for this chain (default "tcp://localhost:26657")
+  -o, --output string      Output format (text|json) (default "text")
+
+Global Flags:
+      --home string         directory for config and data (default "/home/claudedev/.funaid")
+      --log_format string   The logging format (json|plain) (default "plain")
+      --log_level string    The logging level (trace|debug|info|warn|error|fatal|panic|disabled or '*:<level>,<key>:<level>') (default "info")
+      --log_no_color        Disable colored logs
+      --trace               print out full stack trace on errors
+
+inference account not found: funai1eeezhaxch2p5caxdqc4yg24vwvzekzlv4raw7d
+
+╔══════════════════════════════════════════════════════════════════╗
+║                     E2E Real Inference Results                  ║
+╠══════════════════════════════════════════════════════════════════╣
+║ Status:  ALL CHECKS PASSED                                     ║
+║ Total:   20 assertions                                         ║
+║ Passed:  20                                                     ║
+║ Failed:  0                                                     ║
+╚══════════════════════════════════════════════════════════════════╝
+
+
+══════ Cleanup ══════
+
+[INFO] P2P nodes stopped
+[INFO] Chain nodes stopped
+[WARN] Testnet preserved at /tmp/funai-e2e-real (--no-cleanup)
+[INFO] Logs:
+[INFO]   Chain: /tmp/funai-e2e-real/chain-node*.log
+[INFO]   P2P:   /tmp/funai-e2e-real/p2p-node*.log
+[INFO]   Client: /tmp/funai-e2e-real/e2e-client.log

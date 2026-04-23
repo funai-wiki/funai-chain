@@ -1,0 +1,35 @@
+11:52:24 dispatch.go:488: dispatch: refreshed 4 workers
+11:52:45 dispatch.go:264: dispatch: worker.HandleTask: S4: AssignTask for task 366e9bd3dab69997 is not signed by any of the top-3 accepted leaders for model qwen-test (known=[funai1szyf0nqw6slrk7acsjqgflne9v2pngp3xgkkg0 funai1w5yh635aw0cv7d83fugm5hhs3nlt3crqhusv54 funai1shpmknzqw4pdlwq67gngcq8pm0ywdp9p6sknjl])
+11:52:45 dispatch.go:234: dispatch: task 366e9bd3dab69997.. dispatched to funai1shpmknzqw4pdlwq67gngcq8pm0ywdp9p6sknjl
+11:52:45 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:52:45 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:52:45 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:52:47 tgi.go:415: TeacherForce: prefill empty (TGI v3?), falling back to token-by-token
+11:52:54 dispatch.go:488: dispatch: refreshed 4 workers
+11:53:04 dispatch.go:279: dispatch: receipt for task 366e9bd3dab69997.. from 025f56c5ef323224..
+11:53:04 dispatch.go:279: dispatch: receipt for task 366e9bd3dab69997.. from 025e98c782bfd6d2..
+11:53:04 dispatch.go:279: dispatch: receipt for task 366e9bd3dab69997.. from 02ddaee907d8d661..
+11:53:05 tgi.go:415: TeacherForce: prefill empty (TGI v3?), falling back to token-by-token
+11:53:05 worker.go:453: worker: verify dispatch: 3 candidates (need >=3), task=366e9bd3dab69997
+11:53:05 dispatch.go:268: dispatch: task 366e9bd3dab69997.. completed, result=76bd1bafeb7ec4b4..
+11:53:05 worker.go:517: Worker: rebroadcast cancelled for task 366e9bd3dab69997
+11:53:05 tgi.go:415: TeacherForce: prefill empty (TGI v3?), falling back to token-by-token
+11:53:06 tgi.go:415: TeacherForce: prefill empty (TGI v3?), falling back to token-by-token
+11:53:22 dispatch.go:313: dispatch: verify result for task 366e9bd3dab69997.. pass=true
+verifier: teacher force for task 366e9bd3dab69997 returned 38 tokens
+11:53:22 dispatch.go:305: dispatch: verified task 366e9bd3dab69997.. pass=true logits=5/5
+11:53:22 dispatch.go:313: dispatch: verify result for task 366e9bd3dab69997.. pass=true
+11:53:22 dispatch.go:313: dispatch: verify result for task 366e9bd3dab69997.. pass=true
+11:53:22 dispatch.go:313: dispatch: verify result for task 366e9bd3dab69997.. pass=true
+verifier: teacher force for task 366e9bd3dab69997 returned 38 tokens
+11:53:22 dispatch.go:305: dispatch: verified task 366e9bd3dab69997.. pass=true logits=5/5
+verifier: teacher force for task 366e9bd3dab69997 returned 38 tokens
+11:53:22 dispatch.go:305: dispatch: verified task 366e9bd3dab69997.. pass=true logits=5/5
+11:53:23 dispatch.go:313: dispatch: verify result for task 366e9bd3dab69997.. pass=true
+11:53:23 dispatch.go:313: dispatch: verify result for task 366e9bd3dab69997.. pass=true
+11:53:24 dispatch.go:313: dispatch: verify result for task 366e9bd3dab69997.. pass=true
+11:53:24 dispatch.go:313: dispatch: verify result for task 366e9bd3dab69997.. pass=true
+11:53:24 dispatch.go:488: dispatch: refreshed 4 workers
+11:53:24 client.go:589: chain: BatchSettlement tx broadcast hash=29A0E238F0ABE5754F248BA7FBF51A164CDE61AC192019DB84096B3CA0794D9B entries=1 gas=202000 seq=0
+11:53:24 dispatch.go:649: dispatch: BatchSettlement submitted tx=29A0E238F0ABE5754F248BA7FBF51A164CDE61AC192019DB84096B3CA0794D9B entries=1 (processed=1 audits=0)
+11:53:54 dispatch.go:488: dispatch: refreshed 4 workers

@@ -1,0 +1,26 @@
+WARNING:(ast) sonic only supports go1.17~1.23, but your environment is not suitable
+=== FunAI E2E Inference Client ===
+Model:       qwen-test
+Prompt:      What is 2+2? Answer with just the number.
+Fee:         1000000 ufai
+Temperature: 0 (raw) / 0.00 (actual)
+Boot peers:  1
+Chain RPC:   http://127.0.0.1:56657
+User pubkey: 0297c297b3af208f6913bef37066ebdcb0c6bbc588e58ac1aef7173c688b43060c
+User addr:   funai19z0zv3weexvy9ycwsx77e5eqtxzfwn6cq0lnt0
+
+Waiting 5s for P2P peer discovery...
+Sending inference request...
+11:16:04 client.go:293: SDK: sent InferRequest task_id=b5529f9abd132194 model=qwen-test fee=1000000 privacy=plain
+
+=== Inference Result ===
+Task ID:     b5529f9abd132194434ecd0eb9b4092f
+Output:       4
+
+The answer is 4.<|endoftext|>
+Tokens:      10
+Verified:    true
+Result hash: 8b1e114db432968bcbede49e87151129
+Latency:     2.228517794s
+
+SUCCESS: Inference completed successfully

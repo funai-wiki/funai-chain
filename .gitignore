@@ -45,6 +45,9 @@ agency-agents/
 *.tmp
 *.bak
 
+# Exception: test report evidence artefacts are tracked
+!docs/testing/reports/*/*.log
+
 docs/internal/
 docs/reports/
 docs/mainnet-readiness/

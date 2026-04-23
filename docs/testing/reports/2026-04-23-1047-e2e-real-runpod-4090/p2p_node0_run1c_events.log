@@ -1,0 +1,37 @@
+11:15:41 dispatch.go:488: dispatch: refreshed 4 workers
+11:16:05 dispatch.go:227: dispatch: leader.HandleRequest: all workers rejected for model qwen-test
+11:16:05 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:16:05 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:16:05 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:16:05 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:16:05 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:16:06 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+11:16:07 tgi.go:415: TeacherForce: prefill empty (TGI v3?), falling back to token-by-token
+11:16:11 dispatch.go:279: dispatch: receipt for task b5529f9abd132194.. from 0397c3e4698faafc..
+11:16:11 dispatch.go:488: dispatch: refreshed 4 workers
+11:16:11 dispatch.go:279: dispatch: receipt for task b5529f9abd132194.. from 027d757a7b17b9c4..
+11:16:12 dispatch.go:279: dispatch: receipt for task b5529f9abd132194.. from 034698e79a39cef8..
+11:16:12 worker.go:453: worker: verify dispatch: 3 candidates (need >=3), task=b5529f9abd132194
+11:16:12 dispatch.go:268: dispatch: task b5529f9abd132194.. completed, result=8b1e114db432968b..
+11:16:12 worker.go:517: Worker: rebroadcast cancelled for task b5529f9abd132194
+11:16:12 tgi.go:415: TeacherForce: prefill empty (TGI v3?), falling back to token-by-token
+11:16:12 tgi.go:415: TeacherForce: prefill empty (TGI v3?), falling back to token-by-token
+11:16:13 tgi.go:415: TeacherForce: prefill empty (TGI v3?), falling back to token-by-token
+11:16:16 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+11:16:17 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+11:16:17 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+verifier: teacher force for task b5529f9abd132194 returned 10 tokens
+11:16:18 dispatch.go:305: dispatch: verified task b5529f9abd132194.. pass=true logits=5/5
+11:16:18 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+verifier: teacher force for task b5529f9abd132194 returned 10 tokens
+11:16:18 dispatch.go:305: dispatch: verified task b5529f9abd132194.. pass=true logits=5/5
+11:16:18 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+11:16:18 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+verifier: teacher force for task b5529f9abd132194 returned 10 tokens
+11:16:19 dispatch.go:305: dispatch: verified task b5529f9abd132194.. pass=true logits=5/5
+11:16:19 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+11:16:19 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+11:16:19 dispatch.go:313: dispatch: verify result for task b5529f9abd132194.. pass=true
+11:16:20 client.go:589: chain: BatchSettlement tx broadcast hash=99DD92EF7BAF081111CFCF868A8E67BD6B800BCCF08358820DF201AC46E63D72 entries=1 gas=202000 seq=0
+11:16:20 dispatch.go:649: dispatch: BatchSettlement submitted tx=99DD92EF7BAF081111CFCF868A8E67BD6B800BCCF08358820DF201AC46E63D72 entries=1 (processed=1 audits=0)
+11:16:41 dispatch.go:488: dispatch: refreshed 4 workers

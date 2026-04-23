@@ -54,6 +54,11 @@ INFERENCE_PROMPT="${INFERENCE_PROMPT:-What is 2+2? Answer with just the number.}
 # Logits comparison epsilon (default 0.01; may need tuning for small models)
 EPSILON="${FUNAI_EPSILON:-0.01}"
 
+# Settlement observation window (Phase 6). Default 10s is only long enough when
+# TGI is local; remote TGI (e.g. RunPod HTTPS proxy) + token-by-token verifier
+# fallback needs 30-60s to complete verify → collect → batch → on-chain.
+BATCH_WAIT_SEC="${BATCH_WAIT_SEC:-10}"
+
 CLEANUP=true
 if [[ "${1:-}" == "--no-cleanup" ]]; then
   CLEANUP=false
@@ -874,8 +879,8 @@ check_settlement() {
   log_phase "Phase 6: Check On-Chain Settlement"
 
   # Wait for potential batch settlement
-  log_info "Waiting for batch settlement (10s)..."
-  sleep 10
+  log_info "Waiting for batch settlement (${BATCH_WAIT_SEC}s)..."
+  sleep "$BATCH_WAIT_SEC"
 
   # Check if any settlement transactions were broadcast
   local height=$(get_block_height 0)

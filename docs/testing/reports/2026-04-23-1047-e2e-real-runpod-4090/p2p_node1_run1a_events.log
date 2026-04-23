@@ -1,0 +1,5 @@
+10:46:45 node.go:181: P7: fresh X25519 keypair generated (key rotation on restart)
+10:47:06 dispatch.go:234: dispatch: task dd9f8e48646e8fb9.. dispatched to funai1akzds223t0wdm98z3ueq6gpdh0gckl4rdplxp5
+10:47:06 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+10:47:06 dispatch.go:264: dispatch: worker.HandleTask: inference concurrency limit reached (1/1)
+10:47:08 dispatch.go:264: dispatch: worker.HandleTask: teacher force for logits: TGI error 422: {"error":"Input validation error: `top_n_tokens` must be >= 0 and <= 5. Given: 256","error_type":"validation"}
