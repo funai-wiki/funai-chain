@@ -177,6 +177,43 @@ type InferResult struct {
 	Verified   bool // M7: true if result_hash matches worker's receipt
 }
 
+// reassembleStreamTokens reconstructs the ordered token list from StreamToken
+// messages that may arrive out of order via libp2p pubsub. ready is true only
+// when a token marked IsFinal has been seen AND every index from 0 through the
+// final index is present. Duplicates (same Index appearing more than once) use
+// the first-seen Token text. Returns the ContentSig attached to the
+// highest-indexed IsFinal token.
+func reassembleStreamTokens(received []p2ptypes.StreamToken) (tokens []string, contentSig []byte, ready bool) {
+	var finalSeen bool
+	var finalIdx uint32
+	for _, t := range received {
+		if t.IsFinal && (!finalSeen || t.Index >= finalIdx) {
+			finalSeen = true
+			finalIdx = t.Index
+			contentSig = t.ContentSig
+		}
+	}
+	if !finalSeen {
+		return nil, nil, false
+	}
+	byIndex := make(map[uint32]string, len(received))
+	for _, t := range received {
+		if _, exists := byIndex[t.Index]; !exists {
+			byIndex[t.Index] = t.Token
+		}
+	}
+	for i := uint32(0); i <= finalIdx; i++ {
+		if _, ok := byIndex[i]; !ok {
+			return nil, nil, false
+		}
+	}
+	tokens = make([]string, 0, int(finalIdx)+1)
+	for i := uint32(0); i <= finalIdx; i++ {
+		tokens = append(tokens, byIndex[i])
+	}
+	return tokens, contentSig, true
+}
+
 // Infer sends an inference request and returns the complete result.
 // Implements 5-second auto-retry with the same task_id.
 // M7: verifies result_hash against Worker's InferReceipt after completion.
@@ -293,6 +330,11 @@ func (c *Client) Infer(ctx context.Context, params InferParams) (*InferResult, e
 	log.Printf("SDK: sent InferRequest task_id=%x model=%s fee=%d privacy=%s", taskId[:8], params.ModelId, params.Fee, c.privacyMode)
 
 	var tokens []string
+	// received buffers StreamToken messages as they arrive; because libp2p
+	// pubsub does not guarantee ordering, we must index-sort before composing
+	// the final output (see reassembleStreamTokens).
+	var received []p2ptypes.StreamToken
+	var finalContentSig []byte
 	var workerReceipt *p2ptypes.InferReceipt
 	retryTimer := time.NewTimer(c.InferTimeout)
 	defer retryTimer.Stop()
@@ -342,62 +384,66 @@ func (c *Client) Infer(ctx context.Context, params InferParams) (*InferResult, e
 				continue
 			}
 
-			tokens = append(tokens, streamToken.Token)
+			received = append(received, streamToken)
+			reassembled, contentSig, ready := reassembleStreamTokens(received)
+			if !ready {
+				// A token arrived — extend the retry deadline.
+				retryTimer.Reset(c.InferTimeout)
+				continue
+			}
+			tokens = reassembled
+			finalContentSig = contentSig
 
-			if streamToken.IsFinal {
-				output := ""
-				for _, t := range tokens {
-					output += t
-				}
-
-				resultHash := sha256.Sum256([]byte(output))
-
-				// P3-7: Worker signs sha256(complete_output) on the final StreamToken.
-				// Capture it here so a downstream FraudProof can carry a valid
-				// WorkerContentSig through the on-chain H3 check
-				// (x/settlement/keeper/keeper.go:1279-1288). Without this, FraudProof
-				// would ship empty WorkerContentSig and the H3 sig verification would
-				// be silently skipped — anyone could spam forged fraud reports.
-				workerContentSig := streamToken.ContentSig
-
-				// Restore PII in output if sanitization was applied
-				restoredOutput := output
-				if len(piiMapping) > 0 {
-					restoredOutput = RestoreOutput(output, piiMapping)
-				}
-
-				result := &InferResult{
-					TaskId:     taskId,
-					Output:     restoredOutput,
-					ResultHash: resultHash[:],
-					Tokens:     tokens,
-					Verified:   true,
-				}
-
-				// P2-9: safely receive receipt from channel (no data race)
-				select {
-				case r := <-receiptCh:
-					workerReceipt = r
-				default:
-				}
-
-				// M7: verify result_hash against Worker's InferReceipt
-				if workerReceipt != nil {
-					// P3-4: verify Worker's signature on the receipt before trusting it
-					receiptSigValid := verifyWorkerReceiptSig(workerReceipt)
-					if !receiptSigValid {
-						log.Printf("SDK: Worker receipt signature invalid for task %x, ignoring", taskId[:8])
-					} else if !bytes.Equal(resultHash[:], workerReceipt.ResultHash) {
-						result.Verified = false
-						log.Printf("SDK: FRAUD DETECTED! result_hash mismatch for task %x", taskId[:8])
-						c.submitFraudProof(ctx, taskId, workerReceipt, []byte(output), resultHash[:], workerContentSig)
-					}
-				}
-
-				return result, nil
+			output := ""
+			for _, t := range tokens {
+				output += t
 			}
 
-			retryTimer.Reset(c.InferTimeout)
+			resultHash := sha256.Sum256([]byte(output))
+
+			// P3-7: Worker signs sha256(complete_output) on the final StreamToken.
+			// Capture it here so a downstream FraudProof can carry a valid
+			// WorkerContentSig through the on-chain H3 check
+			// (x/settlement/keeper/keeper.go:1279-1288). Without this, FraudProof
+			// would ship empty WorkerContentSig and the H3 sig verification would
+			// be silently skipped — anyone could spam forged fraud reports.
+			workerContentSig := finalContentSig
+
+			// Restore PII in output if sanitization was applied
+			restoredOutput := output
+			if len(piiMapping) > 0 {
+				restoredOutput = RestoreOutput(output, piiMapping)
+			}
+
+			result := &InferResult{
+				TaskId:     taskId,
+				Output:     restoredOutput,
+				ResultHash: resultHash[:],
+				Tokens:     tokens,
+				Verified:   true,
+			}
+
+			// P2-9: safely receive receipt from channel (no data race)
+			select {
+			case r := <-receiptCh:
+				workerReceipt = r
+			default:
+			}
+
+			// M7: verify result_hash against Worker's InferReceipt
+			if workerReceipt != nil {
+				// P3-4: verify Worker's signature on the receipt before trusting it
+				receiptSigValid := verifyWorkerReceiptSig(workerReceipt)
+				if !receiptSigValid {
+					log.Printf("SDK: Worker receipt signature invalid for task %x, ignoring", taskId[:8])
+				} else if !bytes.Equal(resultHash[:], workerReceipt.ResultHash) {
+					result.Verified = false
+					log.Printf("SDK: FRAUD DETECTED! result_hash mismatch for task %x", taskId[:8])
+					c.submitFraudProof(ctx, taskId, workerReceipt, []byte(output), resultHash[:], workerContentSig)
+				}
+			}
+
+			return result, nil
 		}
 	}
 }
