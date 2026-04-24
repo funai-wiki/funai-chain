@@ -206,3 +206,140 @@ func TestBech32FromPubkey_DifferentPubkeysProduceDifferentAddresses(t *testing.T
 		t.Fatal("two distinct pubkeys produced the same bech32 address")
 	}
 }
+
+// ── reassembleStreamTokens ───────────────────────────────────────────────────
+//
+// Regression tests for the SDK stream-token reassembly path. libp2p pubsub
+// does not guarantee message delivery order, so the SDK must index-sort
+// StreamToken messages before assembling the output. Without this, longer
+// outputs (e.g. 34 tokens on Qwen2.5-7B, real test 2026-04-23) observed
+// scrambled output like "You correct're! to2+" instead of "You're correct!".
+// See docs/testing/reports/2026-04-23-1047-e2e-real-runpod-4090/report.md §13.4.
+
+func TestReassembleStreamTokens_InOrder(t *testing.T) {
+	received := []p2ptypes.StreamToken{
+		{Index: 0, Token: "Hello", IsFinal: false},
+		{Index: 1, Token: " ", IsFinal: false},
+		{Index: 2, Token: "world", IsFinal: true, ContentSig: []byte{0xaa}},
+	}
+	tokens, sig, ready := reassembleStreamTokens(received)
+	if !ready {
+		t.Fatal("expected ready=true")
+	}
+	got := strings.Join(tokens, "")
+	if got != "Hello world" {
+		t.Errorf("output mismatch: got %q want %q", got, "Hello world")
+	}
+	if len(sig) != 1 || sig[0] != 0xaa {
+		t.Errorf("content sig mismatch: got %v", sig)
+	}
+}
+
+func TestReassembleStreamTokens_OutOfOrder(t *testing.T) {
+	// Simulates the real Run 2 scenario: pubsub delivered tokens out of
+	// index order. Before the fix, the SDK concatenated them by arrival
+	// order and produced scrambled output; with the fix, Index wins.
+	received := []p2ptypes.StreamToken{
+		{Index: 2, Token: "world", IsFinal: true, ContentSig: []byte{0xbb}},
+		{Index: 0, Token: "Hello", IsFinal: false},
+		{Index: 1, Token: " ", IsFinal: false},
+	}
+	tokens, sig, ready := reassembleStreamTokens(received)
+	if !ready {
+		t.Fatal("expected ready=true")
+	}
+	got := strings.Join(tokens, "")
+	if got != "Hello world" {
+		t.Errorf("out-of-order reassembly wrong: got %q want %q", got, "Hello world")
+	}
+	if len(sig) != 1 || sig[0] != 0xbb {
+		t.Errorf("content sig mismatch: got %v", sig)
+	}
+}
+
+func TestReassembleStreamTokens_NotReadyWithoutFinal(t *testing.T) {
+	received := []p2ptypes.StreamToken{
+		{Index: 0, Token: "Hello", IsFinal: false},
+		{Index: 1, Token: " ", IsFinal: false},
+	}
+	_, _, ready := reassembleStreamTokens(received)
+	if ready {
+		t.Error("expected ready=false when no IsFinal present")
+	}
+}
+
+func TestReassembleStreamTokens_NotReadyWithGap(t *testing.T) {
+	received := []p2ptypes.StreamToken{
+		{Index: 0, Token: "A", IsFinal: false},
+		{Index: 2, Token: "C", IsFinal: true},
+	}
+	_, _, ready := reassembleStreamTokens(received)
+	if ready {
+		t.Error("expected ready=false when intermediate index missing")
+	}
+}
+
+func TestReassembleStreamTokens_DeduplicatesSameIndex(t *testing.T) {
+	received := []p2ptypes.StreamToken{
+		{Index: 0, Token: "Hello", IsFinal: false},
+		{Index: 0, Token: "Hello", IsFinal: false},
+		{Index: 1, Token: " world", IsFinal: true},
+	}
+	tokens, _, ready := reassembleStreamTokens(received)
+	if !ready {
+		t.Fatal("expected ready=true")
+	}
+	if strings.Join(tokens, "") != "Hello world" {
+		t.Errorf("got %q, want %q", strings.Join(tokens, ""), "Hello world")
+	}
+	if len(tokens) != 2 {
+		t.Errorf("dedupe failed: expected 2 tokens, got %d", len(tokens))
+	}
+}
+
+func TestReassembleStreamTokens_SingleTokenIsFinal(t *testing.T) {
+	received := []p2ptypes.StreamToken{
+		{Index: 0, Token: "done", IsFinal: true, ContentSig: []byte{0xcc}},
+	}
+	tokens, sig, ready := reassembleStreamTokens(received)
+	if !ready {
+		t.Fatal("expected ready=true for single-token output")
+	}
+	if len(tokens) != 1 || tokens[0] != "done" {
+		t.Errorf("single token mismatch: got %v", tokens)
+	}
+	if len(sig) != 1 || sig[0] != 0xcc {
+		t.Errorf("content sig mismatch: got %v", sig)
+	}
+}
+
+func TestReassembleStreamTokens_FinalBeforeEarlierTokens(t *testing.T) {
+	// Pubsub can deliver the Final token first, with Index=N-1. We must
+	// still wait for tokens 0..N-2 before declaring ready.
+	received := []p2ptypes.StreamToken{
+		{Index: 3, Token: "END", IsFinal: true},
+	}
+	_, _, ready := reassembleStreamTokens(received)
+	if ready {
+		t.Error("expected ready=false when only final (Index=3) received, 0..2 still missing")
+	}
+	received = append(received,
+		p2ptypes.StreamToken{Index: 0, Token: "A", IsFinal: false},
+		p2ptypes.StreamToken{Index: 1, Token: "B", IsFinal: false},
+		p2ptypes.StreamToken{Index: 2, Token: "C", IsFinal: false},
+	)
+	tokens, _, ready := reassembleStreamTokens(received)
+	if !ready {
+		t.Fatal("expected ready=true once all 4 tokens present")
+	}
+	if strings.Join(tokens, "") != "ABCEND" {
+		t.Errorf("got %q, want %q", strings.Join(tokens, ""), "ABCEND")
+	}
+}
+
+func TestReassembleStreamTokens_Empty(t *testing.T) {
+	_, _, ready := reassembleStreamTokens(nil)
+	if ready {
+		t.Error("expected ready=false on empty input")
+	}
+}
