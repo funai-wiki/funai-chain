@@ -14,10 +14,21 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/chacha20"
 )
+
+// teacherForceMaxConcurrent caps the number of in-flight per-position TGI
+// requests in teacherForceTokenByToken. Set well below the typical
+// `max_concurrent_requests=128` advertised by TGI 3.x's `/info` so that
+// other workers / verifiers hitting the same endpoint at the same time do
+// not get rate-limited because we exhausted the pool. Picked empirically:
+// 32 is enough to drop wall-clock teacher-force time on a 34-token output
+// from ~17 s sequential to roughly 1 RTT (under 1 s) without saturating
+// either the server or our own outbound socket budget.
+const teacherForceMaxConcurrent = 32
 
 // TGIClient wraps HuggingFace Text Generation Inference HTTP API.
 type TGIClient struct {
@@ -419,71 +430,140 @@ func (c *TGIClient) TeacherForce(ctx context.Context, prompt string, completeOut
 	return result, nil
 }
 
-// teacherForceTokenByToken replays inference one token at a time to collect logprobs.
-// Used as a fallback when TGI v3 does not support decoder_input_details.
+// teacherForceTokenByToken replays inference one token at a time to collect
+// logprobs. Used as a fallback when TGI v3 does not support
+// decoder_input_details (returns empty `prefill`).
+//
+// Each per-position request is a pure function of its (prompt + prefix) input,
+// so the N TGI calls fan out concurrently with a bounded worker pool capped at
+// teacherForceMaxConcurrent. Wall-clock for an N-token output drops from
+// O(N × per-call RTT) to roughly O(per-call RTT) — for the Qwen2.5-7B 34-token
+// trace in the 2026-04-23 RunPod report (§14.2), that's ~17 s → ~1 s. The
+// observable result (Tokens slice ordered by output position) is byte-for-byte
+// identical to the prior sequential implementation; only the order in which
+// the TGI requests are submitted changes.
+//
+// Errors short-circuit: the first per-position failure cancels in-flight peer
+// requests via a sub-context and is returned to the caller. A position that
+// returns no Details is filled with an ID/Text placeholder, matching the
+// sequential behaviour.
 func (c *TGIClient) teacherForceTokenByToken(ctx context.Context, prompt string, completeOutput string, outputTokenCount int) (*InferenceResult, error) {
 	// Tokenize the output to get real token boundaries.
 	outputTokens, err := c.Tokenize(ctx, completeOutput)
 	if err != nil {
 		return nil, fmt.Errorf("teacherForceTokenByToken tokenize: %w", err)
 	}
+	n := len(outputTokens)
+	if n == 0 {
+		return &InferenceResult{Output: completeOutput, Tokens: nil, TokenCount: 0}, nil
+	}
 
-	// Reconstruct cumulative text prefixes from token texts.
-	// Each step: send prompt + output_prefix, generate 1 token, collect logprobs.
-	var allTokens []TokenInfo
-	outputPrefix := ""
+	// Pre-build all per-position inputs sequentially (CPU-only, no I/O) so
+	// the goroutines below only do the network call.
+	inputs := make([]string, n)
+	var prefix strings.Builder
 	for i, tok := range outputTokens {
-		input := prompt + outputPrefix
-		req := GenerateRequest{
-			Inputs: input,
-			Parameters: GenerateParams{
-				MaxNewTokens: 1,
-				Temperature:  0,
-				DoSample:     false,
-				Details:      true,
-				TopNTokens:   256,
-			},
-		}
-		body, err := json.Marshal(req)
-		if err != nil {
-			return nil, fmt.Errorf("teacherForceTokenByToken marshal step %d: %w", i, err)
-		}
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/generate", bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("teacherForceTokenByToken request step %d: %w", i, err)
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
+		inputs[i] = prompt + prefix.String()
+		prefix.WriteString(tok.Text)
+	}
 
-		resp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("teacherForceTokenByToken TGI step %d: %w", i, err)
-		}
-		var genResp GenerateResponse
-		err = json.NewDecoder(resp.Body).Decode(&genResp)
-		resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("teacherForceTokenByToken decode step %d: %w", i, err)
-		}
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-		if genResp.Details != nil && len(genResp.Details.Tokens) > 0 {
-			t := genResp.Details.Tokens[0]
-			// TGI v3: merge top_tokens from details level into token
-			if len(t.TopTokens) == 0 && len(genResp.Details.TopTokens) > 0 {
-				t.TopTokens = genResp.Details.TopTokens[0]
+	allTokens := make([]TokenInfo, n)
+	errCh := make(chan error, n)
+	sem := make(chan struct{}, teacherForceMaxConcurrent)
+	var wg sync.WaitGroup
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-subCtx.Done():
+				errCh <- subCtx.Err()
+				return
 			}
-			allTokens = append(allTokens, t)
-		} else {
-			// No detail at this position — insert a placeholder.
-			allTokens = append(allTokens, TokenInfo{ID: tok.ID, Text: tok.Text})
+
+			tok, err := c.teacherForceOnePosition(subCtx, inputs[idx], outputTokens[idx])
+			if err != nil {
+				errCh <- fmt.Errorf("teacherForceTokenByToken step %d: %w", idx, err)
+				return
+			}
+			allTokens[idx] = tok
+			errCh <- nil
+		}(i)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for e := range errCh {
+		if e != nil {
+			return nil, e
 		}
-		outputPrefix += tok.Text
 	}
 
 	return &InferenceResult{
 		Output:     completeOutput,
 		Tokens:     allTokens,
-		TokenCount: len(allTokens),
+		TokenCount: n,
 	}, nil
+}
+
+// teacherForceOnePosition issues a single 1-token TGI request and returns the
+// position's logprob / top-tokens. Extracted from teacherForceTokenByToken so
+// the per-position behaviour is unit-testable and the parallel driver above
+// stays focused on fan-out / error short-circuit.
+func (c *TGIClient) teacherForceOnePosition(ctx context.Context, input string, fallbackTok TokenizeToken) (TokenInfo, error) {
+	req := GenerateRequest{
+		Inputs: input,
+		Parameters: GenerateParams{
+			MaxNewTokens: 1,
+			Temperature:  0,
+			DoSample:     false,
+			Details:      true,
+			TopNTokens:   256,
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return TokenInfo{}, fmt.Errorf("marshal: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/generate", bytes.NewReader(body))
+	if err != nil {
+		return TokenInfo{}, fmt.Errorf("build request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return TokenInfo{}, fmt.Errorf("TGI: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return TokenInfo{}, fmt.Errorf("TGI error %d: %s", resp.StatusCode, string(body))
+	}
+	var genResp GenerateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
+		return TokenInfo{}, fmt.Errorf("decode: %w", err)
+	}
+
+	if genResp.Details != nil && len(genResp.Details.Tokens) > 0 {
+		t := genResp.Details.Tokens[0]
+		// TGI v3: merge top_tokens from details level into token
+		if len(t.TopTokens) == 0 && len(genResp.Details.TopTokens) > 0 {
+			t.TopTokens = genResp.Details.TopTokens[0]
+		}
+		return t, nil
+	}
+	// No detail at this position — insert a placeholder matching the prior
+	// sequential implementation.
+	return TokenInfo{ID: fallbackTok.ID, Text: fallbackTok.Text}, nil
 }
 
 // DeterministicGenerate runs inference with ChaCha20 deterministic sampling (spec §8.3).
