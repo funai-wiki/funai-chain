@@ -423,11 +423,23 @@ func (c *Client) Infer(ctx context.Context, params InferParams) (*InferResult, e
 				Verified:   true,
 			}
 
-			// P2-9: safely receive receipt from channel (no data race)
+			// P2-9: safely receive receipt from channel (no data race).
+			// The Worker publishes the final StreamToken and the InferReceipt
+			// back-to-back but on separate pubsub topics, and pubsub offers
+			// no cross-topic ordering guarantee. With a purely non-blocking
+			// select here, the common case was `default` firing before the
+			// receipt-reader goroutine had drained its subscription — receipt
+			// stayed nil, M7 never ran, a tampered receipt went undetected,
+			// and Verified defaulted to true. Waiting up to 1 s lets the
+			// goroutine populate receiptCh; if the receipt truly never arrives
+			// we fall through and keep the prior permissive behaviour
+			// (Verified=true, no FraudProof submitted) rather than blocking
+			// the SDK caller indefinitely.
+			const receiptWait = 1 * time.Second
 			select {
 			case r := <-receiptCh:
 				workerReceipt = r
-			default:
+			case <-time.After(receiptWait):
 			}
 
 			// M7: verify result_hash against Worker's InferReceipt

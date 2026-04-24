@@ -5,7 +5,7 @@ GO := go
 GOFLAGS := -mod=readonly
 LDFLAGS := -s -w
 
-.PHONY: all build build-p2p build-e2e-client build-all install clean test test-stress test-e2e test-e2e-real test-p2p-e2e-mock bench lint proto \
+.PHONY: all build build-p2p build-e2e-client build-all install clean test test-stress test-e2e test-e2e-real test-p2p-e2e-mock test-p2p-e2e-mock-fraud bench lint proto \
         init start testnet-init testnet-clean docker-build
 
 all: build-all
@@ -72,6 +72,13 @@ test-e2e-real: build-all
 
 test-p2p-e2e-mock: build-all
 	bash scripts/e2e-mock-inference.sh
+
+# Fraud-injection variant: same mock pipeline with E2E_FRAUD_MODE=1 so every
+# Worker tampers its receipt hash. Exercises the SDK → FraudProof → chain
+# path end-to-end without needing a real malicious Worker. See
+# p2p/worker/worker.go SetTestCorruptReceipt for the guarded code path.
+test-p2p-e2e-mock-fraud: build-all
+	bash scripts/e2e-mock-fraud.sh
 
 docker-build:
 	docker build --target funaid -t funai-chain:latest .

@@ -64,6 +64,17 @@ type Worker struct {
 	// doesn't exist for the deterministic (temperature > 0) path. Renamed to match
 	// reality and avoid driving spec decisions off a misnamed signal.
 	avgInferenceMs atomic.Uint32 // EMA of InferenceLatencyMs (ms)
+
+	// Test-only: when true, the Worker deliberately corrupts the signed
+	// receipt's ResultHash so it disagrees with the content actually streamed
+	// out. This emulates a malicious Worker and is used by
+	// scripts/e2e-mock-fraud.sh to exercise the SDK's M7 fraud-detection
+	// + MsgFraudProof submission path end-to-end without depending on a real
+	// attacker. Must never be set by a production binary — a live Worker with
+	// this flag would get slashed on chain on every task. Operators see a loud
+	// startup warning from cmd/funai-node when FUNAI_TEST_CORRUPT_RECEIPT=1
+	// is set.
+	testCorruptReceipt bool
 }
 
 // SetLeadersForModel updates the accepted top-3 VRF-ranked Leader pubkeys / addresses
@@ -146,6 +157,13 @@ func (w *Worker) SetMaxConcurrentTasks(max uint32) {
 		max = 1
 	}
 	w.maxConcurrentTasks = max
+}
+
+// SetTestCorruptReceipt enables the Worker-side fraud injection used by
+// scripts/e2e-mock-fraud.sh. See Worker.testCorruptReceipt for the safety
+// note — never call this from production code paths.
+func (w *Worker) SetTestCorruptReceipt(enabled bool) {
+	w.testCorruptReceipt = enabled
 }
 
 // CheckUserBalance verifies that the user has sufficient on-chain balance.
@@ -425,12 +443,36 @@ func (w *Worker) HandleTask(ctx context.Context, task *p2ptypes.AssignTask, bloc
 		InferenceLatencyMs: inferMs,
 	}
 
+	// Test-only fraud injection: tamper the receipt's ResultHash so it no
+	// longer matches the content that was already streamed out. The SDK's
+	// M7 check will catch this and submit a MsgFraudProof; on chain, the
+	// settlement keeper will verify the contradiction between the Worker's
+	// ContentSig (over real content) and the Worker's ReceiptSig (over the
+	// tampered hash) and slash. See comment on Worker.testCorruptReceipt
+	// for guard rails.
+	if w.testCorruptReceipt {
+		tampered := make([]byte, len(resultHash))
+		copy(tampered, resultHash[:])
+		tampered[0] ^= 0xFF
+		receipt.ResultHash = tampered
+		log.Printf("WORKER TEST-ONLY: tampered ResultHash for task %x to exercise fraud-proof path", task.TaskId[:8])
+	}
+
 	// S6: Worker must sign the InferReceipt as proof of work
 	receipt.WorkerSig = w.signReceipt(receipt)
 
 	receiptData, _ := json.Marshal(receipt)
 	topic := p2phost.ModelTopic(string(task.ModelId))
 	_ = w.Host.Publish(ctx, topic, receiptData)
+	// Also publish on the per-task topic that the SDK subscribes to for its
+	// M7 fraud-detection check (sdk/client.go:266). Before this double-publish
+	// the SDK never received receipts — its receipt subscription was on
+	// /funai/receipt/<taskId> but Worker only published to /funai/model/<modelId>
+	// so the entire M7 `result_hash mismatch → submit MsgFraudProof` path was
+	// silently dead. Dispatching to a narrow per-task topic lets the SDK keep
+	// a clean scoped subscription without filtering every model-topic message.
+	receiptTopic := fmt.Sprintf("/funai/receipt/%x", task.TaskId)
+	_ = w.Host.Publish(ctx, receiptTopic, receiptData)
 
 	// Select verifiers using VRF (alpha=0.5)
 	verifSeed := append(append([]byte{}, task.TaskId...), resultHash[:]...)

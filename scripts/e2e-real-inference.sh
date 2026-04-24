@@ -666,6 +666,7 @@ start_p2p_nodes() {
     FUNAI_EPSILON="$EPSILON" \
     FUNAI_CHAIN_ID="$CHAIN_ID" \
     FUNAI_BATCH_INTERVAL="3s" \
+    FUNAI_TEST_CORRUPT_RECEIPT="${E2E_FRAUD_MODE:-}" \
     $P2P_BINARY > "$logfile" 2>&1 &
     echo $! > "$BASE_DIR/p2p-node${i}.pid"
 
@@ -795,27 +796,54 @@ run_inference_test() {
   cat "$client_log"
   echo ""
 
-  if [ $exit_code -eq 0 ] && grep -q "SUCCESS" "$client_log"; then
-    log_pass "Inference request completed successfully"
-
-    # Extract output
-    local output
-    output=$(grep "^Output:" "$client_log" | sed 's/^Output:\s*//' || echo "")
-    if [ -n "$output" ]; then
-      log_pass "Got inference output: $output"
-    fi
-
-    # Check verification
-    if grep -q "Verified:.*true" "$client_log"; then
-      log_pass "Result verified (hash matched)"
-    else
-      log_warn "Result verification status unknown"
-    fi
-  else
+  if [ $exit_code -ne 0 ]; then
     log_fail "Inference request failed (exit_code=$exit_code)"
     log_info "Check logs for details:"
     log_info "  Client:   $client_log"
     log_info "  P2P nodes: $BASE_DIR/p2p-node*.log"
+    return
+  fi
+  if ! grep -q "SUCCESS" "$client_log"; then
+    log_fail "SDK client did not reach SUCCESS state"
+    return
+  fi
+
+  if [ "${E2E_FRAUD_MODE:-}" = "1" ]; then
+    # In fraud mode, every Worker tampers receipt.ResultHash (via
+    # FUNAI_TEST_CORRUPT_RECEIPT=1). We expect the SDK to catch the mismatch
+    # and submit a MsgFraudProof; the task itself still produced output bytes,
+    # so the SDK client exits 0 but flags Verified=false.
+    if grep -q "FRAUD DETECTED" "$client_log"; then
+      log_pass "SDK detected receipt hash mismatch"
+    else
+      log_fail "SDK did not detect fraud; expected 'FRAUD DETECTED' in client log"
+    fi
+    if grep -q "Verified:.*false" "$client_log"; then
+      log_pass "Result marked unverified"
+    else
+      log_fail "Result.Verified was not set to false on detected fraud"
+    fi
+    if grep -q "FraudProof submitted tx=" "$client_log"; then
+      local tx_hash
+      tx_hash=$(grep -oE "FraudProof submitted tx=[A-Za-z0-9]+" "$client_log" | head -1 | awk -F= '{print $2}')
+      log_pass "MsgFraudProof broadcast (tx=${tx_hash:0:16}...)"
+    else
+      log_fail "SDK did not broadcast MsgFraudProof — check client log for signing / chain-client errors"
+    fi
+    return
+  fi
+
+  # Happy-path assertions
+  log_pass "Inference request completed successfully"
+  local output
+  output=$(grep "^Output:" "$client_log" | sed 's/^Output:\s*//' || echo "")
+  if [ -n "$output" ]; then
+    log_pass "Got inference output: $output"
+  fi
+  if grep -q "Verified:.*true" "$client_log"; then
+    log_pass "Result verified (hash matched)"
+  else
+    log_warn "Result verification status unknown"
   fi
 }
 

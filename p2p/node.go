@@ -49,6 +49,12 @@ type Config struct {
 	MaxConcurrentTasks uint32        `json:"max_concurrent_tasks" toml:"max_concurrent_tasks"` // G3: inference concurrency limit
 	InferenceBackend   string        `json:"inference_backend" toml:"inference_backend"`       // "tgi" (default), "openai", "ollama", "vllm", "sglang"
 	InferenceModel     string        `json:"inference_model" toml:"inference_model"`           // Model name for OpenAI-compatible backends
+
+	// TestCorruptReceipt: when true, Worker deliberately tampers receipt hashes
+	// to drive the SDK's fraud-detection path in e2e-mock-fraud.sh. DO NOT set
+	// in production — a Worker with this flag is slashable on every task.
+	// Wired from FUNAI_TEST_CORRUPT_RECEIPT=1 in cmd/funai-node/main.go.
+	TestCorruptReceipt bool `json:"test_corrupt_receipt" toml:"test_corrupt_receipt"`
 }
 
 func defaultChainID() string {
@@ -149,6 +155,9 @@ func NewNode(cfg Config) (*Node, error) {
 	// G3: apply configured concurrency limit
 	if cfg.MaxConcurrentTasks > 0 {
 		node.Worker.SetMaxConcurrentTasks(cfg.MaxConcurrentTasks)
+	}
+	if cfg.TestCorruptReceipt {
+		node.Worker.SetTestCorruptReceipt(true)
 	}
 	node.Worker.OutputObserver = node.Proposer
 	// P2-2: wire Worker as RebroadcastStopper so Proposer can signal stop on 3 results

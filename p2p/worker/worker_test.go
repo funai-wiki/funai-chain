@@ -447,3 +447,30 @@ func TestShouldStopGeneration_ExactBudget(t *testing.T) {
 		t.Fatal("FeePerInputToken=0 should be treated as per-request mode")
 	}
 }
+
+// ── SetTestCorruptReceipt — fraud-injection flag ─────────────────────────────
+
+// TestSetTestCorruptReceipt_DefaultsOff: a freshly constructed Worker must
+// have the fraud-injection flag off. If a refactor ever makes it default on,
+// a production binary without FUNAI_TEST_CORRUPT_RECEIPT set would silently
+// corrupt every receipt.
+func TestSetTestCorruptReceipt_DefaultsOff(t *testing.T) {
+	w := New("addr", nil, nil, []string{"model"}, nil, nil, nil)
+	if w.testCorruptReceipt {
+		t.Fatal("Worker.testCorruptReceipt must default to false; a production binary must not tamper receipts")
+	}
+}
+
+// TestSetTestCorruptReceipt_SetAndUnset: the setter is the only way to flip
+// the flag. Lock the behaviour so future refactors cannot bypass it.
+func TestSetTestCorruptReceipt_SetAndUnset(t *testing.T) {
+	w := New("addr", nil, nil, []string{"model"}, nil, nil, nil)
+	w.SetTestCorruptReceipt(true)
+	if !w.testCorruptReceipt {
+		t.Fatal("SetTestCorruptReceipt(true) must enable the flag")
+	}
+	w.SetTestCorruptReceipt(false)
+	if w.testCorruptReceipt {
+		t.Fatal("SetTestCorruptReceipt(false) must clear the flag")
+	}
+}

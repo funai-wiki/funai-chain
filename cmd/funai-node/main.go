@@ -89,6 +89,15 @@ func main() {
 		}
 	}
 
+	if os.Getenv("FUNAI_TEST_CORRUPT_RECEIPT") == "1" {
+		cfg.TestCorruptReceipt = true
+		log.Printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+		log.Printf("!! TEST-ONLY: Worker will tamper receipt ResultHash on every task.")
+		log.Printf("!! A production node with this flag is slashable on every inference.")
+		log.Printf("!! This binary is only suitable for scripts/e2e-mock-fraud.sh.")
+		log.Printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+	}
+
 	// Inference backend: "tgi" (default), "openai", "vllm", "sglang", "ollama"
 	if backend := os.Getenv("FUNAI_INFERENCE_BACKEND"); backend != "" {
 		cfg.InferenceBackend = backend
