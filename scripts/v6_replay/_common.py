@@ -85,3 +85,104 @@ def load_model_and_tokenizer(model_id: str, device: str):
     for p in model.parameters():
         p.requires_grad_(False)
     return model, tokenizer
+
+
+def is_moe_model(model) -> bool:
+    """Return True if the loaded model is a Mixture-of-Experts.
+
+    Uses a duck-typed check that does not import any model-family-specific
+    classes: the model config carries either ``num_experts`` (Mixtral,
+    DeepSeek-MoE, Qwen-MoE) or one of the known top-k attribute names. Any
+    of these implies the forward pass takes the MoE branch and we can ask
+    for ``output_router_logits=True``. Returns False for dense Qwen2.5,
+    Llama 3, Mistral 7B etc. so the existing Phase 1a tests are unaffected.
+    """
+    cfg = getattr(model, "config", None)
+    if cfg is None:
+        return False
+    for attr in ("num_local_experts", "num_experts", "n_routed_experts"):
+        n = getattr(cfg, attr, None)
+        if isinstance(n, int) and n > 1:
+            return True
+    return False
+
+
+def moe_top_k(model) -> int:
+    """Top-k experts the model selects per token. Falls back to 2.
+
+    Mixtral defaults k=2, Qwen2.5-MoE k=4, DeepSeek-MoE k=6. Reading from
+    config when present keeps the captured ``expert_routing`` array
+    correctly shaped per family.
+    """
+    cfg = getattr(model, "config", None)
+    if cfg is None:
+        return 2
+    for attr in ("num_experts_per_tok", "num_routed_experts_per_tok", "moe_top_k"):
+        k = getattr(cfg, attr, None)
+        if isinstance(k, int) and k > 0:
+            return k
+    return 2
+
+
+def extract_top_k_experts_per_step(router_logits, top_k: int) -> list[list[list[int]]]:
+    """Convert a tuple of router logits (one per MoE layer) into per-token
+    top-k expert IDs.
+
+    Args:
+      router_logits: tuple[Tensor], length = number of MoE-enabled decoder
+                     layers. Each tensor has shape (batch, seq_len, num_experts)
+                     OR (batch * seq_len, num_experts) depending on the
+                     transformers version. Both shapes are handled.
+      top_k: number of experts to keep per token.
+
+    Returns:
+      A list of shape ``[batch_position][layer] -> list[int]`` (length
+      ``top_k`` each). The caller decides which batch position corresponds
+      to which task. For decode steps the seq_len dim is 1, so the inner
+      list represents this single step's routing per layer.
+    """
+    if not router_logits:
+        return []
+
+    import torch
+
+    # Normalise every layer tensor to shape (B, S, E).
+    normalised = []
+    batch_size = None
+    seq_len = None
+    for t in router_logits:
+        if t.dim() == 2:
+            # (B*S, E) — we cannot recover B without external info; assume
+            # B is fixed across the call (set on the first 3-D tensor we
+            # see, else 1). For decode-step calls B*S == B (S=1).
+            normalised.append(t)
+        elif t.dim() == 3:
+            normalised.append(t)
+            batch_size = t.shape[0]
+            seq_len = t.shape[1]
+        else:
+            raise ValueError(f"unexpected router_logits dim {t.dim()}; want 2 or 3")
+
+    if batch_size is None:
+        # All 2-D. Caller is expected to pass batch_size separately for
+        # this case; fall back to treating the whole tensor as one row.
+        batch_size = normalised[0].shape[0]
+        seq_len = 1
+
+    # Result[b][layer] = list[int] of length top_k (last position only —
+    # decode steps care about the freshly-produced token).
+    result: list[list[list[int]]] = []
+    for b in range(batch_size):
+        per_layer = []
+        for layer_t in normalised:
+            if layer_t.dim() == 3:
+                # (B, S, E) — take the last position (the just-decoded token).
+                vec = layer_t[b, -1, :]
+            else:
+                # (B*S, E) — assume row b in flattened layout corresponds to
+                # batch position b at seq_len=1 (decode step).
+                vec = layer_t[b, :]
+            top = torch.topk(vec, k=top_k, dim=-1).indices.tolist()
+            per_layer.append([int(x) for x in top])
+        result.append(per_layer)
+    return result

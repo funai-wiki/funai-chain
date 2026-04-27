@@ -39,7 +39,10 @@ from ._common import (
     ENGINE_ID,
     configure_determinism,
     engine_version,
+    extract_top_k_experts_per_step,
+    is_moe_model,
     load_model_and_tokenizer,
+    moe_top_k,
 )
 from .replay_types import BatchLog, BatchStep, TaskLogits
 from .sampling import chacha20_sample, derive_final_seed
@@ -243,6 +246,14 @@ class WorkerSimulator:
         max_step = max(end for _, end in task_schedule.values())
         sampled_tokens: dict[str, list[int]] = {tid: [] for tid in task_prompts}
         per_task_logits: dict[str, list[Any]] = {tid: [] for tid in task_prompts}
+        # MoE: capture per-step per-layer top-k expert IDs for each task.
+        # Empty for dense models (is_moe_model returns False) — no extra
+        # cost on the existing Phase 1a / 1c test paths.
+        moe_capture = is_moe_model(self.model)
+        moe_k = moe_top_k(self.model) if moe_capture else 0
+        per_task_expert_routing: dict[str, list[list[list[int]]]] = {
+            tid: [] for tid in task_prompts
+        }
         steps: list[BatchStep] = []
 
         pad_id = self.tokenizer.pad_token_id
@@ -271,12 +282,27 @@ class WorkerSimulator:
             input_ids = torch.tensor(padded, dtype=torch.long, device=self.device)
             attention_mask = torch.tensor(attn, dtype=torch.long, device=self.device)
 
-            out = self.model(
+            forward_kwargs = dict(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 use_cache=False,
             )
+            if moe_capture:
+                # MoE-aware models accept this; dense models would error if
+                # we set it, hence the guard. transformers MixtralModel /
+                # Qwen2MoeModel / DeepseekModel all surface router logits via
+                # this kwarg.
+                forward_kwargs["output_router_logits"] = True
+
+            out = self.model(**forward_kwargs)
             step_logits = out.logits[:, -1, :]
+
+            # Per-batch-position top-k expert IDs for this step.
+            step_routing = (
+                extract_top_k_experts_per_step(out.router_logits, top_k=moe_k)
+                if moe_capture and getattr(out, "router_logits", None) is not None
+                else []
+            )
 
             for i, tid in enumerate(active):
                 logit_vec = step_logits[i].detach().float().cpu().numpy()
@@ -292,6 +318,8 @@ class WorkerSimulator:
                         step_index=step,
                     )
                 sampled_tokens[tid].append(tok)
+                if moe_capture and step_routing:
+                    per_task_expert_routing[tid].append(step_routing[i])
 
             steps.append(BatchStep(step_index=step, active_task_ids=active))
 
@@ -319,6 +347,7 @@ class WorkerSimulator:
                 task_id=tid,
                 logits=per_task_logits[tid],
                 sampled_tokens=list(sampled_tokens[tid]),
+                expert_routing=list(per_task_expert_routing[tid]),
             )
             for tid in task_prompts
         }

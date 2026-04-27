@@ -76,8 +76,26 @@ class TaskLogits:
     on every entry for the Phase 1b bit-exactness assertion to pass.
     ``default_factory=list`` keeps the field backward-compatible with
     Phase 1a/1c code that does not populate it.
+
+    ``expert_routing[i]`` is the per-MoE-layer top-k expert IDs selected
+    for this task at decode step i, when the model is a Mixture-of-Experts.
+    Shape: ``list[step][layer] -> list[int]`` — outer list is one entry
+    per active step, middle is one entry per MoE-enabled decoder layer,
+    inner is the top-k expert indices (typically k=2 for Mixtral / Qwen MoE).
+    For dense (non-MoE) models the list is empty (default), keeping the
+    field invisible to existing Phase 1a tests on Qwen2.5-Dense models.
+
+    The field exists so the Phase 1 MoE test can answer:
+      Path 1 — does the gating network select different experts on the
+               replay side under the same inputs?
+                  yes  → expert routing is non-deterministic
+                  no   → routing is fine; any drift is Path 2 territory
+      Path 2 — does the expert internal compute drift when routing is
+               held constant? Out-of-scope here; addressed by the existing
+               batch-replay path.
     """
 
     task_id: str
     logits: list[Any]  # list[np.ndarray], shape [vocab_size] per entry
     sampled_tokens: list[int] = field(default_factory=list)
+    expert_routing: list[list[list[int]]] = field(default_factory=list)
