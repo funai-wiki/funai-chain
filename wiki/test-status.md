@@ -106,6 +106,10 @@ Total network TPS = `min(` layer 1 throughput × GPU count, layer 2 pipeline lat
 
 4-day timeline, total budget ~$35 on Vast.ai (see doc §3). For teams executing on Alibaba Cloud instead, see `scripts/tgi-bootstrap-aliyun.sh` which provisions a pinned-TGI endpoint on A10 / L20 / A100 class ECS instances in one command.
 
+## Live execution dashboard
+
+[`docs/testing/Test_Plan_Execution_Status.md`](../docs/testing/Test_Plan_Execution_Status.md) — updated 2026-04-27. Tracks per-plan execution status (0 fully run, 4 partial, 2 not started, 1 meta) plus a 12-slice priority list, gating chain, and update protocol. Treat it as the canonical "where are we" view; this wiki page is the conceptual summary.
+
 ## Pre-mainnet test plans (2026-04-27)
 
 Two synthesis docs land the outstanding work between today and mainnet:
