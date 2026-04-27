@@ -98,6 +98,8 @@ Periodic health check:
 | `docs/testing/FunAI_Test_Execution_Plan_KT.md` | Test | 597 | 227 test scenarios across 6 layers |
 | `docs/testing/T4_E2E_Test_Plan.md` | Test | 475 | T4 GPU E2E plan |
 | `docs/testing/FunAI_Test_Plan_Review.md` | Test | 241 | Spec vs implementation gaps |
+| `docs/testing/Pre_Mainnet_Test_Plan.md` | Test | 275 | Pre-mainnet synthesis: P0 / P1 / P2 with decision gates (2026-04-27) |
+| `docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md` | Test | 192 | KT V6 penalty-path fuzzing plan: 30 scenarios + 7 invariants (2026-04-27) |
 | `docs/internal/ops-runbook.md` | Ops | 319 | Deployment, env vars, monitoring (internal) |
 | `docs/guides/Join_Testnet.md` | Guide | 350 | Testnet join guide |
 | `docs/guides/Phase4_Full_Network_Guide.md` | Guide | 159 | Multi-node network guide |

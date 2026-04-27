@@ -23,6 +23,15 @@ While jailed, a participant **cannot**:
 
 After **50 consecutive successful tasks**, the `jail_count` resets to 0. This gives rehabilitated participants a clean slate.
 
+> ⚠ **Contradiction with V6 KT plan (open).** The V6 Byzantine Test Plan
+> ([`docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md`](../docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md), 2026-04-27)
+> tests M7/M8/C1/C2 against a different rule: **every 1000 successful tasks
+> decays `jail_count` by 1** (incremental, not full reset). V52 says reset
+> to 0 after 50; the V6 plan says decay by 1 after 1000. These are not
+> equivalent — a Worker with `jail_count=2` reaches "clean" after 50 tasks
+> on V52 but needs 2000 tasks on KT V6. **Spec source of truth must be
+> chosen before the Byzantine fuzzer can be implemented.**
+
 **What counts as "1 task" per role:**
 
 | Role | 1 successful task = |

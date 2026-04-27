@@ -106,6 +106,17 @@ Total network TPS = `min(` layer 1 throughput × GPU count, layer 2 pipeline lat
 
 4-day timeline, total budget ~$35 on Vast.ai (see doc §3). For teams executing on Alibaba Cloud instead, see `scripts/tgi-bootstrap-aliyun.sh` which provisions a pinned-TGI endpoint on A10 / L20 / A100 class ECS instances in one command.
 
+## Pre-mainnet test plans (2026-04-27)
+
+Two synthesis docs land the outstanding work between today and mainnet:
+
+| Document | Scope |
+|---|---|
+| [`docs/testing/Pre_Mainnet_Test_Plan.md`](../docs/testing/Pre_Mainnet_Test_Plan.md) | Cross-track synthesis. P0 (V6 production-engine validation, V6 cross-hardware A2, Verifier economics modelling, Byzantine scenarios, FAIL-path economic invariants, disaster-recovery rehearsal, Day-0 concurrency) / P1 (V6 adversarial + dispatch boundaries, SDK privacy E2E, soak, security regression, penalty mechanism, script polish) / P2 (multimodal, EVM bridge, IBC, wallet integrations, etc.). 4 explicit decision gates at week 2 / 4 / 5. |
+| [`docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md`](../docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md) | KT-authored V6 penalty-path stress plan. 30 fuzz scenarios across 4 tiers (L1–L5 light, M1–M8 moderate, S1–S6 severe, C1–C10 combined), 7 invariant checks (fee / stake / reputation bounds / state-machine legality / `jail_count` consistency / task uniqueness / `in_flight`), CI hooks `make test-byzantine-quick` per PR + `make test-byzantine-full` nightly. No GPU required (mock logits + mock TGI, same harness as PR #23 e2e-mock). |
+
+Coverage gap: KT's 30 scenarios do not include "Leader signs `AssignTask` but never publishes" — flagged in `Pre_Mainnet_Test_Plan.md` §2.4 as a to-add item.
+
 ## Related Pages
 
 - [Security Second verification Findings](security-second verification.md)

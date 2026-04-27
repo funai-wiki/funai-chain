@@ -1,5 +1,27 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-27] ingest | Pre-mainnet test plan + KT V6 Byzantine plan
+
+**Operator:** Claude (LLM)
+
+**New source docs ingested:**
+- `docs/testing/Pre_Mainnet_Test_Plan.md` (275 lines) — Cross-track synthesis of every testing track still required between today and mainnet, sorted P0 / P1 / P2 with owner + effort estimates and 4 explicit decision gates (week 2 V6 production-engine, week 2 Verifier economics, week 4 Byzantine findings, week 5 SDK privacy / libp2p stress).
+- `docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md` (192 lines) — English translation of KT's V6 penalty-path stress plan (2026-04-27 PDF). 30 fuzz scenarios in 4 tiers (L1–L5 light reputation, M1–M8 moderate jail, S1–S6 severe slash, C1–C10 combined), 7 invariant checks, CI hooks `make test-byzantine-quick` per PR + `make test-byzantine-full` nightly. No GPU needed (mock harness, same as PR #23 e2e-mock).
+
+**Wiki pages updated:**
+- `wiki/test-status.md` — New "Pre-mainnet test plans (2026-04-27)" section. Notes one coverage gap: KT's 30 scenarios do not include "Leader signs `AssignTask` but never publishes" (flagged in `Pre_Mainnet_Test_Plan.md` §2.4 as a to-add item).
+- `wiki/jail-and-slashing.md` — Annotated the "Jail Counter Reset" subsection with an explicit contradiction marker. V52 spec says "50 consecutive successful tasks → reset to 0"; KT V6 plan tests M7/M8/C1/C2 against "every 1000 successful tasks decays `jail_count` by 1". These rules are not equivalent — Worker with `jail_count=2` reaches "clean" after 50 tasks on V52 but needs 2000 on KT V6. Flagged for human resolution before fuzzer implementation.
+- `wiki/index.md` — Test Plan Status row updated to mention 2026-04-27 ingest + jail_count contradiction; source count 5 → 7.
+- `wiki/log.md` — This entry.
+
+**Original Chinese source removed per English-only convention:**
+- Root-level `FunAI V6 Byzantine Test Plan KT.pdf` — replaced by the English version at `docs/testing/`.
+
+**Key contradictions surfaced:**
+1. `jail_count` rehabilitation rule disagrees between V52 (`success_streak == 50 → reset to 0`) and KT V6 plan (`every 1000 → decay by 1`). Spec source of truth must be chosen before any V6 Byzantine fuzzer can produce meaningful PASS/FAIL signals.
+
+---
+
 ## [2026-04-20] ingest + impl | P1 AvgLatencyMs self-report bug (KT)
 
 **Operator:** Claude (LLM)
