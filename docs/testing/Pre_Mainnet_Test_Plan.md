@@ -188,7 +188,7 @@ These are V5.2 features that survive into V6, not V6-specific.
 | Sliding window: 10 tasks with 3 misses → 1st jail (10 min) | ✗ |
 | 2nd jail (1 hour) trigger | ✗ |
 | 3rd jail = permanent + slash 5 % + tombstone | ✗ |
-| `jail_count` decay: spec in CLAUDE.md says "50 consecutive successful tasks → reset". A V6-track engineer recently cited 1000 — **clarify which document is canonical** before writing the test | OPEN |
+| `jail_count` decay: 1000-task decay-by-1 confirmed canonical (KT, 2026-04-27). V5.2's 50-task reset retired. Code change landed under PR `mainnet-readiness/jail-count-1000-decay`. | RESOLVED |
 
 **Effort**: 3–5 days once spec resolved.
 

@@ -276,26 +276,33 @@ func TestUnjailWorker_NotJailed(t *testing.T) {
 	}
 }
 
-func TestIncrementSuccessStreak(t *testing.T) {
+// TestIncrementSuccessStreak_DecaysJailCount: at the JailDecayInterval
+// boundary (default 1000), jail_count decreases by exactly 1 — not reset
+// to 0 — and the streak counter resets to start counting toward the next
+// decay. This is the core KT V6 rule (2026-04-27); see
+// docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md scenarios M7/M8/C1/C2.
+func TestIncrementSuccessStreak_DecaysJailCount(t *testing.T) {
 	k, ctx := setupKeeper(t)
 	addr := sdk.AccAddress([]byte("worker1_____________"))
 	w := makeWorker(addr.String())
 	w.JailCount = 2
-	w.SuccessStreak = 49
+	w.SuccessStreak = 999
 	k.SetWorker(ctx, w)
 
 	k.IncrementSuccessStreak(ctx, addr)
 
 	w2, _ := k.GetWorker(ctx, addr)
-	if w2.JailCount != 0 {
-		t.Fatalf("expected jail_count reset to 0 after 50 successes, got %d", w2.JailCount)
+	if w2.JailCount != 1 {
+		t.Fatalf("expected jail_count decay 2 → 1 after hitting JailDecayInterval, got %d", w2.JailCount)
 	}
 	if w2.SuccessStreak != 0 {
-		t.Fatalf("expected success_streak reset to 0, got %d", w2.SuccessStreak)
+		t.Fatalf("expected success_streak reset to 0 to count toward next decay, got %d", w2.SuccessStreak)
 	}
 }
 
-func TestIncrementSuccessStreak_NoReset(t *testing.T) {
+// TestIncrementSuccessStreak_NoDecayBeforeThreshold: streak below the
+// threshold leaves jail_count alone.
+func TestIncrementSuccessStreak_NoDecayBeforeThreshold(t *testing.T) {
 	k, ctx := setupKeeper(t)
 	addr := sdk.AccAddress([]byte("worker1_____________"))
 	w := makeWorker(addr.String())
@@ -311,6 +318,54 @@ func TestIncrementSuccessStreak_NoReset(t *testing.T) {
 	}
 	if w2.JailCount != 1 {
 		t.Fatalf("expected jail_count unchanged at 1, got %d", w2.JailCount)
+	}
+}
+
+// TestIncrementSuccessStreak_FloorAtZero: a worker who has never been
+// jailed (JailCount=0) keeps JailCount=0 after hitting the threshold.
+// No underflow.
+func TestIncrementSuccessStreak_FloorAtZero(t *testing.T) {
+	k, ctx := setupKeeper(t)
+	addr := sdk.AccAddress([]byte("worker1_____________"))
+	w := makeWorker(addr.String())
+	w.JailCount = 0
+	w.SuccessStreak = 999
+	k.SetWorker(ctx, w)
+
+	k.IncrementSuccessStreak(ctx, addr)
+
+	w2, _ := k.GetWorker(ctx, addr)
+	if w2.JailCount != 0 {
+		t.Fatalf("expected jail_count to floor at 0, got %d", w2.JailCount)
+	}
+	if w2.SuccessStreak != 0 {
+		t.Fatalf("expected streak to still reset at threshold even with floor, got %d", w2.SuccessStreak)
+	}
+}
+
+// TestIncrementSuccessStreak_MultipleDecays: a JailCount=2 worker
+// requires two full intervals (2 × 1000 successes) to reach 0. The
+// rehabilitation cost is now linear in the offence count, instead of
+// the V5.2 constant 50 per offence.
+func TestIncrementSuccessStreak_MultipleDecays(t *testing.T) {
+	k, ctx := setupKeeper(t)
+	addr := sdk.AccAddress([]byte("worker1_____________"))
+	w := makeWorker(addr.String())
+	w.JailCount = 2
+	w.SuccessStreak = 0
+	k.SetWorker(ctx, w)
+
+	params := k.GetParams(ctx)
+	for i := uint32(0); i < 2*params.JailDecayInterval; i++ {
+		k.IncrementSuccessStreak(ctx, addr)
+	}
+
+	w2, _ := k.GetWorker(ctx, addr)
+	if w2.JailCount != 0 {
+		t.Fatalf("expected jail_count to reach 0 after 2 × JailDecayInterval successes, got %d", w2.JailCount)
+	}
+	if w2.SuccessStreak != 0 {
+		t.Fatalf("expected streak 0 after exact multiple of interval, got %d", w2.SuccessStreak)
 	}
 }
 

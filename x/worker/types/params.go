@@ -21,8 +21,14 @@ const (
 	// DefaultSlashFraudPercent is 5% stake slash on 3rd jail or FraudProof.
 	DefaultSlashFraudPercent uint32 = 5
 
-	// DefaultSuccessResetThreshold is 50 consecutive successes to reset jail_count.
-	DefaultSuccessResetThreshold uint32 = 50
+	// DefaultJailDecayInterval is the number of consecutive successful tasks
+	// that decay jail_count by 1 (floored at 0). Per KT V6 Byzantine Test Plan
+	// (2026-04-27), replaces V5.2's "50 consecutive → reset to 0" rule, which
+	// let an attacker rhythm-cheat: cheat once, behave for 50 tasks,
+	// jail_count back to clean, repeat indefinitely at constant amortised
+	// cost. Linear decay over 1000 makes each additional offence cost a
+	// multiple of 1000 clean tasks to recover from.
+	DefaultJailDecayInterval uint32 = 1000
 )
 
 // DefaultMinStake is 10,000 FAI = 10_000_000_000 ufai.
@@ -35,7 +41,7 @@ type Params struct {
 	Jail1Duration         int64    `protobuf:"varint,4,opt,name=jail_1_duration,proto3" json:"jail_1_duration"`
 	Jail2Duration         int64    `protobuf:"varint,5,opt,name=jail_2_duration,proto3" json:"jail_2_duration"`
 	SlashFraudPercent     uint32   `protobuf:"varint,6,opt,name=slash_fraud_percent,proto3" json:"slash_fraud_percent"`
-	SuccessResetThreshold uint32   `protobuf:"varint,7,opt,name=success_reset_threshold,proto3" json:"success_reset_threshold"`
+	JailDecayInterval     uint32   `protobuf:"varint,7,opt,name=jail_decay_interval,proto3" json:"jail_decay_interval"`
 }
 
 func (m *Params) ProtoMessage()  {}
@@ -50,7 +56,7 @@ func DefaultParams() Params {
 		Jail1Duration:         DefaultJail1Duration,
 		Jail2Duration:         DefaultJail2Duration,
 		SlashFraudPercent:     DefaultSlashFraudPercent,
-		SuccessResetThreshold: DefaultSuccessResetThreshold,
+		JailDecayInterval:     DefaultJailDecayInterval,
 	}
 }
 
@@ -70,7 +76,7 @@ func (p Params) Validate() error {
 	if p.SlashFraudPercent == 0 || p.SlashFraudPercent > 100 {
 		return ErrInsufficientStake
 	}
-	if p.SuccessResetThreshold == 0 {
+	if p.JailDecayInterval == 0 {
 		return ErrInsufficientStake
 	}
 	return nil

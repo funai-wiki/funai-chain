@@ -421,8 +421,13 @@ func (k Keeper) slashWorkerInternal(ctx sdk.Context, workerAddr sdk.AccAddress, 
 	))
 }
 
-// IncrementSuccessStreak increments the success streak and resets jail_count
-// if the threshold is reached (V5.2: 50 consecutive successes).
+// IncrementSuccessStreak increments the success streak. Every
+// JailDecayInterval consecutive successes, jail_count decays by 1
+// (floored at 0) and the streak counter resets. Replaces V5.2's
+// "50 successes → reset to 0" rule per KT V6 Byzantine Test Plan
+// (2026-04-27): linear decay closes the rhythm-cheat attack where a
+// Worker would cheat once, behave for the reset interval, and return
+// to a clean record at constant amortised cost.
 func (k Keeper) IncrementSuccessStreak(ctx sdk.Context, workerAddr sdk.AccAddress) {
 	worker, found := k.GetWorker(ctx, workerAddr)
 	if !found {
@@ -432,8 +437,10 @@ func (k Keeper) IncrementSuccessStreak(ctx sdk.Context, workerAddr sdk.AccAddres
 	params := k.GetParams(ctx)
 	worker.SuccessStreak++
 
-	if worker.SuccessStreak >= params.SuccessResetThreshold {
-		worker.JailCount = 0
+	if worker.SuccessStreak >= params.JailDecayInterval {
+		if worker.JailCount > 0 {
+			worker.JailCount--
+		}
 		worker.SuccessStreak = 0
 	}
 

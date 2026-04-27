@@ -1,5 +1,34 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-27] code change | jail_count: 50-reset → 1000-decay-by-1 (KT V6 canonical)
+
+**Operator:** Claude (LLM)
+
+KT confirmed (in response to the contradiction this wiki flagged 2026-04-27 morning) that V6 Byzantine Test Plan's "every 1000 successful tasks decays jail_count by 1" supersedes V5.2's "50 successful tasks resets jail_count to 0". Reason: V5.2 enabled rhythm-cheating — cheat once, behave for 50, jail_count clean again, repeat at constant amortised cost. Linear decay over 1000 makes each additional offence cost a multiple of 1000 honest tasks to recover from.
+
+**Code change**:
+- `x/worker/types/params.go` — renamed `DefaultSuccessResetThreshold` → `DefaultJailDecayInterval`, value 50 → 1000; struct field + JSON / proto tag renamed correspondingly.
+- `x/worker/keeper/keeper.go` — `IncrementSuccessStreak()` now decays `jail_count` by 1 (floored at 0) on hitting `JailDecayInterval`, and resets `success_streak` to 0 to start counting toward the next decay. Was: reset `jail_count` to 0 + reset `success_streak`.
+- `x/settlement/keeper/keeper.go:2112` — comment updated.
+- Tests: `keeper_test.go` `TestIncrementSuccessStreak_*` rewritten to cover decay (not reset), floor-at-zero, multi-decay over 2000 tasks. `edge_case_test.go` boundary test updated.
+
+**Wiki pages updated**:
+- `wiki/jail-and-slashing.md` — replaced "Jail Counter Reset (50 tasks)" section with "Jail Counter Decay (1000 tasks per −1)"; removed the contradiction marker; updated `success_streak` description.
+- `wiki/settlement.md` — bullet point updated.
+- `wiki/parameters.md` — `success_reset_threshold` (50) → `jail_decay_interval` (1000); preamble updated.
+- `wiki/log.md` — this entry.
+
+**Docs updated**:
+- `CLAUDE.md` — line 102 rule updated.
+- `docs/testing/Pre_Mainnet_Test_Plan.md` §3.7 — `OPEN` flag flipped to `RESOLVED`.
+- `docs/testing/Test_Plan_Execution_Status.md` — V6 Byzantine fuzzer's blocker noted as resolved.
+
+**Not touched** (intentionally):
+- `docs/protocol/S9_PerToken_Billing_*.md` — KT-authored protocol docs, mention `success_reset_threshold` in S9 anti-cheat context. The S9 dishonest-count reset is a separate mechanism that still ties to consecutive successes; behaviour change there is inadvertently positive (more frequent idempotent resets) and does not require a doc update.
+- `docs/testing/FunAI_Test_Plan_Review.md:45` — references AC6's "50 consecutive successes" which is the S9 mechanism, unchanged by this PR.
+
+---
+
 ## [2026-04-27] ingest | Test plan execution status dashboard
 
 **Operator:** Claude (LLM)

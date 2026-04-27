@@ -54,7 +54,7 @@ func TestJailWorker_ResetsSuccessStreak(t *testing.T) {
 }
 
 // ============================================================
-// 3. SuccessStreak at exactly threshold-1: one more → reset
+// 3. SuccessStreak at exactly threshold-1: one more → decay-by-1 (KT V6)
 // ============================================================
 
 func TestSuccessStreak_ExactThresholdMinus1(t *testing.T) {
@@ -62,30 +62,31 @@ func TestSuccessStreak_ExactThresholdMinus1(t *testing.T) {
 	addr := sdk.AccAddress([]byte("worker1_____________"))
 	w := makeWorker(addr.String())
 	w.JailCount = 2
-	w.SuccessStreak = 48
+	w.SuccessStreak = 998
 	k.SetWorker(ctx, w)
 
 	k.IncrementSuccessStreak(ctx, addr)
 	got, _ := k.GetWorker(ctx, addr)
-	if got.SuccessStreak != 49 {
-		t.Fatalf("expected streak 49, got %d", got.SuccessStreak)
+	if got.SuccessStreak != 999 {
+		t.Fatalf("expected streak 999, got %d", got.SuccessStreak)
 	}
 	if got.JailCount != 2 {
-		t.Fatalf("jail_count should still be 2 at streak 49, got %d", got.JailCount)
+		t.Fatalf("jail_count should still be 2 at streak 999, got %d", got.JailCount)
 	}
 
 	k.IncrementSuccessStreak(ctx, addr)
 	got, _ = k.GetWorker(ctx, addr)
 	if got.SuccessStreak != 0 {
-		t.Fatalf("streak should reset to 0 at threshold, got %d", got.SuccessStreak)
+		t.Fatalf("streak should reset to 0 at JailDecayInterval, got %d", got.SuccessStreak)
 	}
-	if got.JailCount != 0 {
-		t.Fatalf("jail_count should reset to 0 at threshold, got %d", got.JailCount)
+	// KT V6 (2026-04-27): decay by 1, NOT reset to 0.
+	if got.JailCount != 1 {
+		t.Fatalf("jail_count should decay 2 → 1 at JailDecayInterval, got %d", got.JailCount)
 	}
 }
 
 // ============================================================
-// 4. SuccessStreak with jail_count=0: threshold still resets streak
+// 4. SuccessStreak with jail_count=0: threshold still resets streak (floor at 0)
 // ============================================================
 
 func TestSuccessStreak_ZeroJailCount_StillResets(t *testing.T) {
@@ -93,7 +94,7 @@ func TestSuccessStreak_ZeroJailCount_StillResets(t *testing.T) {
 	addr := sdk.AccAddress([]byte("worker1_____________"))
 	w := makeWorker(addr.String())
 	w.JailCount = 0
-	w.SuccessStreak = 49
+	w.SuccessStreak = 999
 	k.SetWorker(ctx, w)
 
 	k.IncrementSuccessStreak(ctx, addr)
@@ -102,7 +103,7 @@ func TestSuccessStreak_ZeroJailCount_StillResets(t *testing.T) {
 		t.Fatalf("streak should reset, got %d", got.SuccessStreak)
 	}
 	if got.JailCount != 0 {
-		t.Fatalf("jail_count should stay 0, got %d", got.JailCount)
+		t.Fatalf("jail_count should floor at 0, got %d", got.JailCount)
 	}
 }
 
@@ -377,7 +378,7 @@ func TestWorkerParams_Validation(t *testing.T) {
 		{"zero_jail2", func(p *types.Params) { p.Jail2Duration = 0 }, true},
 		{"zero_slash", func(p *types.Params) { p.SlashFraudPercent = 0 }, true},
 		{"slash_over_100", func(p *types.Params) { p.SlashFraudPercent = 101 }, true},
-		{"zero_success_threshold", func(p *types.Params) { p.SuccessResetThreshold = 0 }, true},
+		{"zero_jail_decay_interval", func(p *types.Params) { p.JailDecayInterval = 0 }, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
