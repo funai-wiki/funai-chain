@@ -101,7 +101,7 @@ Jailing follows a Cosmos-style progressive penalty system shared across all role
 | 2nd jail | 1 hour (720 blocks) | Wait, then `MsgUnjail` to resume |
 | 3rd jail | Permanent | Slash 5% of stake + tombstone |
 
-- **Rehabilitation:** 50 consecutive successful tasks resets `jail_count` to 0.
+- **Rehabilitation:** Every 1000 consecutive successful tasks decays `jail_count` by 1 (floored at 0), per KT V6 Byzantine Test Plan 2026-04-27.
 - **FraudProof:** bypasses the progressive system -- immediate slash 5% + tombstone regardless of jail count.
 
 ---

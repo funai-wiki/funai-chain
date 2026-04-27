@@ -19,18 +19,11 @@ While jailed, a participant **cannot**:
 | 2nd jail | 1 hour | 720 blocks | `MsgUnjail` after cooldown |
 | 3rd jail | **Permanent** | N/A | Slash 5% of stake + tombstone |
 
-### Jail Counter Reset
+### Jail Counter Decay
 
-After **50 consecutive successful tasks**, the `jail_count` resets to 0. This gives rehabilitated participants a clean slate.
+Every **1000 consecutive successful tasks**, `jail_count` decays by 1 (floored at 0) and the streak counter resets to start counting toward the next decay. A Worker with `jail_count=2` therefore needs 2000 clean tasks to reach a clean record; one with `jail_count=1` needs 1000.
 
-> ⚠ **Contradiction with V6 KT plan (open).** The V6 Byzantine Test Plan
-> ([`docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md`](../docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md), 2026-04-27)
-> tests M7/M8/C1/C2 against a different rule: **every 1000 successful tasks
-> decays `jail_count` by 1** (incremental, not full reset). V52 says reset
-> to 0 after 50; the V6 plan says decay by 1 after 1000. These are not
-> equivalent — a Worker with `jail_count=2` reaches "clean" after 50 tasks
-> on V52 but needs 2000 tasks on KT V6. **Spec source of truth must be
-> chosen before the Byzantine fuzzer can be implemented.**
+This rule was set by KT in the V6 Byzantine Test Plan ([`docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md`](../docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md), 2026-04-27, scenarios M7 / M8 / C1 / C2) and is canonical. It supersedes V5.2's earlier "50 successes → reset to 0" rule, which let an attacker rhythm-cheat: cheat once, behave for 50 tasks, jail_count back to clean, repeat indefinitely at constant amortised cost. Linear decay over 1000 makes each additional offence cost a multiple of 1000 honest tasks to recover from.
 
 **What counts as "1 task" per role:**
 
@@ -81,7 +74,7 @@ The [worker module](../x/worker/) stores the following jail-related fields per p
 | `jailed` | `bool` | Whether currently jailed |
 | `jail_until` | `uint64` | Block height when unjail becomes available |
 | `tombstoned` | `bool` | Permanent ban flag |
-| `success_streak` | `uint32` | Consecutive successes toward the 50-task reset |
+| `success_streak` | `uint32` | Consecutive successes toward the next 1000-task `jail_count` decay |
 
 ## Sources
 

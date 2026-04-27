@@ -2109,7 +2109,9 @@ func (k Keeper) IncrementDishonestCount(ctx sdk.Context, workerAddr sdk.AccAddre
 }
 
 // ResetDishonestCount resets a worker's dishonesty counter to 0.
-// Called after jail or after SuccessResetThreshold consecutive successes.
+// Called after jail or after the worker's success streak hits the S9 anti-cheat
+// threshold (independently of the jail_count decay interval — see
+// `IncrementSuccessStreak` in the worker keeper for the jail_count decay rule).
 func (k Keeper) ResetDishonestCount(ctx sdk.Context, workerAddr sdk.AccAddress) {
 	store := ctx.KVStore(k.storeKey)
 	store.Delete(types.DishonestCountKey(workerAddr))

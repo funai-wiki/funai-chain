@@ -91,14 +91,14 @@ Parameters governing [Worker registration](msg-types.md) (`MsgRegisterWorker`), 
 
 ### Jail Durations
 
-Jail is progressive. After 50 consecutive successful tasks, `jail_count` resets to 0. See [Jail & Slashing](jail-and-slashing.md) for full details.
+Jail is progressive. Every 1000 consecutive successful tasks decays `jail_count` by 1 (floored at 0), per KT V6 Byzantine Test Plan 2026-04-27. See [Jail & Slashing](jail-and-slashing.md) for full details.
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
 | `jail_1_duration` | 120 | blocks (10 min) | 1st jail duration -- submit `MsgUnjail` after cooldown |
 | `jail_2_duration` | 720 | blocks (1 hour) | 2nd jail duration -- submit `MsgUnjail` after cooldown |
 | `slash_fraud_percent` | 5 | percent | Stake percentage slashed on `MsgFraudProof` or 3rd jail (permanent tombstone) |
-| `success_reset_threshold` | 50 | tasks | Consecutive successful tasks required to reset `jail_count` to 0 |
+| `jail_decay_interval` | 1000 | tasks | Consecutive successful tasks per `jail_count` decay-by-1 (floored at 0). Replaces V5.2's `success_reset_threshold=50` per KT V6 Byzantine Test Plan 2026-04-27. |
 
 ---
 
