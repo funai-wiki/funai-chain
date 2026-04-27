@@ -25,7 +25,10 @@ from ._common import (
     ENGINE_ID,
     configure_determinism,
     engine_version,
+    extract_top_k_experts_per_step,
+    is_moe_model,
     load_model_and_tokenizer,
+    moe_top_k,
 )
 from .replay_types import BatchLog, TaskLogits
 from .sampling import chacha20_sample, derive_final_seed
@@ -210,11 +213,15 @@ class ReplayEngine:
         sampled_tokens: dict[str, list[int]] = {tid: [] for tid in batch_log.task_prompts}
         target_logits: list = []
         target_sampled: list[int] = []
+        target_expert_routing: list[list[list[int]]] = []
         pad_id = self.tokenizer.pad_token_id
         # Re-derive per-task ChaCha20 keys from the log — symmetric with Worker.
         final_seeds: dict[str, bytes] = {
             tid: derive_final_seed(tid, batch_log.seed) for tid in batch_log.task_prompts
         }
+
+        moe_capture = is_moe_model(self.model)
+        moe_k = moe_top_k(self.model) if moe_capture else 0
 
         for step in batch_log.steps:
             active = step.active_task_ids
@@ -229,12 +236,21 @@ class ReplayEngine:
             input_ids = torch.tensor(padded, dtype=torch.long, device=self.device)
             attention_mask = torch.tensor(attn, dtype=torch.long, device=self.device)
 
-            out = self.model(
+            forward_kwargs = dict(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 use_cache=False,
             )
+            if moe_capture:
+                forward_kwargs["output_router_logits"] = True
+
+            out = self.model(**forward_kwargs)
             step_logits = out.logits[:, -1, :]
+            step_routing = (
+                extract_top_k_experts_per_step(out.router_logits, top_k=moe_k)
+                if moe_capture and getattr(out, "router_logits", None) is not None
+                else []
+            )
 
             for i, tid in enumerate(active):
                 logit_vec = step_logits[i].detach().float().cpu().numpy()
@@ -252,9 +268,12 @@ class ReplayEngine:
                 if tid == target_task_id:
                     target_logits.append(logit_vec)
                     target_sampled.append(tok)
+                    if moe_capture and step_routing:
+                        target_expert_routing.append(step_routing[i])
 
         return TaskLogits(
             task_id=target_task_id,
             logits=target_logits,
             sampled_tokens=target_sampled,
+            expert_routing=target_expert_routing,
         )

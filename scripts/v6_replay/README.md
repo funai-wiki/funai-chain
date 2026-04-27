@@ -143,6 +143,43 @@ abstraction cannot capture enough state to reproduce the continuous-batch
 execution. **V6 dies at this gate.** Report findings; fall back to
 Option B.
 
+#### Phase 1 MoE coverage — `test_phase1_moe.py`
+
+Phase 1a / 1b / 1c above were originally validated on dense models
+(Qwen2.5-3B / Qwen2.5-0.5B). MoE introduces a separate non-determinism
+risk — **expert-routing drift**: the gating network's softmax may pick
+different top-k experts on the replay side under the same inputs, even
+when the batch composition is identical.
+
+`scripts/v6_replay/test_phase1_moe.py` runs the dynamic-batch path
+(`run_batch_dynamic` / `replay_dynamic`) on a Mixture-of-Experts model
+and asserts both bit-exact logits AND bit-exact top-k expert IDs at
+every (step, layer). The two assertions together let one run distinguish
+between two failure modes that differ in mitigation:
+
+| Failure mode | Logits diff | Expert-ID diff | Mitigation |
+|---|---|---|---|
+| **Path 1 — gating non-determinism** | > 0 | mismatched | Record top-k expert IDs in BatchLog and force the Replayer to follow them (not yet implemented; this test surfaces whether it is needed) |
+| **Path 2 — expert internal compute drift** | > 0 | matched | Same as the dense-model batch drift; addressed by the existing replay path |
+
+Hardware notes:
+
+- **Mixtral-8x7B-Instruct-v0.1** (47 B / 13 B active) bf16 = ~94 GB → needs A100/H100 80 GB; AWQ Q4 ~24 GB → tight on a single 4090
+- **Qwen1.5-MoE-A2.7B** (14 B / 2.7 B active) bf16 ~28 GB → fits L20 48 GB / A100; tight on 4090
+- **Smaller MoE alternatives** are scarce; the test is opt-in via `V6_MODEL` env var so the dense Phase 1 suite is unaffected on workstations without a big-MoE-capable GPU
+
+Usage:
+
+```
+V6_MODEL=mistralai/Mixtral-8x7B-Instruct-v0.1 \
+V6_DEVICE=cuda \
+pytest scripts/v6_replay/test_phase1_moe.py -v
+```
+
+A PASS here is what V6 needs in order to claim "supports MoE models";
+a Path 1 hit triggers the force-routing follow-up patch; a Path 2 hit
+gets folded into the existing batch-replay analysis.
+
 ### Phase 2 — Cross-hardware replay bit-exact
 
 **Method.**
