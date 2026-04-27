@@ -1,5 +1,19 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-27] ingest | Test plan execution status dashboard
+
+**Operator:** Claude (LLM)
+
+**New source doc ingested:**
+- `docs/testing/Test_Plan_Execution_Status.md` (~125 lines) — Per-plan execution state board for the 7 tracked test plan documents. Headline: 0 fully executed, 4 partial, 2 not started, 1 meta. Includes a 12-slice priority list, an explicit gating chain (V6 production-engine validation gates V6 Byzantine fuzzer + cross-hardware + T4 Phase 2/3/4), and an update protocol so future report authors keep the dashboard in sync.
+
+**Wiki pages updated:**
+- `wiki/test-status.md` — Added "Live execution dashboard" section pointing at the new doc as the canonical "where are we" view; this wiki page becomes the conceptual summary.
+- `wiki/log.md` — This entry.
+- `wiki/schema.md` — Added the new doc to source inventory.
+
+---
+
 ## [2026-04-27] ingest | Pre-mainnet test plan + KT V6 Byzantine plan
 
 **Operator:** Claude (LLM)

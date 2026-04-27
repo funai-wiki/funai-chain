@@ -100,6 +100,7 @@ Periodic health check:
 | `docs/testing/FunAI_Test_Plan_Review.md` | Test | 241 | Spec vs implementation gaps |
 | `docs/testing/Pre_Mainnet_Test_Plan.md` | Test | 275 | Pre-mainnet synthesis: P0 / P1 / P2 with decision gates (2026-04-27) |
 | `docs/testing/FunAI_V6_Byzantine_Test_Plan_KT.md` | Test | 192 | KT V6 penalty-path fuzzing plan: 30 scenarios + 7 invariants (2026-04-27) |
+| `docs/testing/Test_Plan_Execution_Status.md` | Test | 125 | Per-plan execution dashboard: 0 fully run / 4 partial / 2 not started; 12-slice priority list (2026-04-27) |
 | `docs/internal/ops-runbook.md` | Ops | 319 | Deployment, env vars, monitoring (internal) |
 | `docs/guides/Join_Testnet.md` | Guide | 350 | Testnet join guide |
 | `docs/guides/Phase4_Full_Network_Guide.md` | Guide | 159 | Multi-node network guide |
