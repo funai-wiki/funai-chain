@@ -1370,15 +1370,43 @@ func (k Keeper) ProcessFraudProof(ctx sdk.Context, msg *types.MsgFraudProof) err
 // ProcessSecondVerificationResult processes an audit result submission.
 // V5.2: Handles all 4 scenarios (SUCCESS+PASS, SUCCESS+FAIL, FAIL+PASS, FAIL+FAIL).
 // P2-7: Original verifiers are excluded from auditing (conflict of interest).
+//
+// Pre_Mainnet_Test_Plan §2.9 row 5 (timing-attack enforcement): the call
+// must reject any result whose corresponding SecondVerificationPending entry
+// does not yet exist on chain. SecondVerificationPending is created by the
+// Worker's batch-settlement path; without that entry, accepting a result
+// here would credit the second_verifier (via IncrementSecondVerifierEpochCount
+// below) for an audit they cannot have actually performed — a verifier could
+// game epoch rewards by pre-submitting fake passes for tasks they have not
+// seen, gambling that an honest Worker entry will eventually arrive. The
+// entry's `SubmittedAt` field is the receipt height; its mere existence is
+// the "result height ≥ receipt height" guarantee the §2.9 rule asks for.
 func (k Keeper) ProcessSecondVerificationResult(ctx sdk.Context, msg *types.MsgSecondVerificationResult) error {
 	params := k.GetParams(ctx)
 
+	// EARLY EXIT: an existing SecondVerificationRecord at threshold means
+	// processAuditJudgment has already fired and DeleteSecondVerificationPending
+	// was called as part of it — so the pending entry is gone by design. The
+	// 4th+ result on such a task is a late legitimate submission (the dispatch
+	// path may have sent the audit before the 3rd result settled the audit).
+	// Silently ignore it; this is the dedup behavior tests at
+	// TestProcessSecondVerificationResult_AfterThreshold_Ignored assume and
+	// predates the §2.9 timing-attack rule below.
+	if ar, found := k.GetSecondVerificationRecord(ctx, msg.TaskId); found {
+		if uint32(len(ar.SecondVerifierAddresses)) >= params.SecondVerifierCount {
+			return nil
+		}
+	}
+
+	apt, pendingFound := k.GetSecondVerificationPending(ctx, msg.TaskId)
+	if !pendingFound {
+		return fmt.Errorf("no SecondVerificationPending for task %x — second_verifier may not submit a result before the corresponding receipt has settled (§2.9 timing-attack rule)", msg.TaskId)
+	}
+
 	// P2-7: reject audit results from original verifiers (conflict of interest)
-	if apt, found := k.GetSecondVerificationPending(ctx, msg.TaskId); found {
-		for _, vAddr := range apt.VerifierAddresses {
-			if vAddr == msg.SecondVerifier {
-				return fmt.Errorf("second_verifier %s is an original verifier for task %x, cannot audit", msg.SecondVerifier, msg.TaskId)
-			}
+	for _, vAddr := range apt.VerifierAddresses {
+		if vAddr == msg.SecondVerifier {
+			return fmt.Errorf("second_verifier %s is an original verifier for task %x, cannot audit", msg.SecondVerifier, msg.TaskId)
 		}
 	}
 

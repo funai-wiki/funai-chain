@@ -134,6 +134,23 @@ func makeAddr(name string) sdk.AccAddress {
 	return sdk.AccAddress(buf)
 }
 
+// seedAuditPending writes a SecondVerificationPendingTask so subsequent
+// ProcessSecondVerificationResult calls clear the §2.9 timing-attack rule
+// (which rejects results submitted before the corresponding pending entry
+// exists). Use in unit tests that exercise the audit-result path in
+// isolation without going through MsgBatchSettlement first.
+func seedAuditPending(k keeper.Keeper, ctx sdk.Context, taskId []byte, originalVerifiers []string) {
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
+		TaskId:            taskId,
+		OriginalStatus:    types.SettlementSuccess,
+		SubmittedAt:       ctx.BlockHeight(),
+		WorkerAddress:     makeAddr("seed-worker").String(),
+		VerifierAddresses: originalVerifiers,
+		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
+		ExpireBlock:       100000,
+	})
+}
+
 func fillTestSigHashes(entries []types.SettlementEntry) []types.SettlementEntry {
 	dummySig := []byte("test-sig-hash-32-bytes-padding!!")
 	for i := range entries {
@@ -647,6 +664,18 @@ func TestProcessSecondVerificationResult_PassMajority(t *testing.T) {
 		WorkerAddress:     workerAddr.String(),
 		OriginalVerifiers: []string{verifierAddr.String()},
 	})
+	// §2.9 row 5 timing-attack rule: ProcessSecondVerificationResult requires
+	// a SecondVerificationPending entry. Set it up so this unit test exercises
+	// the result-handling path, not the timing-attack rejection.
+	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
+		TaskId:            taskId,
+		OriginalStatus:    types.SettlementSuccess,
+		SubmittedAt:       ctx.BlockHeight(),
+		WorkerAddress:     workerAddr.String(),
+		VerifierAddresses: []string{verifierAddr.String()},
+		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
+		ExpireBlock:       100000,
+	})
 
 	second_verifiers := []sdk.AccAddress{
 		makeAddr("second_verifier1"),
@@ -1099,6 +1128,8 @@ func TestProcessSecondVerificationResult_IgnoresExtraSecondVerifiers(t *testing.
 		WorkerAddress:     makeAddr("worker1").String(),
 		OriginalVerifiers: []string{makeAddr("v1").String()},
 	})
+	// §2.9 row 5 timing-attack rule.
+	seedAuditPending(k, ctx, taskId, []string{makeAddr("v1").String()})
 
 	// Submit 3 PASS audits (threshold met → no jail)
 	for i := 0; i < 3; i++ {
@@ -1410,9 +1441,13 @@ func TestMsgServer_SubmitSecondVerificationResult(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
 	ms := keeper.NewMsgServerImpl(k)
 
+	taskId := []byte("audit-msg-task-0001")
+	// §2.9 row 5 timing-attack rule.
+	seedAuditPending(k, ctx, taskId, []string{makeAddr("orig-msg-v1").String()})
+
 	msg := &types.MsgSecondVerificationResult{
 		SecondVerifier: makeAddr("second_verifier1").String(),
-		TaskId:         []byte("audit-msg-task-0001"),
+		TaskId:         taskId,
 		Epoch:          1,
 		Pass:           true,
 		LogitsHash:     []byte("hash"),

@@ -1146,6 +1146,10 @@ func TestProcessSecondVerificationResult_AfterThreshold_Ignored(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
 
 	taskId := []byte("aud-threshold-task01")
+	// §2.9 row 5: keeper now requires SecondVerificationPending to exist
+	// before accepting any result. Original verifiers chosen disjoint from
+	// the at-aud* second_verifiers below.
+	seedAuditPending(k, ctx, taskId, []string{makeAddr("orig-thresh-v1").String()})
 
 	// Submit 3 results (threshold)
 	for i := 0; i < 3; i++ {

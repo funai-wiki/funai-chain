@@ -279,7 +279,16 @@ func TestIntegration_SecondVerificationResult_AfterTimeout(t *testing.T) {
 	}
 	t.Log("[PASS] HandleSecondVerificationTimeouts cleared the pending task")
 
-	// Now submit 3 audit results for the same task — they arrive too late
+	// Now submit 3 audit results for the same task — they arrive too late.
+	//
+	// Pre §2.9 row 5: the keeper silently accepted these and recorded a
+	// SecondVerificationRecord (without ever firing processAuditJudgment,
+	// since no pending entry was found) — leaking epoch reward credit to
+	// the late second_verifiers via IncrementSecondVerifierEpochCount.
+	//
+	// Post §2.9 row 5: the keeper rejects them at the entry check; no
+	// SecondVerificationRecord is created, no per-second_verifier reward
+	// counter ticks, and the timeout settlement stands as the only outcome.
 	jailsBefore := len(wk.jailCalls)
 	second_verifiers := []string{
 		makeAddr("e8-aud1").String(),
@@ -294,22 +303,21 @@ func TestIntegration_SecondVerificationResult_AfterTimeout(t *testing.T) {
 			Pass:           true,
 			LogitsHash:     []byte("logits-hash"),
 		})
-		if err != nil {
-			t.Fatalf("ProcessSecondVerificationResult from %s: %v", aud, err)
+		if err == nil {
+			t.Fatalf("post-timeout audit result from %s should be rejected (§2.9 row 5)", aud)
 		}
 	}
 
-	// SecondVerificationRecord should exist with 3 results (they were recorded)
-	ar, arFound := k.GetSecondVerificationRecord(ctx, taskId)
-	if !arFound {
-		t.Fatal("SecondVerificationRecord should exist after 3 submissions")
+	// SecondVerificationRecord must NOT be created — the timing-attack rule
+	// rejects late results before they are recorded.
+	if _, arFound := k.GetSecondVerificationRecord(ctx, taskId); arFound {
+		t.Fatal("§2.9 row 5: SecondVerificationRecord should NOT be created from rejected late results")
 	}
-	if len(ar.Results) != 3 {
-		t.Fatalf("SecondVerificationRecord results: want 3, got %d", len(ar.Results))
-	}
-	t.Log("[PASS] SecondVerificationRecord created with 3 results")
+	t.Log("[PASS] §2.9 row 5: late audit results rejected, no record leaked")
 
-	// Key check: no jail calls occurred — processAuditJudgment found no pending task
+	// Sanity: no jail calls (would have been impossible anyway since
+	// processAuditJudgment requires SecondVerificationRecord, which the
+	// rejection prevents from ever being written).
 	if len(wk.jailCalls) != jailsBefore {
 		t.Fatalf("Expected no new jail calls after timeout, got %d new calls", len(wk.jailCalls)-jailsBefore)
 	}

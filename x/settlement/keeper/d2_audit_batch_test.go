@@ -61,6 +61,12 @@ func TestProcessSecondVerificationResultBatch_AcceptsValidSigs(t *testing.T) {
 	taskId := []byte("task-batch-valid")
 	mockPubkey := testProposerKey.PubKey().Bytes() // what the mock returns for every addr
 
+	// §2.9 row 5 timing-attack rule: ProcessSecondVerificationResult requires
+	// a SecondVerificationPending entry. Original verifiers are kept disjoint
+	// from the second_verifiers below (v1/v2/v3) so the conflict-of-interest
+	// check (P2-7) doesn't trip.
+	seedAuditPending(k, ctx, taskId, []string{makeAddr("orig-v1").String()})
+
 	entries := make([]types.SecondVerificationBatchEntry, 3)
 	for i := 0; i < 3; i++ {
 		entries[i] = newBatchEntry(makeAddr("v"+string(rune('1'+i))).String(), taskId, true)
@@ -93,6 +99,7 @@ func TestProcessSecondVerificationResultBatch_RejectsBadSig(t *testing.T) {
 	taskId := []byte("task-batch-bad-sig")
 	mockPubkey := testProposerKey.PubKey().Bytes()
 	attacker := secp256k1.GenPrivKey()
+	seedAuditPending(k, ctx, taskId, []string{makeAddr("orig-v-bad-sig").String()})
 
 	good := newBatchEntry(makeAddr("v-good").String(), taskId, true)
 	signBatchEntry(t, &good, testProposerKey, mockPubkey)
@@ -173,6 +180,8 @@ func TestProcessSecondVerificationResultBatch_PartialFailureDoesNotBlockRest(t *
 
 	t1 := []byte("task-partial-1")
 	t2 := []byte("task-partial-2")
+	seedAuditPending(k, ctx, t1, []string{makeAddr("orig-partial-1").String()})
+	seedAuditPending(k, ctx, t2, []string{makeAddr("orig-partial-2").String()})
 
 	good1 := newBatchEntry(makeAddr("v-good-1").String(), t1, true)
 	signBatchEntry(t, &good1, testProposerKey, mockPubkey)
