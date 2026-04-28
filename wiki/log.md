@@ -1,5 +1,22 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-28] verifier economics simulator + 12% recommendation | §2.3 closed
+
+**Operator:** Claude (LLM)
+**Sources ingested:**
+- `docs/economics/verifier_economics.py` (new) — 394-line stdlib-only Python simulator; sweeps fee × pool-size M × inference latency T × GPU rental
+- `docs/economics/verifier_economics_report.md` (new) — analysis report with KT-review recommendation
+
+**Wiki changes:**
+- Created `wiki/verifier-economics.md` — TL;DR + cost model + key findings + break-even table + recommendations
+- Updated `wiki/index.md` — added Verifier Economics under Components & Features
+
+**Closes:** Pre_Mainnet_Test_Plan §2.3 (Verifier economics modelling).
+
+**Key takeaway:** Per-task verifier cost is INDEPENDENT of batch size N under uniform-VRF dispatch — the V6 PoC SUMMARY's "tens-of-times single-task inference" cost amplification cancels per task verified. Recommendation: keep `verifier_pool_pct = 12%`; pool size M is dominant cost driver but market-self-regulated. Document the `M × T × GPU$/hr ≤ fee × 432` sustainability inequality in V52 spec; recommend (not blocking) a chain-side out-of-envelope monitor in modelreg.
+
+---
+
 ## [2026-04-28] correction + plan extension | MoE coverage gaps from 2026-04-27 review
 
 **Operator:** Claude (LLM)

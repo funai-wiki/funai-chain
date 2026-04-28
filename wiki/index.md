@@ -26,6 +26,7 @@
 | [Per-Token Billing (S9)](per-token-billing.md) | Shadow balance, Worker truncation, two-party cross-verification, anti-cheat (C1/C2/C3). | S9_Billing |
 | [On-Chain Message Types](msg-types.md) | All 11 Msg types: Deposit, Withdraw, RegisterWorker, BatchSettlement, FraudProof, etc. | V52_Final |
 | [On-Chain Parameters](parameters.md) | Complete parameter reference by module (Settlement, Worker, Reward, ModelReg, VRF). | V52_Final, S9_Billing |
+| [Verifier Economics](verifier-economics.md) | Sustainability of the 12% verifier-pool allocation under V6 batch-replay. Cost INDEPENDENT of batch size N under uniform-VRF dispatch (the SUMMARY's open question disposed). Recommendation: keep 12%; pool size M is market-self-regulated; document the M × T × GPU$/hr ≤ fee × 432 break-even. | verifier_economics.py + report |
 
 ## Operations & Status
 
