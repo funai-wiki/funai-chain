@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.3, pluggy-1.6.0 -- /usr/bin/python3.12
+cachedir: .pytest_cache
+rootdir: /workspace/funai-chain
+plugins: anyio-4.11.0
+collecting ... collected 9 items
+
+scripts/v6_replay/test_phase1_moe.py::test_worker_emits_expert_routing PASSED [ 11%]
+scripts/v6_replay/test_phase1_moe.py::test_replay_logits_bit_exact_moe[task-moe-001] PASSED [ 22%]
+scripts/v6_replay/test_phase1_moe.py::test_replay_logits_bit_exact_moe[task-moe-002] PASSED [ 33%]
+scripts/v6_replay/test_phase1_moe.py::test_replay_logits_bit_exact_moe[task-moe-003] PASSED [ 44%]
+scripts/v6_replay/test_phase1_moe.py::test_replay_logits_bit_exact_moe[task-moe-004] PASSED [ 55%]
+scripts/v6_replay/test_phase1_moe.py::test_replay_expert_routing_bit_exact_moe[task-moe-001] PASSED [ 66%]
+scripts/v6_replay/test_phase1_moe.py::test_replay_expert_routing_bit_exact_moe[task-moe-002] PASSED [ 77%]
+scripts/v6_replay/test_phase1_moe.py::test_replay_expert_routing_bit_exact_moe[task-moe-003] PASSED [ 88%]
+scripts/v6_replay/test_phase1_moe.py::test_replay_expert_routing_bit_exact_moe[task-moe-004] PASSED [100%]
+
+========================= 9 passed in 96.74s (0:01:36) =========================
+EXIT=0

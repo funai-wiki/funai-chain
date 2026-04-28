@@ -1,0 +1,35 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.3, pluggy-1.6.0 -- /usr/bin/python3.12
+cachedir: .pytest_cache
+rootdir: /workspace/funai-chain
+plugins: anyio-4.11.0
+collecting ... collected 26 items
+
+scripts/v6_replay/test_phase1.py::test_worker_emits_log_and_logits PASSED [  3%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-001] PASSED [  7%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-002] PASSED [ 11%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-003] PASSED [ 15%]
+scripts/v6_replay/test_phase1.py::test_replay_is_bit_exact_same_gpu[task-p1-004] PASSED [ 19%]
+scripts/v6_replay/test_phase1.py::test_replay_three_repeats_stable PASSED [ 23%]
+scripts/v6_replay/test_phase1.py::test_1c_leave_roster_varies PASSED     [ 26%]
+scripts/v6_replay/test_phase1.py::test_1c_leave_log_matches_schedule PASSED [ 30%]
+scripts/v6_replay/test_phase1.py::test_1c_leave_replay_bit_exact PASSED  [ 34%]
+scripts/v6_replay/test_phase1.py::test_1c_join_roster_varies PASSED      [ 38%]
+scripts/v6_replay/test_phase1.py::test_1c_join_log_matches_schedule PASSED [ 42%]
+scripts/v6_replay/test_phase1.py::test_1c_join_replay_bit_exact PASSED   [ 46%]
+scripts/v6_replay/test_phase1.py::test_1b_sampling_not_argmax PASSED     [ 50%]
+scripts/v6_replay/test_phase1.py::test_1b_replay_is_bit_exact_logits[task-p1-001] PASSED [ 53%]
+scripts/v6_replay/test_phase1.py::test_1b_replay_is_bit_exact_logits[task-p1-002] PASSED [ 57%]
+scripts/v6_replay/test_phase1.py::test_1b_replay_is_bit_exact_logits[task-p1-003] PASSED [ 61%]
+scripts/v6_replay/test_phase1.py::test_1b_replay_is_bit_exact_logits[task-p1-004] PASSED [ 65%]
+scripts/v6_replay/test_phase1.py::test_1b_replay_sampled_tokens_match[task-p1-001] PASSED [ 69%]
+scripts/v6_replay/test_phase1.py::test_1b_replay_sampled_tokens_match[task-p1-002] PASSED [ 73%]
+scripts/v6_replay/test_phase1.py::test_1b_replay_sampled_tokens_match[task-p1-003] PASSED [ 76%]
+scripts/v6_replay/test_phase1.py::test_1b_replay_sampled_tokens_match[task-p1-004] PASSED [ 80%]
+scripts/v6_replay/test_phase1.py::test_1d_engine_mismatch_rejected PASSED [ 84%]
+scripts/v6_replay/test_phase1.py::test_1d_large_batch_bit_exact PASSED   [ 88%]
+scripts/v6_replay/test_phase1.py::test_1d_long_prompts_bit_exact PASSED  [ 92%]
+scripts/v6_replay/test_phase1.py::test_1d_long_generation_bit_exact PASSED [ 96%]
+scripts/v6_replay/test_phase1.py::test_1d_complex_schedule_bit_exact PASSED [100%]
+
+============================= 26 passed in 53.07s ==============================

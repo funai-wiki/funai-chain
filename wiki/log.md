@@ -1,5 +1,23 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-27] test report | V6 Phase 1 MoE on RunPod RTX PRO 6000 Blackwell
+
+**Operator:** Claude (LLM)
+
+**New source doc ingested:**
+- `docs/testing/reports/2026-04-27-2003-runpod-moe-phase1-rtxpro6000/report.md` (~250 lines) — first cloud-GPU MoE validation of the V6 batch-replay PoC (PR #30). Three pytest sessions on a single RunPod RTX PRO 6000 Blackwell 96 GB pod. Qwen2.5-0.5B dense baseline 26/26 PASS in 53 s reproduces the existing Phase 1 result on Blackwell (CC 12.0, first non-Ampere validation). Qwen1.5-MoE-A2.7B (top-k=4) 9/9 PASS in 96 s including expert-routing capture. DeepSeek-V2-Lite-Chat (top-k=6) 8/9 PASS in 387 s — logits bit-exact for all 4 targets, single FAIL is the PoC's `output.router_logits` capture path which DeepSeek does not surface (instrumentation gap, not a V6 protocol issue). Net result: V6 holds bit-exact on two MoE families with different top-k; neither Path 1 (gating non-determinism) nor Path 2 (expert internal drift) has fired.
+
+**Operational findings worth carrying forward:**
+1. transformers 5.x's MoE fast path uses `torch._grouped_mm` which is hard-restricted to compute capability 9.0 (Hopper). On Blackwell (CC 12.0), and presumably on Ampere/Ada, MoE forward errors out. Pin `transformers>=4.46,<5` for Blackwell. Already what `requirements.txt` specifies; `pip install transformers` ignored the upper bound.
+2. 50 GB pod volume insufficient for any test matrix that includes Phi-3.5-MoE (84 GB) or Mixtral 8x7B (94 GB). For the next rental allocate ≥ 200 GB.
+3. DeepSeek-V2's transformers does not expose `model_output.router_logits`; PoC needs a forward-hook based capture path for that family. Logged as follow-up patch on PR #30.
+
+**Wiki pages updated:**
+- `wiki/test-status.md` — Added "V6 PoC Phase 1 — MoE cross-family validation (2026-04-27)" section pointing at the new report.
+- `wiki/log.md` — This entry.
+
+---
+
 ## [2026-04-27] code change | jail_count: 50-reset → 1000-decay-by-1 (KT V6 canonical)
 
 **Operator:** Claude (LLM)

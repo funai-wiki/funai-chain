@@ -110,6 +110,10 @@ Total network TPS = `min(` layer 1 throughput × GPU count, layer 2 pipeline lat
 
 [`docs/testing/Test_Plan_Execution_Status.md`](../docs/testing/Test_Plan_Execution_Status.md) — updated 2026-04-27. Tracks per-plan execution status (0 fully run, 4 partial, 2 not started, 1 meta) plus a 12-slice priority list, gating chain, and update protocol. Treat it as the canonical "where are we" view; this wiki page is the conceptual summary.
 
+## V6 PoC Phase 1 — MoE cross-family validation (2026-04-27)
+
+[`docs/testing/reports/2026-04-27-2003-runpod-moe-phase1-rtxpro6000/`](../docs/testing/reports/2026-04-27-2003-runpod-moe-phase1-rtxpro6000/report.md) — first MoE validation of V6 batch-replay PoC on cloud GPU. RunPod RTX PRO 6000 Blackwell 96 GB. Three pytest runs: Qwen2.5-0.5B dense baseline 26/26 PASS; **Qwen1.5-MoE-A2.7B (top-k=4) 9/9 PASS** including expert-routing capture; **DeepSeek-V2-Lite-Chat (top-k=6) 8/9 PASS** — logits bit-exact for all targets, single FAIL is a PoC instrumentation gap (DeepSeek transformers does not expose `output.router_logits` like Mixtral / Qwen do). Net result: V6 batch-replay holds bit-exact on two MoE families with different top-k values; neither Path 1 (gating non-determinism) nor Path 2 (expert internal drift) has fired. Cost ~$2.30. Phi-3.5-MoE 42 B (top-k=2) deferred — 84 GB does not fit the 50 GB pod volume.
+
 ## Pre-mainnet test plans (2026-04-27)
 
 Two synthesis docs land the outstanding work between today and mainnet:

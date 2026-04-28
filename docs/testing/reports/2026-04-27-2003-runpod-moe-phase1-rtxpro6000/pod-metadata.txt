@@ -1,0 +1,12 @@
+=== GPU ===
+NVIDIA RTX PRO 6000 Blackwell Server Edition, 12.0, 97887 MiB, 580.126.16
+=== Python / pkgs ===
+Python 3.12.3
+torch 2.8.0+cu128
+transformers 4.57.6
+=== git HEAD ===
+18c9a85 research(v6): add MoE expert-routing capture to Phase 1 PoC
+=== model sha for record ===
+CACHEDIR.TAG
+models--Qwen--Qwen2.5-0.5B-Instruct
+models--deepseek-ai--DeepSeek-V2-Lite-Chat
