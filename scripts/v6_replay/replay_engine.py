@@ -30,6 +30,10 @@ from ._common import (
     load_model_and_tokenizer,
     moe_top_k,
 )
+from ._validation import (
+    validate_log_against_tokenizer,
+    validate_per_task_token_counts,
+)
 from .replay_types import BatchLog, TaskLogits
 from .sampling import chacha20_sample, derive_final_seed
 
@@ -90,6 +94,11 @@ class ReplayEngine:
             )
 
         _check_engine_match(batch_log)
+        # §2.9 boundary checks fire before configure_determinism so a
+        # tokenizer mismatch surfaces in milliseconds, before we burn any
+        # determinism / model state on a doomed replay.
+        validate_log_against_tokenizer(batch_log, self.tokenizer, self.model)
+        validate_per_task_token_counts(batch_log, self.tokenizer)
         configure_determinism(batch_log.seed)
 
         self._require_fixed_composition(batch_log)
@@ -204,12 +213,21 @@ class ReplayEngine:
             raise ValueError("batch_log.steps is empty")
 
         _check_engine_match(batch_log)
+        validate_log_against_tokenizer(batch_log, self.tokenizer, self.model)
+        validate_per_task_token_counts(batch_log, self.tokenizer)
         configure_determinism(batch_log.seed)
 
-        prompt_ids: dict[str, list[int]] = {
-            tid: list(self.tokenizer(prompt, add_special_tokens=True)["input_ids"])
-            for tid, prompt in batch_log.task_prompts.items()
-        }
+        # §2.9 row 4: apply the same truncation cap the Worker recorded,
+        # so prompts that would otherwise exceed `max_position_embeddings`
+        # are trimmed identically on both sides. With cap=None this is a
+        # no-op and matches the legacy behaviour.
+        cap = batch_log.max_prompt_tokens
+        prompt_ids: dict[str, list[int]] = {}
+        for tid, prompt in batch_log.task_prompts.items():
+            ids = list(self.tokenizer(prompt, add_special_tokens=True)["input_ids"])
+            if cap is not None and len(ids) > cap:
+                ids = ids[:cap]
+            prompt_ids[tid] = ids
         sampled_tokens: dict[str, list[int]] = {tid: [] for tid in batch_log.task_prompts}
         target_logits: list = []
         target_sampled: list[int] = []

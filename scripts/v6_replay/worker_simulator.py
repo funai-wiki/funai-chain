@@ -44,6 +44,7 @@ from ._common import (
     load_model_and_tokenizer,
     moe_top_k,
 )
+from ._validation import gather_eos_token_ids
 from .replay_types import BatchLog, BatchStep, TaskLogits
 from .sampling import chacha20_sample, derive_final_seed
 
@@ -205,6 +206,8 @@ class WorkerSimulator:
         temperature: float,
         top_p: float,
         seed: int,
+        max_prompt_tokens: int | None = None,
+        sampling_params_extra: dict[str, Any] | None = None,
     ) -> tuple[dict[str, str], BatchLog, dict[str, TaskLogits]]:
         """
         Run inference with a dynamic per-task schedule.
@@ -219,6 +222,16 @@ class WorkerSimulator:
             top_p: nucleus threshold. Ignored when temperature == 0.
             seed: Worker seed, fed to ``configure_determinism`` and to
                 ``derive_final_seed`` for per-task ChaCha20 key derivation.
+            max_prompt_tokens: Pre_Mainnet_Test_Plan §2.9 row 4 — if set,
+                truncate every prompt to this many tokens before any
+                forward pass. Recorded into BatchLog so the Replayer
+                applies the same cut. None = no truncation.
+            sampling_params_extra: Pre_Mainnet_Test_Plan §2.9 row 3 — any
+                sampler input not already covered by `temperature`/`top_p`
+                (e.g. `top_k`, `repetition_penalty`). Worker enumerates
+                them explicitly so the Replayer can assert dict equality.
+                The PoC's ChaCha20 sampler currently uses none of these
+                so the default {} is correct for production code paths.
 
         Returns: same shape as ``run_batch``.
         """
@@ -233,15 +246,23 @@ class WorkerSimulator:
                 f"task_schedule keys must match task_prompts; "
                 f"missing={missing}, extra={extra}"
             )
+        if max_prompt_tokens is not None and max_prompt_tokens <= 0:
+            raise ValueError(
+                f"max_prompt_tokens must be a positive integer or None, got {max_prompt_tokens}"
+            )
 
         configure_determinism(seed)
 
         # Pre-tokenize each prompt once. Returned list of ints, no padding —
         # padding happens per-step because active contexts have varying length.
-        prompt_ids: dict[str, list[int]] = {
-            tid: list(self.tokenizer(prompt, add_special_tokens=True)["input_ids"])
-            for tid, prompt in task_prompts.items()
-        }
+        # §2.9 row 4: optional truncation cap — applied here, recorded in
+        # BatchLog so the Replayer reproduces the exact cut.
+        prompt_ids: dict[str, list[int]] = {}
+        for tid, prompt in task_prompts.items():
+            ids = list(self.tokenizer(prompt, add_special_tokens=True)["input_ids"])
+            if max_prompt_tokens is not None and len(ids) > max_prompt_tokens:
+                ids = ids[:max_prompt_tokens]
+            prompt_ids[tid] = ids
 
         max_step = max(end for _, end in task_schedule.values())
         sampled_tokens: dict[str, list[int]] = {tid: [] for tid in task_prompts}
@@ -340,6 +361,13 @@ class WorkerSimulator:
             engine_id=ENGINE_ID,
             engine_version=engine_version(),
             attention_impl=ATTENTION_IMPL,
+            # §2.9 boundary-condition fields ──────────────────────────
+            eos_token_ids=gather_eos_token_ids(self.tokenizer, self.model),
+            padding_side=self.tokenizer.padding_side,
+            pad_token_id=int(self.tokenizer.pad_token_id) if self.tokenizer.pad_token_id is not None else 0,
+            sampling_params_extra=dict(sampling_params_extra or {}),
+            max_prompt_tokens=max_prompt_tokens,
+            task_prompt_token_counts={tid: len(ids) for tid, ids in prompt_ids.items()},
         )
 
         task_logits = {

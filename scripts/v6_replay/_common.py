@@ -8,6 +8,11 @@ Centralizes:
 Any divergence between Worker and Replayer on these flags is a determinism
 leak and Phase 1a's ``max_abs_err == 0.0`` assertion will fail — so they
 must live in one place.
+
+Pre_Mainnet_Test_Plan §2.9 boundary validators live in `_validation.py` so
+they can be unit-tested in CPU-only CI without pulling in torch. They are
+re-exported here for backward compatibility with callers that import from
+`_common`.
 """
 
 from __future__ import annotations
@@ -18,6 +23,13 @@ import numpy as np
 import torch
 import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Backward-compat re-exports for callers that imported these from `_common`.
+from ._validation import (  # noqa: F401
+    gather_eos_token_ids,
+    validate_log_against_tokenizer,
+    validate_per_task_token_counts,
+)
 
 # KT v2 §2.5 — identity of the inference engine used here. These are
 # embedded in every BatchLog the Worker emits and checked by the Replayer;

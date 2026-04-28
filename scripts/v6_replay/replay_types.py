@@ -53,6 +53,70 @@ class BatchLog:
     engine_version: str = ""       # e.g. "4.57.6"
     attention_impl: str = "eager"  # "eager" | "sdpa" | "flash_attention_2" | ...
 
+    # Pre_Mainnet_Test_Plan §2.9 row 1 — model EOS contract.
+    #
+    # The schedule (BatchStep.active_task_ids) is the source of truth for when
+    # each task leaves the batch. The Replayer NEVER consults its tokenizer's
+    # EOS set to decide a leave; it follows the recorded schedule verbatim,
+    # eliminating the "Worker / Verifier disagree on EOS interpretation"
+    # divergence vector. This field still records the EOS set Worker observed
+    # so the Replayer can confirm it has loaded the same tokenizer variant —
+    # different EOS lists between Worker and Replayer means the model_id
+    # somehow resolved to two different tokenizer revisions, which is a load
+    # bug worth surfacing immediately rather than as a downstream logit drift.
+    eos_token_ids: tuple[int, ...] = ()
+
+    # Pre_Mainnet_Test_Plan §2.9 row 2 — tokenizer padding contract.
+    #
+    # `padding_side` ("left" vs "right") flips which positions the attention
+    # mask zeros out. `pad_token_id` decides the literal pad token written
+    # into input_ids. A mismatch on either between Worker and Replayer means
+    # the prefill forward pass sees a structurally different input and the
+    # KV cache diverges from step 0 — the failure is silent under the
+    # existing logits-equality assertion (which compares OUTPUT logits, not
+    # the inputs that produced them) until step N when the cumulative drift
+    # crosses the float-precision floor. Recording both lets the Replayer
+    # catch the divergence at validation time, before any forward pass.
+    padding_side: str = "left"
+    pad_token_id: int = 0
+
+    # Pre_Mainnet_Test_Plan §2.9 row 3 — sampler parameter completeness.
+    #
+    # `temperature` and `top_p` above cover every sampler input the PoC's
+    # ChaCha20 sampler currently uses (sampling.py / chacha20_sample). This
+    # extra dict is the extensibility slot for any sampler input a future
+    # PoC change introduces (`top_k`, `repetition_penalty`,
+    # `frequency_penalty`, `presence_penalty`, system-prompt fields if a
+    # future sampler surfaces them separately, etc.).
+    #
+    # The Worker is required to enumerate EVERY sampler input explicitly —
+    # no "default applies on Replayer side". The Replayer asserts the dict
+    # matches its own sampler config. A future sampler change that adds a
+    # new param without also updating the Worker's enumeration will surface
+    # as `{} != {"new_param": default_value}` at validation time, not as a
+    # silent drift in the produced logits.
+    sampling_params_extra: dict[str, Any] = field(default_factory=dict)
+
+    # Pre_Mainnet_Test_Plan §2.9 row 4 — oversize prompt truncation contract.
+    #
+    # `max_prompt_tokens` is the cap the Worker applied; None = no cap. The
+    # Replayer applies the SAME cap. Without this, a prompt long enough to
+    # exceed the model's `max_position_embeddings` would be silently
+    # truncated by transformers in different ways depending on tokenizer
+    # version (older versions truncate at right-end, newer at the model
+    # config's `max_position_embeddings` minus a margin); Worker and
+    # Replayer using different tokenizer versions would then start their
+    # forward pass on different prefixes.
+    #
+    # `task_prompt_token_counts` is the post-tokenization (post-truncation if
+    # `max_prompt_tokens` is set) length per task. The Replayer recomputes
+    # it from its own tokenizer and asserts equality. This catches tokenizer
+    # version drift even when `max_prompt_tokens` itself is None — if the
+    # two sides tokenize the same prompt to different lengths, the mismatch
+    # surfaces here instead of as silent logit divergence.
+    max_prompt_tokens: int | None = None
+    task_prompt_token_counts: dict[str, int] = field(default_factory=dict)
+
     def active_step_indices(self, task_id: str) -> list[int]:
         """Return the decode step indices where ``task_id`` was active."""
         return [s.step_index for s in self.steps if task_id in s.active_task_ids]
