@@ -1,5 +1,27 @@
 # FunAI Chain Wiki — Operations Log
 
+## [2026-04-28] correction + plan extension | MoE coverage gaps from 2026-04-27 review
+
+**Operator:** Claude (LLM)
+
+Track engineer reviewed the 2026-04-27 RunPod MoE report (PR #31, merged) and surfaced both an overclaim and a much broader test-coverage gap list.
+
+**Correction in `2026-04-27-2003-runpod-moe-phase1-rtxpro6000/report.md` (in place, §0 + §4.2 + §5 + §9):**
+- The original report's "Phase 1c dynamic-batch composition" claim was overstated. `test_phase1_moe.py` called `run_batch_dynamic` / `replay_dynamic` (the dynamic-batch *API*) but with a schedule of `{tid: (0, 10) for tid}` — every task active for every step, functionally equivalent to **static composition**. The V6-distinctive dynamic property is therefore unverified on MoE by that report.
+- Verdict softened from "PASS" to "PASS (narrowly)" — configuration-bounded.
+- §9 follow-ups re-prioritised: P0 = true dynamic batch + ChaCha20 / cross-hardware A2 / AWQ quantized; P1 = top-k=2 (Phi-3.5-MoE) / temperature>0 / DeepSeek routing forward-hook.
+
+**Pre-mainnet plan extension (`docs/testing/Pre_Mainnet_Test_Plan.md`):**
+- New **§2.8 MoE coverage matrix** — three P0 dimensions still open before any white-paper-grade "MoE 100% precise verification" claim can be made: true dynamic batch + ChaCha20, cross-hardware A2, AWQ/GPTQ quantization. Effort 3–4 days code + 1–2 GPU rentals (~$5–10).
+- New **§2.9 Inference determinism boundary conditions** — five P0 items the engineer surfaced beyond MoE: EOS handling under continuous batching, padding strategy, sampling-parameter completeness in BatchLog (repetition / frequency penalties etc.), malicious-oversize-prompt truncation rule, Verifier-precedes-Worker timing-attack chain enforcement. Effort 1 week.
+- Two items consciously **moved out** of the test plan into protocol design tracks: Sybil resistance (VRF α design, not testing), same-prompt-twice (UX education, not determinism). Multi-turn cumulative drift downgraded to P2 because if V6 single-turn replay is bit-exact then multi-turn is bit-exact by composition.
+
+**Wiki pages updated:**
+- `wiki/log.md` — this entry.
+- `docs/testing/Test_Plan_Execution_Status.md` — added 2026-04-28 amendment annotation to the report row.
+
+---
+
 ## [2026-04-27] test report | V6 Phase 1 MoE on RunPod RTX PRO 6000 Blackwell
 
 **Operator:** Claude (LLM)

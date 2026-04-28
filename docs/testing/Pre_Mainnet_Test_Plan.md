@@ -118,6 +118,36 @@ Existing 1M-iteration dust / fee tests cover SUCCESS only. FAIL path (15 % fee, 
 
 **Effort**: 1 week.
 
+### 2.8 MoE coverage matrix (gaps from 2026-04-27 RunPod report)
+
+The first MoE V6 validation (`docs/testing/reports/2026-04-27-2003-runpod-moe-phase1-rtxpro6000/`) covered Qwen MoE + DeepSeek-V2-Lite under bf16, static composition, single Blackwell GPU, temperature=0. Three remaining P0 dimensions before V6 can claim "supports MoE in production":
+
+| Item | Today | Needs |
+|---|---|---|
+| MoE on **true dynamic batch** (non-trivial join/leave schedule) + ChaCha20 sampling | ✗ — the 2026-04-27 report's `test_phase1_moe.py` called the dynamic-batch API but with a static schedule, so the V6-distinctive property is unverified on MoE | Update `scripts/v6_replay/test_phase1_moe.py` schedule so tasks join / leave at distinct steps; rerun on the same Qwen / DeepSeek pair; add a temperature>0 ChaCha20 case |
+| MoE **cross-hardware A2** (Blackwell vs Ampere/Ada Worker–Verifier pair) | ✗ — single Blackwell only | Same matrix on at least one non-Blackwell GPU (RTX 4090 24 GB AWQ, A100 80 GB bf16, or L40S 48 GB) and diff captured `BatchLog`s |
+| MoE **AWQ / GPTQ quantized** (e.g. Mixtral 8x7B AWQ) | ✗ | PoC `_common.py` extension to load AWQ weights; rerun matrix; ~95 % of production Workers run quantized so this is a reality requirement, not a stretch goal |
+
+**Effort**: 3–4 days code + 1–2 GPU rentals (~$5–10).
+
+**Does not block** the existing static-composition / bf16 / single-Blackwell PASS verdict — that result remains valid for its scope. **Does block** any white-paper-grade "MoE 100 % precise verification" claim.
+
+### 2.9 Inference determinism boundary conditions
+
+V6 batch-replay assumes Worker and Verifier hit the same code path bit-exactly. Several inference parameters and edge cases can cause divergence today if not explicitly recorded in the BatchLog or pinned by the protocol:
+
+| Item | Risk | Needs |
+|---|---|---|
+| **EOS handling under continuous batching** | Different Worker / Verifier interpretation of "task is done" → different `active_task_ids` schedule → divergence | Test that EOS-driven leaves produce the same BatchLog as schedule-driven leaves; both Worker and Verifier must agree on the EOS token list per model |
+| **Padding strategy (left vs right, pad token id)** | Different padding changes attention mask layout and KV cache contents → silent divergence | Record padding mode + pad token id in BatchLog; assert Replayer matches |
+| **Sampling parameters per task** (`repetition_penalty`, `frequency_penalty`, `presence_penalty`, full system prompt fields if surfaced separately) | Each parameter applies a transform to logits before sampling; missing one parameter = drift | Audit BatchLog schema; ensure every sampler input is recorded; add a parameterised test that drops one parameter on the Replayer and asserts it produces a clear failure (not silent drift) |
+| **Malicious oversize prompt (truncation)** | If Worker truncates at token N but Replayer truncates differently, attention mask + KV cache differ from step 0 | Record `truncated_at_token` in BatchLog; assert Replayer applies the same cut |
+| **Verifier-precedes-Worker timing attack** | Verifier reports PASS before Worker has committed the receipt (gambling on a known-good Worker) | On-chain enforcement: the chain rejects any `VerifyResult` whose timestamp precedes the corresponding `InferReceipt` height. Add chain-level unit test in `x/settlement/keeper/` |
+
+**Effort**: 1 week (test design + protocol-level enforcement code where needed).
+
+**Source**: 2026-04-28 V6 follow-up review by track engineer; consolidated into this section so individual items are not lost as Discord / chat history.
+
 ---
 
 ## 3. P1 — strongly recommended

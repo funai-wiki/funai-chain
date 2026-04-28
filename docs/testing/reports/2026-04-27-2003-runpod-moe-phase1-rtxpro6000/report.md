@@ -3,12 +3,42 @@
 | | |
 |---|---|
 | **Date** | 2026-04-27 20:03 CST (12:03 UTC reference) |
+| **Last amended** | 2026-04-28 — see §0 Correction |
 | **Operator** | dmldevai |
 | **Test driver** | `scripts/v6_replay/test_phase1_moe.py` from PR #30 (`research/v6-replay-poc-moe-expert-logging`) |
 | **Hardware** | RunPod 1× **NVIDIA RTX PRO 6000 Blackwell Server Edition**, 96 GB VRAM, compute capability 12.0, driver 580.126.16 |
 | **Software** | Python 3.12.3, PyTorch 2.8.0+cu128, transformers 4.57.6 |
-| **Verdict** | **PASS** — V6 batch-replay protocol holds bit-exact on two MoE families (Qwen, DeepSeek). Worker-side expert-routing capture is family-specific and works on Qwen but not yet on DeepSeek; logits bit-exactness on both implies neither Path 1 (gating non-determinism) nor Path 2 (expert internal drift) has fired. |
+| **Verdict** | **PASS (narrowly)** — V6 batch-replay protocol holds bit-exact on two MoE families (Qwen top-k=4, DeepSeek top-k=6) under **static batch composition**, single hardware, bf16, temperature=0. Logit-level bit-exactness on both rules out Path 1 (gating non-determinism) and Path 2 (expert internal drift) for that configuration. Many MoE coverage dimensions still open — see §0. |
 | **Cost** | ~1.2 hr × $1.89/hr ≈ **$2.30** |
+
+---
+
+## 0. Correction (2026-04-28)
+
+After review, two claims in the original (2026-04-27) version of this report were too broad:
+
+1. **"Phase 1c dynamic-batch composition" was overstated.** `test_phase1_moe.py` calls `run_batch_dynamic` / `replay_dynamic` (the dynamic-batch *API*), but with a schedule of `{tid: (0, 10) for tid in PROMPTS}` — every task is active for every step. That is functionally equivalent to **static-composition** (all 9 tests share the same active roster across all 10 decode steps). The V6-distinctive dynamic property (tasks joining and leaving mid-batch, the actual Phase 1c assertion) is **not exercised** by this report. Sections that previously implied otherwise are corrected below.
+2. **The "PASS" headline does not generalise to all V6-supports-MoE claims**. White-paper-grade language ("MoE 100% precise verification, validated end-to-end") would over-claim. The V6 protocol assumption *appears* to hold on MoE, but the test surface that backs that conclusion is narrower than the original headline suggested.
+
+What this report still validates after the correction:
+
+- V6 batch-replay determinism on two MoE families (Qwen 4, DeepSeek 6) at **static composition**.
+- First V6 PoC validation on Blackwell (CC 12.0) — first non-Ampere data point.
+- PR #30's MoE expert-routing capture works on Mixtral / Qwen-style MoE families; needs a forward-hook path for DeepSeek-style.
+
+What is now formally listed as **still open** before the V6-on-MoE claim can be made unrestricted:
+
+| # | Gap | Why it matters | Priority |
+|---|---|---|---|
+| 0.a | MoE on **true dynamic batch** (non-trivial join/leave schedule) + ChaCha20 sampling | The V6-distinctive claim — what static composition does not test | **P0** |
+| 0.b | MoE **cross-hardware A2** (Blackwell vs Ampere/Ada Worker–Verifier pair) | Decides whether subnet must shard by GPU architecture | **P0** |
+| 0.c | MoE **AWQ / GPTQ quantized** | ~95 % of production Workers run quantized; dequant kernel is its own non-determinism surface | **P0** |
+| 0.d | MoE at **top-k=2** (Phi-3.5-MoE 42 B) | Numerically the most sensitive routing case (smallest gate-score margin) | P1 |
+| 0.e | MoE + **temperature > 0** + ChaCha20 sampling | Companion business default; sampling path through MoE never validated | P1 |
+
+These items, plus inference-determinism boundary conditions surfaced in the same review (EOS handling, padding, sampling-param recording, malicious-prompt truncation, Verifier-precedes-Worker timing attack), are tracked in [`Pre_Mainnet_Test_Plan.md`](../../Pre_Mainnet_Test_Plan.md) §2.8 and §2.9 as P0 mainnet-blockers.
+
+The technical findings in §§1–10 remain accurate for the configuration that was tested. Read the verdict as "configuration-bounded PASS", not "V6 supports MoE in general".
 
 ---
 
@@ -64,7 +94,7 @@ Replayer mirrors the capture and the new test asserts (a) the array is non-empty
 - Confirms: PyTorch 2.8 + transformers 4.57.6 + bfloat16 + eager attention + `torch.use_deterministic_algorithms(True)` produce a deterministic pipeline on Blackwell, just as on Ampere/Ada in earlier tests.
 - Sanity gate. Without this, any later result would be ambiguous.
 
-### 4.2 Test 2 — Qwen1.5-MoE-A2.7B (top-k=4, 60 experts) — **full PASS**
+### 4.2 Test 2 — Qwen1.5-MoE-A2.7B (top-k=4, 60 experts) — **full PASS (static composition)**
 
 ```
 test_worker_emits_expert_routing                        PASSED
@@ -79,7 +109,7 @@ Three properties asserted:
 2. Logits at every decode step for every target task **match bit-exactly** between Worker and Replayer (`max_abs_err == 0.0`).
 3. Top-k expert IDs at every (step, layer) **match exactly** between Worker and Replayer.
 
-This is the cleanest result possible: **same logits, same routing, same hardware**. V6 batch-replay holds end-to-end on a real MoE.
+This is the cleanest result possible **for this configuration**: same logits, same routing, same hardware, **static batch composition** (every task active across all 10 decode steps; the dynamic-batch property is not exercised — see §0). V6 batch-replay holds bit-exact under static MoE.
 
 ### 4.3 Test 3 — DeepSeek-V2-Lite-Chat (top-k=6, 64 experts) — **logits PASS, routing capture FAIL**
 
@@ -126,16 +156,18 @@ These are warnings about PoC code style + a config-version mismatch in the model
 
 ### Proves
 
-1. **V6 batch-replay protocol holds bit-exact on Blackwell.** First non-Ampere validation. Previous Phase 1 PASS evidence was on A10 (Ampere) and reportedly on a 5090 for the engineer's private cross-hardware run.
-2. **MoE protocol-level support.** Two MoE families with different top-k (4, 6), different number of experts (60, 64), different router internals — both produce bit-exact logits on Worker / Verifier replay. The V6 protocol does not need to add force-routing as a Path 1 mitigation.
-3. **PR #30 expert-routing capture is correct on the family it works for** (Qwen MoE) — the captured top-k IDs match across Worker and Replayer at every (step, layer).
+1. **V6 batch-replay protocol holds bit-exact on Blackwell under static-composition MoE.** First non-Ampere validation. Previous Phase 1 PASS evidence was on A10 (Ampere) and reportedly on a 5090 for the engineer's private cross-hardware run.
+2. **MoE protocol-level determinism, narrow scope.** Two MoE families with different top-k (4, 6), different number of experts (60, 64), different router internals — both produce bit-exact logits on Worker / Verifier replay **when batch composition is held static across all decode steps**. Within that scope, the V6 protocol does not need a force-routing Path 1 mitigation.
+3. **PR #30 expert-routing capture is correct on Mixtral / Qwen-style MoE** — the captured top-k IDs match across Worker and Replayer at every (step, layer).
 
 ### Does not prove
 
-1. **Cross-hardware A2.** Same machine, same GPU. Cross-GPU runs (e.g. A10 → Blackwell, Hopper → Blackwell) are still the engineer's open follow-up. This report is the "single-Blackwell" data point.
-2. **Phi-3.5-MoE / Mixtral 8x7B / DS V4.** Phi-3.5-MoE (42 B bf16, ~84 GB) was on the original test plan but did not fit the 50 GB pod volume; Mixtral 8x7B (94 GB bf16) needs more than the 96 GB card has free; DeepSeek V4 has no transformers integration yet. None blocks the V6 conclusion above; all are extension data points.
-3. **Sampling determinism (Phase 1b temp > 0).** This run was Phase 1c (temp = 0, dynamic batch) only. Phase 1b on MoE is a follow-up.
-4. **DeepSeek expert-routing capture.** PoC currently reads `model_output.router_logits`, which DeepSeek-V2 does not expose. Need a forward-hook based capture path for DeepSeek-style MoE before `test_worker_emits_expert_routing` can return non-empty data on that family.
+1. **MoE on true dynamic batch.** §0 correction: the test driver calls the dynamic-batch API but with a static schedule. The V6-distinctive claim — bit-exact under members joining and leaving mid-batch — is **not exercised on MoE by this report**. P0 follow-up.
+2. **Cross-hardware A2.** Same machine, same GPU. Cross-GPU runs (e.g. A10 → Blackwell, Hopper → Blackwell) are still the engineer's open follow-up. This report is the "single-Blackwell" data point. P0 follow-up.
+3. **Phi-3.5-MoE (top-k=2, 42 B), Mixtral 8x7B (94 GB bf16), DS V4.** Phi-3.5-MoE was on the original test plan but did not fit the 50 GB pod volume; Mixtral 8x7B exceeds the 96 GB card; DeepSeek V4 has no transformers integration yet. P1 follow-up (Phi-3.5-MoE specifically — top-k=2 is the most numerically sensitive routing case).
+4. **MoE under temperature > 0 with ChaCha20 sampling.** This run was Phase 1c-API + temperature = 0 only. The sampling-on-MoE path is untested. P1 follow-up.
+5. **MoE under quantization (AWQ / GPTQ / FP8).** ~95 % of production Workers will run quantized MoE; the dequant kernel is a separate non-determinism surface. Not tested here. **P0 follow-up** — generation matters in production.
+6. **DeepSeek expert-routing capture.** PoC currently reads `model_output.router_logits`, which DeepSeek-V2 does not expose. Need a forward-hook based capture path for DeepSeek-style MoE before `test_worker_emits_expert_routing` can return non-empty data on that family. P1 follow-up.
 
 ---
 
@@ -193,14 +225,16 @@ Key evidence lines:
 
 ## 9. Recommended follow-up patches
 
-In priority order, what this report enables next:
+In priority order. P0 items are mainnet-blockers per §0; P1 items strongly recommended.
 
-| # | Item | Effort | Output |
-|---|---|---|---|
-| 9.1 | Forward-hook based expert-routing capture for DeepSeek-style MoE. Lets `test_phase1_moe.py` produce non-empty `expert_routing` on DeepSeek-V2 / V3 — which closes the only FAIL in this report cleanly. | 0.5 d | Patch on top of PR #30 |
-| 9.2 | Phi-3.5-MoE 42 B (top-k=2) Phase 1 run. Larger MoE + the smallest top-k of common MoE families — engineer's Path 1 sensitivity argument peaks at top-k=2. Requires ≥ 200 GB volume per §6.2. | ~1 hr GPU + report | Cross-family completeness data |
-| 9.3 | Cross-hardware A2: rerun the same test matrix on a non-Blackwell GPU (e.g. RTX 4090 24 GB AWQ / A100 80 GB bf16) and diff the captured `BatchLog`s. The "V6 cross-hardware bit-exact" claim is still the load-bearing open A2 assumption. | 1 d | Cross-hardware report |
-| 9.4 | Phase 1b (temperature > 0, ChaCha20 sampling) on MoE. This run only exercised Phase 1c (temp = 0 dynamic batch). | 0.5 d | Sampling-on-MoE report |
+| # | Item | Priority | Effort | Output |
+|---|---|---|---|---|
+| 9.1 | **MoE on true dynamic batch (non-trivial join/leave) + ChaCha20 sampling.** Fix the `test_phase1_moe.py` schedule so tasks actually join and leave at different decode steps; rerun. Without this the V6-distinctive claim is unsubstantiated on MoE. | **P0** | 0.5 d test fix + 0.5 hr GPU | Real V6 dynamic-batch evidence on MoE |
+| 9.2 | **MoE cross-hardware A2.** Run the same matrix on a non-Blackwell GPU (RTX 4090 / A100 / L40S) and diff the captured `BatchLog`s. Decides whether subnets must shard by GPU architecture. | **P0** | 1 d / 1 rental | Cross-hardware report |
+| 9.3 | **MoE under quantization (AWQ Mixtral 8x7B).** ~95 % of production Workers run quantized; dequant kernel is its own non-determinism surface. Requires PoC `_common.py` extension to load AWQ weights. | **P0** | 1 d code + 1 rental | Quantized-MoE report |
+| 9.4 | Phi-3.5-MoE 42 B (top-k=2) Phase 1 run. The most numerically sensitive routing case (smallest gate-score margin). Requires ≥ 200 GB volume per §6.2. | P1 | ~1 hr GPU + report | top-k=2 sensitivity datapoint |
+| 9.5 | Phase 1b (temperature > 0, ChaCha20 sampling) on MoE. | P1 | 0.5 d | Sampling-on-MoE report |
+| 9.6 | Forward-hook based expert-routing capture for DeepSeek-style MoE. Lets `test_phase1_moe.py` produce non-empty `expert_routing` on DeepSeek-V2 / V3 — closes the only FAIL in this report cleanly. | P1 | 0.5 d | Patch on top of PR #30 |
 
 ---
 
