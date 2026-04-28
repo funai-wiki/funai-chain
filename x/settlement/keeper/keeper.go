@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"sort"
 
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
@@ -1234,18 +1235,42 @@ func (k Keeper) DistributeMultiVerificationFund(ctx sdk.Context, epoch int64) {
 		return
 	}
 
+	// Sort second_verifiers by address so the "last gets remainder" rule
+	// is deterministic across runs. Without this, Go map iteration order
+	// would non-deterministically pick which second_verifier absorbs the
+	// rounding dust — fine for total accounting but a hash-divergent
+	// outcome on chain.
+	addrs := make([]string, 0, len(second_verifierCounts))
+	for vAddr := range second_verifierCounts {
+		addrs = append(addrs, vAddr)
+	}
+	sort.Strings(addrs)
+
+	// distributedTotal accumulates exactly what we hand out so the last
+	// second_verifier can absorb `fundPool - distributedTotal` and the
+	// pool sums to zero with no dust trapped in the module account.
+	// Mirrors distributeFailFee's pattern (line ~1175).
+	distributedTotal := math.ZeroInt()
 	distributed := int64(0)
-	for vAddr, count := range second_verifierCounts {
+	for i, vAddr := range addrs {
+		count := second_verifierCounts[vAddr]
 		addr, err := sdk.AccAddressFromBech32(vAddr)
 		if err != nil {
 			continue
 		}
-		amount := perPersonTime.MulRaw(count)
+		var amount math.Int
+		if i == len(addrs)-1 {
+			// Absorb all remaining pool dust into the last second_verifier.
+			amount = fundPool.Sub(distributedTotal)
+		} else {
+			amount = perPersonTime.MulRaw(count)
+		}
 		coin := sdk.NewCoin("ufai", amount)
 		if coin.IsPositive() {
 			_ = k.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleAccountName, addr, sdk.NewCoins(coin))
 			k.IncrementSecondVerifierEpochFee(ctx, vAddr, amount)
 			distributed++
+			distributedTotal = distributedTotal.Add(amount)
 		}
 	}
 
