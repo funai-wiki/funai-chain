@@ -9,8 +9,6 @@ package byzantine
 import (
 	"fmt"
 	"math/rand"
-
-	workertypes "github.com/funai-wiki/funai-chain/x/worker/types"
 )
 
 // C1 — 1st jail → unjail → 500 honest → 1 cheat → 500 honest → reoffend.
@@ -129,10 +127,8 @@ func (ScenarioC4) Description() string {
 func (s ScenarioC4) Run(env *Env, _ *rand.Rand) error {
 	const total = 20
 	const toJail = 10
-	addrs := make([]workertypes.Worker, 0, total)
 	for i := 0; i < total; i++ {
-		a := env.MakeWorker(i, 10_000)
-		addrs = append(addrs, env.MustGet(a))
+		env.MakeWorker(i, 10_000)
 	}
 
 	// Jail the first half.
