@@ -91,7 +91,7 @@ Existing 1M-iteration dust / fee tests cover SUCCESS only. FAIL path (15 % fee, 
 | Item | Today | Needs |
 |---|---|---|
 | 1M random FAIL tasks → total FAI supply unchanged | ✗ | Mirror `economic_test.go` SUCCESS suite |
-| Halving boundary (block 8 760 000) — fees + rewards before / after match expected schedule | ✗ | Synthetic test fast-forwarding chain across boundary |
+| Halving boundary (block 26 250 000 = `DefaultHalvingPeriod` in `x/reward/types/params.go`, ~4.16 years @ 5 s/block) — fees + rewards before / after match expected schedule | ✗ | Synthetic test fast-forwarding chain across boundary |
 | 5 % slash from "3rd jail" path vs "FraudProof" path produce identical state transitions | ✗ | Today they share keeper code; test assertion makes the equivalence explicit |
 | Multi-verification fund per-epoch payout — `DistributeMultiVerificationFund` matches the deposits in | ✗ | Per-epoch invariant test |
 
