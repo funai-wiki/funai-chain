@@ -1555,9 +1555,14 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.SecondVerificatio
 			}
 		}
 
-		// No third_verification → proceed with settlement based on audit result
+		// No third_verification → proceed with settlement based on audit result.
+		// Track whether a SettledTask record was successfully written. On false,
+		// pending is preserved for HandleSecondVerificationTimeouts to retry —
+		// without this, an early-return from settleAuditedTask (bad addr, no
+		// inference account, balance shortfall) would orphan the task.
+		settled := false
 		if apt.OriginalStatus == types.SettlementSuccess && auditPass {
-			k.settleAuditedTask(ctx, apt, true, false, params, 0)
+			settled = k.settleAuditedTask(ctx, apt, true, false, params, 0)
 		} else if apt.OriginalStatus == types.SettlementSuccess && !auditPass {
 			// H1: audit overturns SUCCESS→FAIL — §10.6: no settlement (funds not yet paid) + jail Worker + jail original PASS verifiers
 			stats.AuditOverturn++
@@ -1571,83 +1576,98 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.SecondVerificatio
 				WorkerAddress:     apt.WorkerAddress,
 				OriginalVerifiers: apt.VerifierAddresses,
 			})
+			settled = true
 		} else if apt.OriginalStatus == types.SettlementFail && auditPass {
 			// P1-NEW-1 fix: Audit overturns FAIL→SUCCESS. Under "no settlement before audit" principle,
 			// the audit VRF triggered `continue` before any fee was collected (neither SUCCESS 100%
 			// nor FAIL 5%). So alreadyPaidFail must be false — charge full 100%.
 			stats.AuditOverturn++
-			k.settleAuditedTask(ctx, apt, true, false, params, 0)
+			settled = k.settleAuditedTask(ctx, apt, true, false, params, 0)
 			k.jailFailVerifiers(ctx, apt)
 		} else {
 			stats.AuditFail++
-			k.settleAuditedTask(ctx, apt, false, false, params, 0)
-		}
-	} else {
-		// ThirdVerification judgment
-		stats.ThirdVerificationTotal++
-		origAudit, origFound := k.GetSecondVerificationRecord(ctx, ar.TaskId)
-		if !origFound {
-			k.DeleteSecondVerificationPending(ctx, ar.TaskId, true)
-			k.SetEpochStats(ctx, stats)
-			return
+			settled = k.settleAuditedTask(ctx, apt, false, false, params, 0)
 		}
 
-		var origAuditPass bool
-		origPassCount := uint32(0)
-		for _, r := range origAudit.Results {
-			if r {
-				origPassCount++
-			}
-		}
-		origAuditPass = origPassCount >= params.SecondVerificationMatchThreshold
+		k.SetEpochStats(ctx, stats)
 
-		if origAuditPass && !auditPass {
-			// H2: ThirdVerification overturns audit PASS→FAIL — §10.7: no settlement + jail original PASS second_verifiers + jail Worker + jail verifiers
-			stats.ThirdVerificationOverturn++
-			k.jailSecondVerifiers(ctx, origAudit)
-			k.jailWorkerAndVerifiers(ctx, apt)
-			k.SetSettledTask(ctx, types.SettledTaskID{
-				TaskId:            apt.TaskId,
-				Status:            types.TaskFailed,
-				ExpireBlock:       apt.ExpireBlock,
-				SettledAt:         ctx.BlockHeight(),
-				WorkerAddress:     apt.WorkerAddress,
-				OriginalVerifiers: apt.VerifierAddresses,
-			})
-		} else if !origAuditPass && auditPass {
-			// ThirdVerification overturns audit FAIL→PASS: malicious second_verifiers → jail original FAIL second_verifiers, settle by original verification result
-			stats.ThirdVerificationOverturn++
-			k.jailFailSecondVerifiers(ctx, origAudit, params)
-			// P1-NEW-1 fix: Under "no settlement before audit" principle, no fee was ever collected
-			// when the audit VRF triggered. alreadyPaidFail must always be false.
-			k.settleAuditedTask(ctx, apt, apt.OriginalStatus == types.SettlementSuccess, false, params, 0)
-		} else {
-			// ThirdVerification confirms audit result
-			if origAuditPass {
-				k.settleAuditedTask(ctx, apt, apt.OriginalStatus == types.SettlementSuccess, false, params, 0)
-			} else {
-				if apt.OriginalStatus == types.SettlementSuccess {
-					// ThirdVerification confirms audit overturn SUCCESS→FAIL: no settlement + jail
-					k.jailWorkerAndVerifiers(ctx, apt)
-					k.SetSettledTask(ctx, types.SettledTaskID{
-						TaskId:            apt.TaskId,
-						Status:            types.TaskFailed,
-						ExpireBlock:       apt.ExpireBlock,
-						SettledAt:         ctx.BlockHeight(),
-						WorkerAddress:     apt.WorkerAddress,
-						OriginalVerifiers: apt.VerifierAddresses,
-					})
-				} else {
-					k.settleAuditedTask(ctx, apt, false, false, params, 0)
-				}
-			}
-		}
+		ctx.EventManager().EmitEvent(sdk.NewEvent(
+			types.EventSecondVerificationResult,
+			sdk.NewAttribute(types.AttributeKeyTaskId, fmt.Sprintf("%x", ar.TaskId)),
+			sdk.NewAttribute("audit_pass", fmt.Sprintf("%v", auditPass)),
+			sdk.NewAttribute("is_third_verification", fmt.Sprintf("%v", isThirdVerification)),
+		))
 
-		k.DeleteSecondVerificationPending(ctx, ar.TaskId, true)
+		if settled {
+			k.DeleteSecondVerificationPending(ctx, ar.TaskId, false)
+		}
+		return
 	}
 
-	if !isThirdVerification {
-		k.DeleteSecondVerificationPending(ctx, ar.TaskId, false)
+	// ThirdVerification judgment. Same orphan-recovery contract as second
+	// verification path above: pending is deleted ONLY when SettledTask was
+	// actually written (settled == true). Otherwise pending stays for
+	// HandleSecondVerificationTimeouts retry.
+	stats.ThirdVerificationTotal++
+	origAudit, origFound := k.GetSecondVerificationRecord(ctx, ar.TaskId)
+	if !origFound {
+		k.DeleteSecondVerificationPending(ctx, ar.TaskId, true)
+		k.SetEpochStats(ctx, stats)
+		return
+	}
+
+	var origAuditPass bool
+	origPassCount := uint32(0)
+	for _, r := range origAudit.Results {
+		if r {
+			origPassCount++
+		}
+	}
+	origAuditPass = origPassCount >= params.SecondVerificationMatchThreshold
+
+	settled := false
+	if origAuditPass && !auditPass {
+		// H2: ThirdVerification overturns audit PASS→FAIL — §10.7: no settlement + jail original PASS second_verifiers + jail Worker + jail verifiers
+		stats.ThirdVerificationOverturn++
+		k.jailSecondVerifiers(ctx, origAudit)
+		k.jailWorkerAndVerifiers(ctx, apt)
+		k.SetSettledTask(ctx, types.SettledTaskID{
+			TaskId:            apt.TaskId,
+			Status:            types.TaskFailed,
+			ExpireBlock:       apt.ExpireBlock,
+			SettledAt:         ctx.BlockHeight(),
+			WorkerAddress:     apt.WorkerAddress,
+			OriginalVerifiers: apt.VerifierAddresses,
+		})
+		settled = true
+	} else if !origAuditPass && auditPass {
+		// ThirdVerification overturns audit FAIL→PASS: malicious second_verifiers → jail original FAIL second_verifiers, settle by original verification result
+		stats.ThirdVerificationOverturn++
+		k.jailFailSecondVerifiers(ctx, origAudit, params)
+		// P1-NEW-1 fix: Under "no settlement before audit" principle, no fee was ever collected
+		// when the audit VRF triggered. alreadyPaidFail must always be false.
+		settled = k.settleAuditedTask(ctx, apt, apt.OriginalStatus == types.SettlementSuccess, false, params, 0)
+	} else {
+		// ThirdVerification confirms audit result
+		if origAuditPass {
+			settled = k.settleAuditedTask(ctx, apt, apt.OriginalStatus == types.SettlementSuccess, false, params, 0)
+		} else {
+			if apt.OriginalStatus == types.SettlementSuccess {
+				// ThirdVerification confirms audit overturn SUCCESS→FAIL: no settlement + jail
+				k.jailWorkerAndVerifiers(ctx, apt)
+				k.SetSettledTask(ctx, types.SettledTaskID{
+					TaskId:            apt.TaskId,
+					Status:            types.TaskFailed,
+					ExpireBlock:       apt.ExpireBlock,
+					SettledAt:         ctx.BlockHeight(),
+					WorkerAddress:     apt.WorkerAddress,
+					OriginalVerifiers: apt.VerifierAddresses,
+				})
+				settled = true
+			} else {
+				settled = k.settleAuditedTask(ctx, apt, false, false, params, 0)
+			}
+		}
 	}
 
 	k.SetEpochStats(ctx, stats)
@@ -1658,6 +1678,10 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.SecondVerificatio
 		sdk.NewAttribute("audit_pass", fmt.Sprintf("%v", auditPass)),
 		sdk.NewAttribute("is_third_verification", fmt.Sprintf("%v", isThirdVerification)),
 	))
+
+	if settled {
+		k.DeleteSecondVerificationPending(ctx, ar.TaskId, true)
+	}
 }
 
 // settleAuditedTask settles a task after audit/third_verification completion.
@@ -1665,19 +1689,26 @@ func (k Keeper) processAuditJudgment(ctx sdk.Context, ar types.SecondVerificatio
 // post PR #2) during initial FAIL settlement, so only charge the remaining 85% (not full
 // fee) to avoid double-charging. Numbers are for documentation; code reads the dynamic
 // ratio from params.
-func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationPendingTask, asSuccess bool, alreadyPaidFail bool, params types.Params, overrideOutputTokens uint32) {
+//
+// Returns true iff a SettledTask record was written (terminal state reached). On any
+// early-return failure (address decode, missing inference account, balance shortfall),
+// returns false WITHOUT writing SettledTask. The caller MUST keep the corresponding
+// SecondVerificationPending alive when this returns false, so HandleSecondVerificationTimeouts
+// can retry. Without this contract the task is orphaned: pending deleted, settled never
+// written, no retry handle on chain. (KT 30-case Issue 2, audit retry-handle bug.)
+func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationPendingTask, asSuccess bool, alreadyPaidFail bool, params types.Params, overrideOutputTokens uint32) bool {
 	userAddr, err := sdk.AccAddressFromBech32(apt.UserAddress)
 	if err != nil {
-		return
+		return false
 	}
 	workerAddr, err := sdk.AccAddressFromBech32(apt.WorkerAddress)
 	if err != nil {
-		return
+		return false
 	}
 
 	ia, found := k.GetInferenceAccount(ctx, userAddr)
 	if !found {
-		return
+		return false
 	}
 
 	var verifiers []types.VerifierResult
@@ -1710,7 +1741,7 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationP
 			chargeAmount = sdk.NewCoin(baseFee.Denom, baseFee.Amount.Sub(alreadyPaid))
 		}
 		if ia.Balance.IsLT(chargeAmount) && chargeAmount.IsPositive() {
-			return
+			return false
 		}
 		ia.Balance = ia.Balance.Sub(chargeAmount)
 		k.SetInferenceAccount(ctx, ia)
@@ -1729,28 +1760,30 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationP
 			WorkerAddress:     apt.WorkerAddress,
 			OriginalVerifiers: apt.VerifierAddresses,
 		})
-	} else {
-		failFee := sdk.NewCoin(baseFee.Denom, baseFee.Amount.MulRaw(int64(params.FailSettlementFeeRatio)).QuoRaw(1000))
-		if ia.Balance.IsLT(failFee) && failFee.IsPositive() {
-			return
-		}
-		ia.Balance = ia.Balance.Sub(failFee)
-		k.SetInferenceAccount(ctx, ia)
-		k.distributeFailFee(ctx, failFee, verifiers, params)
-
-		if k.workerKeeper != nil {
-			k.workerKeeper.JailWorker(ctx, workerAddr, 0)
-		}
-
-		k.SetSettledTask(ctx, types.SettledTaskID{
-			TaskId:            apt.TaskId,
-			Status:            types.TaskFailSettled,
-			ExpireBlock:       apt.ExpireBlock,
-			SettledAt:         ctx.BlockHeight(),
-			WorkerAddress:     apt.WorkerAddress,
-			OriginalVerifiers: apt.VerifierAddresses,
-		})
+		return true
 	}
+
+	failFee := sdk.NewCoin(baseFee.Denom, baseFee.Amount.MulRaw(int64(params.FailSettlementFeeRatio)).QuoRaw(1000))
+	if ia.Balance.IsLT(failFee) && failFee.IsPositive() {
+		return false
+	}
+	ia.Balance = ia.Balance.Sub(failFee)
+	k.SetInferenceAccount(ctx, ia)
+	k.distributeFailFee(ctx, failFee, verifiers, params)
+
+	if k.workerKeeper != nil {
+		k.workerKeeper.JailWorker(ctx, workerAddr, 0)
+	}
+
+	k.SetSettledTask(ctx, types.SettledTaskID{
+		TaskId:            apt.TaskId,
+		Status:            types.TaskFailSettled,
+		ExpireBlock:       apt.ExpireBlock,
+		SettledAt:         ctx.BlockHeight(),
+		WorkerAddress:     apt.WorkerAddress,
+		OriginalVerifiers: apt.VerifierAddresses,
+	})
+	return true
 }
 
 // P2-7: jails Worker + only PASS-voting verifiers (FAIL voters were correct).
@@ -1960,7 +1993,31 @@ func (k Keeper) processTimeoutsByIndex(ctx sdk.Context, prefix []byte, cutoffHei
 				}
 			}
 		}
-		k.settleAuditedTask(ctx, apt, settleAsSuccess, false, params, 0)
+
+		// Timeout is the last chance to reach a terminal state. processAuditJudgment
+		// already had its retry-by-leaving-pending; if settle still cannot record
+		// (e.g. user account permanently absent or balance exhausted), we MUST
+		// force a terminal SettledTask record here so the chain doesn't carry an
+		// orphan pending forever. The fee impact of force-terminal is zero on
+		// both worker + verifiers — they were never paid for this task — but the
+		// task is removed from the chain's "in-flight" state. Operators can audit
+		// these via TaskStatus == TaskFailed && SettledAt within timeout window.
+		if !k.settleAuditedTask(ctx, apt, settleAsSuccess, false, params, 0) {
+			k.SetSettledTask(ctx, types.SettledTaskID{
+				TaskId:            apt.TaskId,
+				Status:            types.TaskFailed,
+				ExpireBlock:       apt.ExpireBlock,
+				SettledAt:         ctx.BlockHeight(),
+				WorkerAddress:     apt.WorkerAddress,
+				OriginalVerifiers: apt.VerifierAddresses,
+				UserAddress:       apt.UserAddress,
+			})
+			k.logger.Info("audit timeout force-terminal: settle could not complete after timeout window",
+				"task", hex.EncodeToString(apt.TaskId),
+				"is_third_verification", isThirdVerification,
+				"original_status", apt.OriginalStatus.String(),
+			)
+		}
 		if isThirdVerification {
 			store.Delete(types.ThirdVerificationPendingKey(apt.TaskId))
 		} else {
