@@ -430,7 +430,21 @@ func (c *Client) GetActiveWorkers(ctx context.Context) ([]WorkerListEntry, error
 	return workers, nil
 }
 
-// BroadcastTx broadcasts a signed transaction to the chain.
+// DefaultConfirmTimeout is the upper bound on how long BroadcastTxConfirmed waits
+// for a tx to be included in a block AND DeliverTx to report success. At a 5 s
+// block time this gives roughly 12 blocks of headroom — enough for normal
+// inclusion latency while still failing fast on a stuck mempool / orphaned tx.
+const DefaultConfirmTimeout = 60 * time.Second
+
+// BroadcastTx broadcasts a signed transaction to the chain via /broadcast_tx_sync.
+//
+// IMPORTANT: success here only proves CheckTx accepted the tx into the mempool.
+// It does NOT prove the tx was included in a block, nor that DeliverTx returned
+// code=0. For critical settlement / audit / fraud-proof paths, use
+// BroadcastTxConfirmed which waits for actual inclusion.
+//
+// Use of this raw helper for non-critical paths (or tests that need only the
+// tx hash) is fine; the caller takes responsibility for confirming inclusion.
 func (c *Client) BroadcastTx(ctx context.Context, txBytes []byte) (string, error) {
 	url := fmt.Sprintf("%s/broadcast_tx_sync?tx=0x%x", c.rpcURL, txBytes)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -462,6 +476,108 @@ func (c *Client) BroadcastTx(ctx context.Context, txBytes []byte) (string, error
 	}
 
 	return result.Result.Hash, nil
+}
+
+// WaitForTxInclusion polls /tx?hash=... until the tx is included in a block
+// or the timeout expires. Returns nil only when DeliverTx returned code 0.
+//
+// Returns an error in three cases:
+//   - timeout expired without tx being found in a block
+//   - tx was included but DeliverTx failed (non-zero code)
+//   - the supplied context was canceled
+//
+// CometBFT's /tx endpoint returns an RPC error "tx … not found" until the tx
+// lands in a block; this helper treats those errors as "keep polling" rather
+// than terminal failures.
+func (c *Client) WaitForTxInclusion(ctx context.Context, txHash string, timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = DefaultConfirmTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	pollInterval := 500 * time.Millisecond
+
+	// Strip 0x prefix if present — CometBFT /tx accepts either form, but be tidy.
+	hashHex := strings.TrimPrefix(txHash, "0x")
+	hashHex = strings.TrimPrefix(hashHex, "0X")
+
+	for {
+		if ctx.Err() != nil {
+			return fmt.Errorf("WaitForTxInclusion canceled: %w", ctx.Err())
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("WaitForTxInclusion: tx %s not found in any block within %s", txHash, timeout)
+		}
+
+		url := fmt.Sprintf("%s/tx?hash=0x%s", c.rpcURL, hashHex)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return fmt.Errorf("WaitForTxInclusion: build request: %w", err)
+		}
+		resp, err := c.http.Do(req)
+		if err != nil {
+			// Transient network error — wait and retry.
+			time.Sleep(pollInterval)
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		var result struct {
+			Result *struct {
+				Hash     string `json:"hash"`
+				Height   string `json:"height"`
+				TxResult struct {
+					Code uint32 `json:"code"`
+					Log  string `json:"log"`
+				} `json:"tx_result"`
+			} `json:"result"`
+			Error *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+				Data    string `json:"data"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return fmt.Errorf("WaitForTxInclusion: decode response: %w", err)
+		}
+
+		// CometBFT shape: a not-found tx returns Error populated; a found tx
+		// returns Result populated. Either an explicit error OR an empty Result
+		// means "keep polling".
+		if result.Error != nil || result.Result == nil || result.Result.Hash == "" {
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		if result.Result.TxResult.Code != 0 {
+			return fmt.Errorf("WaitForTxInclusion: tx %s included at height %s but DeliverTx failed code=%d log=%s",
+				txHash, result.Result.Height, result.Result.TxResult.Code, result.Result.TxResult.Log)
+		}
+		return nil
+	}
+}
+
+// BroadcastTxConfirmed broadcasts a signed tx and blocks until it is included
+// in a block AND DeliverTx returned code=0. Returns the tx hash on success.
+//
+// On confirmation failure, the returned hash is still the broadcast hash (so
+// callers can log it for diagnostics) but err describes the inclusion or
+// DeliverTx failure. On broadcast (CheckTx) failure, hash is "" and err
+// describes the rejection.
+//
+// Use for critical settlement / audit / fraud paths where a "broadcast OK"
+// log line must mean "actually committed", not just "mempool accepted".
+// For high-throughput non-critical paths, BroadcastTx without confirmation
+// remains available.
+func (c *Client) BroadcastTxConfirmed(ctx context.Context, txBytes []byte, confirmTimeout time.Duration) (string, error) {
+	hash, err := c.BroadcastTx(ctx, txBytes)
+	if err != nil {
+		return "", err
+	}
+	if err := c.WaitForTxInclusion(ctx, hash, confirmTimeout); err != nil {
+		return hash, fmt.Errorf("broadcast accepted (hash=%s) but confirmation failed: %w", hash, err)
+	}
+	return hash, nil
 }
 
 // QueryAccountInfo queries account_number and sequence from the chain REST API.
@@ -576,17 +692,21 @@ func (c *Client) BroadcastSettlement(ctx context.Context, msg *settlementtypes.M
 		return "", fmt.Errorf("encode tx: %w", err)
 	}
 
-	hash, err := c.BroadcastTx(ctx, txBytes)
+	hash, err := c.BroadcastTxConfirmed(ctx, txBytes, DefaultConfirmTimeout)
 	if err != nil {
 		// Reset sequence on mismatch so next attempt re-queries
 		if strings.Contains(err.Error(), "sequence") {
 			log.Printf("chain: sequence mismatch, resetting")
 			c.ResetSequence()
 		}
-		return "", err
+		// KT Issue 3: distinguish "broadcast rejected" (no hash) from
+		// "broadcast accepted but DeliverTx failed / never included" (hash != "").
+		// The latter means the tx is gone from mempool too — caller should
+		// treat as "settlement did NOT happen on chain" and decide on retry.
+		return hash, err
 	}
 
-	log.Printf("chain: BatchSettlement tx broadcast hash=%s entries=%d gas=%d seq=%d", hash, len(msg.Entries), gasLimit, seq)
+	log.Printf("chain: BatchSettlement tx confirmed hash=%s entries=%d gas=%d seq=%d", hash, len(msg.Entries), gasLimit, seq)
 	return hash, nil
 }
 
@@ -652,16 +772,19 @@ func (c *Client) BroadcastAuditBatch(ctx context.Context, msg *settlementtypes.M
 		return "", fmt.Errorf("encode tx: %w", err)
 	}
 
-	hash, err := c.BroadcastTx(ctx, txBytes)
+	hash, err := c.BroadcastTxConfirmed(ctx, txBytes, DefaultConfirmTimeout)
 	if err != nil {
 		if strings.Contains(err.Error(), "sequence") {
 			log.Printf("chain: audit-batch sequence mismatch, resetting")
 			c.ResetSequence()
 		}
-		return "", err
+		// KT Issue 3: same partial-failure caveat as BroadcastSettlement —
+		// non-empty hash + err means broadcast accepted but tx never reached
+		// a finalized block; caller treats as audit-result NOT recorded on chain.
+		return hash, err
 	}
 
-	log.Printf("chain: SecondVerificationResultBatch tx broadcast hash=%s entries=%d gas=%d seq=%d", hash, len(msg.Entries), gasLimit, seq)
+	log.Printf("chain: SecondVerificationResultBatch tx confirmed hash=%s entries=%d gas=%d seq=%d", hash, len(msg.Entries), gasLimit, seq)
 	return hash, nil
 }
 
@@ -731,16 +854,19 @@ func (c *Client) BroadcastFraudProof(ctx context.Context, msg *settlementtypes.M
 		return "", fmt.Errorf("encode tx: %w", err)
 	}
 
-	hash, err := c.BroadcastTx(ctx, txBytes)
+	hash, err := c.BroadcastTxConfirmed(ctx, txBytes, DefaultConfirmTimeout)
 	if err != nil {
 		if strings.Contains(err.Error(), "sequence") {
 			log.Printf("chain: fraud-proof sequence mismatch, resetting")
 			c.ResetSequence()
 		}
-		return "", err
+		// KT Issue 3: caller (SDK / user) should treat err with non-empty hash
+		// as "fraud report NOT recorded on chain" — fee was paid for broadcast
+		// but DeliverTx didn't accept it.
+		return hash, err
 	}
 
-	log.Printf("chain: FraudProof tx broadcast hash=%s task=%x gas=%d seq=%d", hash, msg.TaskId, gasLimit, seq)
+	log.Printf("chain: FraudProof tx confirmed hash=%s task=%x gas=%d seq=%d", hash, msg.TaskId, gasLimit, seq)
 	return hash, nil
 }
 
