@@ -53,7 +53,13 @@ pass "Settlement params correct"
 # Test 2: Worker registration
 # ============================================================
 info "=== Test 2: Worker registration ==="
-PUBKEY=$($BINARY keys show validator -p $KEYRING)
+# `keys show -p` outputs JSON ({"@type":"/cosmos.crypto.secp256k1.PubKey","key":"<base64>"}).
+# Extract just the base64 `key` field — that's the canonical compressed-pubkey
+# form accepted by MsgRegisterWorker.ValidateBasic via types.DecodeWorkerPubkey
+# (KT Issue 14 strict validation, PR #49). Pre-Issue-14 the JSON-wrapped string
+# was accepted as-is by the non-empty check; post-fix DecodeWorkerPubkey rejects
+# the JSON wrapper so we extract the base64 the same way e2e-real-inference.sh does.
+PUBKEY=$($BINARY keys show validator -p $KEYRING | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
 
 TX_RESULT=$($BINARY tx worker register \
   --pubkey "$PUBKEY" \

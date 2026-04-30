@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cometbft/cometbft/crypto/secp256k1"
+	"github.com/cosmos/cosmos-sdk/types/bech32"
 )
 
 // makeRawPubkey returns a deterministic 33-byte compressed secp256k1 public
@@ -99,6 +100,37 @@ func TestDecodeWorkerPubkey_GarbageInputReturnsNil(t *testing.T) {
 		if got := DecodeWorkerPubkey(c); got != nil {
 			t.Fatalf("garbage input %q must return nil, got len=%d", c, len(got))
 		}
+	}
+}
+
+func TestDecodeWorkerPubkey_Bech32(t *testing.T) {
+	// Bech32 encoding: HRP + bech32(amino-prefix-bytes || raw-pubkey-bytes).
+	// Use the SDK ConvertAndEncode helper — same path the keyring CLI uses.
+	raw := makeRawPubkey(t)
+	payload := append(append([]byte{}, aminoSecp256k1PubkeyPrefix...), raw...)
+	encoded, err := bech32.ConvertAndEncode("funaipub", payload)
+	if err != nil {
+		t.Fatalf("bech32 encode: %v", err)
+	}
+	got := DecodeWorkerPubkey(encoded)
+	if string(got) != string(raw) {
+		t.Fatalf("bech32 round-trip mismatch")
+	}
+}
+
+func TestDecodeWorkerPubkey_Bech32_WrongAminoPrefix(t *testing.T) {
+	// Same length payload but wrong amino prefix (e.g. ed25519's `1624de64 20`
+	// instead of secp256k1's `eb5ae98721`) → decoder MUST reject so an
+	// ed25519 pubkey is not silently treated as if it were secp256k1.
+	raw := makeRawPubkey(t)
+	wrongPrefix := []byte{0x16, 0x24, 0xde, 0x64, 0x20}
+	payload := append(append([]byte{}, wrongPrefix...), raw...)
+	encoded, err := bech32.ConvertAndEncode("funaipub", payload)
+	if err != nil {
+		t.Fatalf("bech32 encode: %v", err)
+	}
+	if got := DecodeWorkerPubkey(encoded); got != nil {
+		t.Fatalf("must reject ed25519-prefix bech32, got len=%d", len(got))
 	}
 }
 
