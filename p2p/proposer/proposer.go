@@ -207,6 +207,12 @@ func (p *Proposer) AddOutput(taskId []byte, output string) {
 
 // AddVerifyResult adds a VerifyResult after validating the verifier's VRF legitimacy.
 // S7: Recompute VRF ranking and verify submitter is in top 3 candidates.
+//
+// KT non-state-machine Issue B: also enforces signature verification (the
+// inline pre-fix path accepted any VerifyResult that passed VRF top-21 — no
+// signature check at all on inbound P2P) and dedups by VerifierAddr so the
+// same identity cannot stuff `ev.Verifiers` with multiple votes for the
+// same task.
 func (p *Proposer) AddVerifyResult(result *p2ptypes.VerifyResult) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -215,6 +221,34 @@ func (p *Proposer) AddVerifyResult(result *p2ptypes.VerifyResult) error {
 	ev, exists := p.pendingTasks[key]
 	if !exists {
 		return fmt.Errorf("unknown task_id %s", key)
+	}
+
+	// KT Issue B: signature must verify against the verifier's claimed
+	// pubkey (VerifierAddr is the compressed secp256k1 pubkey itself).
+	// SecondVerificationEntrySigBytes-style mistake — pre-fix the inline
+	// canonical did not cover Pass, so a MITM could flip the verdict bit
+	// and the signature still matched. SignBytes() now centralises the
+	// pre-image and covers all critical fields.
+	if len(result.Signature) == 0 || len(result.VerifierAddr) != 33 {
+		return fmt.Errorf("verifier %x: missing signature or wrong-length pubkey (got %d, want 33)",
+			result.VerifierAddr, len(result.VerifierAddr))
+	}
+	{
+		msgHash := sha256.Sum256(result.SignBytes())
+		var pubKey secp256k1.PubKey = result.VerifierAddr
+		if !pubKey.VerifySignature(msgHash[:], result.Signature) {
+			return fmt.Errorf("verifier %x: signature verification failed", result.VerifierAddr)
+		}
+	}
+
+	// KT Issue B / Issue C residual: dedup by VerifierAddr so the same
+	// verifier identity cannot stuff ev.Verifiers with multiple votes for
+	// the same task. Pre-fix the only check was `len(ev.Verifiers) < 3` —
+	// counting rows, not unique identities.
+	for _, existing := range ev.Verifiers {
+		if bytes.Equal(existing.VerifierAddr, result.VerifierAddr) {
+			return fmt.Errorf("verifier %x: duplicate result for task %s", result.VerifierAddr, key)
+		}
 	}
 
 	// S7: VRF legitimacy check — verify submitter is in VRF top 3

@@ -178,7 +178,14 @@ func initAppConfig() (string, interface{}) {
 		serverconfig.Config
 	}
 	srvCfg := serverconfig.DefaultConfig()
-	srvCfg.MinGasPrices = "0ufai"
+	// KT non-state-machine Issue G: non-zero default min gas price so a low-
+	// cost mempool spammer cannot crowd out reserve / settlement / audit /
+	// fraud-proof tx by submitting cheap small txs at high rate. 0.001 ufai
+	// per gas unit × ~200_000 gas per typical tx ≈ 200 ufai per tx — high
+	// enough to deter spam, low enough that legitimate user / worker /
+	// proposer flow remains essentially free at testnet scale. Operators
+	// can override via app.toml minimum-gas-prices in production.
+	srvCfg.MinGasPrices = "0.001ufai"
 	customAppConfig := CustomAppConfig{Config: *srvCfg}
 	return serverconfig.DefaultConfigTemplate, customAppConfig
 }

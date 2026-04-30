@@ -596,14 +596,21 @@ func (w *Worker) signReceipt(receipt *p2ptypes.InferReceipt) []byte {
 
 // sendAcceptTask publishes an AcceptTask response back to the Leader.
 // P2-6 §6.2: "Worker must reply accept/reject within 1 second"
+//
+// KT non-state-machine Issue A: sign BOTH accept and reject (pre-fix only
+// the accepted path was signed, leaving forged rejects undetectable), and
+// sign the canonical SignBytes bound to (taskId, worker pubkey, accepted)
+// rather than just taskId. The pubkey is included in the message so Leader
+// can verify without an out-of-band lookup.
 func (w *Worker) sendAcceptTask(ctx context.Context, taskId []byte, accepted bool) {
 	accept := p2ptypes.AcceptTask{
 		TaskId:   taskId,
 		Accepted: accepted,
 	}
-	if accepted && len(w.PrivKey) == 32 {
+	if len(w.PrivKey) == 32 {
 		privKey := secp256k1.PrivKey(w.PrivKey)
-		sig, err := privKey.Sign(taskId)
+		accept.WorkerPubkey = privKey.PubKey().Bytes()
+		sig, err := privKey.Sign(accept.SignBytes())
 		if err == nil {
 			accept.WorkerSig = sig
 		}

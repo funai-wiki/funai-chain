@@ -404,7 +404,9 @@ func (l *Leader) dispatchSingle(ctx context.Context, req *p2ptypes.InferRequest,
 		}
 
 		// M5: wait for AcceptTask response with 1s timeout
-		accepted := l.waitForAccept(ctx, taskId, w.Address)
+		// KT Issue A: pass the expected worker pubkey so waitForAccept can
+		// verify msg.WorkerPubkey + signature, not just trust the topic.
+		accepted := l.waitForAccept(ctx, taskId, w.Address, w.Pubkey)
 		if !accepted {
 			continue
 		}
@@ -427,11 +429,26 @@ func (l *Leader) dispatchSingle(ctx context.Context, req *p2ptypes.InferRequest,
 
 // waitForAccept waits for a Worker's AcceptTask response.
 // Returns true if accepted within timeout, false otherwise.
-func (l *Leader) waitForAccept(ctx context.Context, taskId []byte, workerAddr string) bool {
+//
+// KT non-state-machine Issue A: pre-fix this path was open to forgery —
+// (1) subscribe failure returned `true` (optimistic accept),
+// (2) the message was not validated against signature/identity, so any P2P
+//     peer publishing on `/funai/accept/<taskId>` could move the Leader
+//     into "accepted" state.
+// Post-fix all three checks are required: subscribe must succeed, the
+// message must come from the expected worker, and AcceptTask.WorkerSig
+// must verify against AcceptTask.SignBytes(). Subscribe failure now
+// returns false (fail closed) so the dispatch loop tries the next-rank
+// worker rather than committing capacity blindly.
+func (l *Leader) waitForAccept(ctx context.Context, taskId []byte, workerAddr string, expectedPubkey []byte) bool {
 	acceptTopic := fmt.Sprintf("/funai/accept/%x", taskId)
 	sub, err := l.Host.Subscribe(acceptTopic)
 	if err != nil {
-		return true // if can't subscribe, optimistically accept
+		// Fail closed: do NOT optimistically accept. The dispatch loop will
+		// move to rank #2/#3 (or fail entirely with "all workers rejected"),
+		// which is preferable to advancing in-flight state on an unverified
+		// channel.
+		return false
 	}
 
 	// Use a timeout context to block on sub.Next instead of busy-waiting with default case
@@ -446,6 +463,23 @@ func (l *Leader) waitForAccept(ctx context.Context, taskId []byte, workerAddr st
 		}
 		var accept p2ptypes.AcceptTask
 		if err := json.Unmarshal(msg.Data, &accept); err != nil {
+			continue
+		}
+		// KT Issue A: verify identity + signature before trusting Accepted.
+		if !bytes.Equal(accept.TaskId, taskId) {
+			continue
+		}
+		if !bytes.Equal(accept.WorkerPubkey, expectedPubkey) {
+			// Wrong worker — could be a forged accept from another peer on
+			// the same topic. Skip; keep waiting (within timeout) for the
+			// real worker's response.
+			continue
+		}
+		if len(accept.WorkerSig) == 0 {
+			continue
+		}
+		var pubKey secp256k1.PubKey = accept.WorkerPubkey
+		if !pubKey.VerifySignature(accept.SignBytes(), accept.WorkerSig) {
 			continue
 		}
 		return accept.Accepted

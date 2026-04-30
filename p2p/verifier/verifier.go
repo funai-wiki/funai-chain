@@ -536,19 +536,13 @@ func (v *Verifier) makeResult(taskId []byte, pass bool, logitsMatch, samplingMat
 	hash := sha256.Sum256(logitsData)
 	result.LogitsHash = hash[:]
 
-	// S9: include token counts in signature coverage
-	sigData := sha256.New()
-	sigData.Write(hash[:])
-	itcBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(itcBuf, verifiedInputTokens)
-	sigData.Write(itcBuf)
-	otcBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(otcBuf, verifiedOutputTokens)
-	sigData.Write(otcBuf)
-	sigHash := sigData.Sum(nil)
-
+	// KT Issue B: sign result.SignBytes() so the canonical pre-image lives in
+	// p2p/types and stays in lockstep between signer + verifier (no inline
+	// drift). The pre-image now covers TaskId / VerifierAddr / Pass /
+	// LogitsMatch / SamplingMatch / LogitsHash / VerifiedInputTokens /
+	// VerifiedOutputTokens — pre-fix Pass and TaskId were NOT in coverage.
 	if len(v.PrivKey) == 32 {
-		msgHash := sha256.Sum256(sigHash)
+		msgHash := sha256.Sum256(result.SignBytes())
 		privKey := secp256k1.PrivKey(v.PrivKey)
 		sig, err := privKey.Sign(msgHash[:])
 		if err == nil {

@@ -183,7 +183,7 @@ func (r *InferReceipt) SignBytes() []byte {
 // VerifyResult is a verifier's assessment of an InferReceipt (V5.2 §9.2).
 type VerifyResult struct {
 	TaskId        []byte `json:"task_id"`
-	VerifierAddr  []byte `json:"verifier_addr"`
+	VerifierAddr  []byte `json:"verifier_addr"` // verifier's compressed secp256k1 pubkey (33 bytes)
 	Pass          bool   `json:"pass"`
 	LogitsMatch   uint8  `json:"logits_match"`   // number of logits positions matched (0-5)
 	SamplingMatch uint8  `json:"sampling_match"` // number of sampling positions matched (0-5, only if temperature>0)
@@ -193,6 +193,37 @@ type VerifyResult struct {
 	// S9: Verifier's independent token count from teacher forcing
 	VerifiedInputTokens  uint32 `json:"verified_input_tokens,omitempty"`
 	VerifiedOutputTokens uint32 `json:"verified_output_tokens,omitempty"`
+}
+
+// SignBytes returns the canonical pre-image the Verifier signs and Proposer
+// verifies for VerifyResult.
+//
+// KT non-state-machine Issue B: pre-fix the Verifier signed an inline
+// `sha256(LogitsHash || itc || otc)` shape that did NOT cover Pass /
+// LogitsMatch / SamplingMatch / TaskId / VerifierAddr — meaning a MITM
+// could flip the verdict bit, swap a verifier identity, or rebind a
+// verifier's signature to a different task without invalidating the
+// signature. Centralising the pre-image here closes that — the same
+// definition is used by Verifier (`p2p/verifier`) at sign time and
+// Proposer (`p2p/proposer`) at verify time, removing drift risk.
+func (r *VerifyResult) SignBytes() []byte {
+	h := sha256.New()
+	h.Write(r.TaskId)
+	h.Write(r.VerifierAddr)
+	if r.Pass {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	h.Write([]byte{r.LogitsMatch, r.SamplingMatch})
+	h.Write(r.LogitsHash)
+	itcBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(itcBuf, r.VerifiedInputTokens)
+	h.Write(itcBuf)
+	otcBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(otcBuf, r.VerifiedOutputTokens)
+	h.Write(otcBuf)
+	return h.Sum(nil)
 }
 
 // AssignTask is Leader's dispatch message to a Worker (V5.2 §6.2).
@@ -269,10 +300,39 @@ func (a *AssignTask) EffectiveFee() uint64 {
 }
 
 // AcceptTask is Worker's response to Leader's dispatch.
+//
+// KT non-state-machine Issue A: WorkerPubkey is included so Leader can
+// verify WorkerSig without having to look up the pubkey by some other
+// channel; Accepted is part of the signed pre-image so an attacker cannot
+// flip a real accept→reject (or vice-versa) by truncating the signature.
 type AcceptTask struct {
-	TaskId    []byte `json:"task_id"`
-	WorkerSig []byte `json:"worker_sig"`
-	Accepted  bool   `json:"accepted"`
+	TaskId       []byte `json:"task_id"`
+	WorkerPubkey []byte `json:"worker_pubkey"`
+	WorkerSig    []byte `json:"worker_sig"`
+	Accepted     bool   `json:"accepted"`
+}
+
+// SignBytes returns canonical bytes for signing the AcceptTask. Pre-fix
+// (`sendAcceptTask` in p2p/worker) only signed `taskId` and only on the
+// accepted path — Leader had no way to detect a forged accept on the
+// `/funai/accept/<taskId>` topic from any other peer, and a forged reject
+// went entirely uncovered. Post-fix the canonical bytes bind taskId +
+// worker pubkey + accept/reject decision.
+//
+// Including WorkerPubkey in the signed pre-image (rather than just relying
+// on Leader-side pubkey lookup) lets the verifier confirm the signer is the
+// pubkey it expects without any committee/registry round-trip — useful in
+// fail-closed paths where chain reads are slow.
+func (a *AcceptTask) SignBytes() []byte {
+	h := sha256.New()
+	h.Write(a.TaskId)
+	h.Write(a.WorkerPubkey)
+	if a.Accepted {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	return h.Sum(nil)
 }
 
 // StreamToken is a single token streamed from Worker to User SDK.
