@@ -1544,7 +1544,7 @@ func TestProcessFraudProof_WithSettledTask(t *testing.T) {
 	}
 }
 
-// -------- Batch settlement with insufficient balance --------
+// -------- Batch settlement with insufficient balance (Rule 4 partial-pay) --------
 
 func TestProcessBatchSettlement_InsufficientBalance(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
@@ -1574,11 +1574,20 @@ func TestProcessBatchSettlement_InsufficientBalance(t *testing.T) {
 	msg := makeBatchMsg(t, makeAddr("proposer").String(), entries)
 	_, err := k.ProcessBatchSettlement(ctx, msg)
 	if err != nil {
-		t.Fatalf("should not error (task skipped due to low balance): %v", err)
+		t.Fatalf("Rule 4: balance shortfall must not error the batch: %v", err)
 	}
 
+	// Rule 4: task settles partial-pay; user's whole balance debited, Worker
+	// absorbs the 999_900 shortfall.
 	ia, _ := k.GetInferenceAccount(ctx, userAddr)
-	if !ia.Balance.Amount.Equal(math.NewInt(100)) {
-		t.Fatalf("balance should be unchanged, got %s", ia.Balance.Amount.String())
+	if !ia.Balance.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("Rule 4: balance must be drained to 0 (partial-pay), got %s", ia.Balance.Amount.String())
+	}
+	st, found := k.GetSettledTask(ctx, []byte("insuff-balance-task"))
+	if !found {
+		t.Fatal("Rule 4: shortfall entry must produce SettledTask, never silent drop")
+	}
+	if !st.Fee.Amount.Equal(math.NewInt(100)) {
+		t.Fatalf("Rule 4: settled Fee should equal available balance (100), got %s", st.Fee.Amount)
 	}
 }

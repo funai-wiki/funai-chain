@@ -182,21 +182,26 @@ func TestKT_Issue2_NoInferenceAccount_PendingPreserved(t *testing.T) {
 }
 
 // ============================================================
-// KT-Issue2-D. SUCCESS path: balance < chargeAmount → return false at line 1713.
+// KT-Issue2-D. SUCCESS path: balance < chargeAmount.
 //
-// This is the most likely real-world trigger: user dispatched a task with
-// pending fee, then withdrew most of their balance before audit completion
-// (per-request billing has no on-chain freeze — KT 30-case Issue 1).
+// Pre-Rule-4 behaviour: settleAuditedTask returned false on shortfall →
+// pending preserved → user could re-deposit and HandleSecondVerificationTimeouts
+// would retry. The test asserted that two-round flow.
+//
+// Rule 4 (audit max_fee pre-authorisation): no silent drops. The audit
+// re-settle now lands partial-pay — Worker absorbs the shortfall, the
+// task settles in round 1, pending is deleted. The "re-deposit + retry"
+// flow no longer applies (preserved as TimeoutRetry was deleted below).
 // ============================================================
 
-func TestKT_Issue2_SuccessPath_BalanceShortfall_PendingPreserved(t *testing.T) {
+func TestKT_Issue2_SuccessPath_BalanceShortfall_SettlesPartialPay(t *testing.T) {
 	k, ctx, _, _ := setupKeeper(t)
 	k.SetCurrentSecondVerificationRate(ctx, 0)
 	k.SetCurrentThirdVerificationRate(ctx, 0)
 
 	taskId := []byte("kt-issue2-succ-bal-01")
 	user := makeAddr("kt-i2sb-poor-user")
-	// Deposit < fee → SUCCESS path will fail balance check.
+	// Deposit < fee → SUCCESS audit re-settle will hit Rule 4 partial-pay.
 	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(100)))
 
 	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
@@ -212,29 +217,33 @@ func TestKT_Issue2_SuccessPath_BalanceShortfall_PendingPreserved(t *testing.T) {
 
 	submit3PassAuditResults(t, k, ctx, taskId, "kt-i2sb")
 
-	if _, found := k.GetSecondVerificationPending(ctx, taskId); !found {
-		t.Fatal("KT-Issue2-D: pending must be preserved when SUCCESS-path balance check fails")
+	// Rule 4: pending deleted (settled), SettledTask written with partial Fee.
+	if _, found := k.GetSecondVerificationPending(ctx, taskId); found {
+		t.Fatal("Rule 4: pending must be deleted on partial-pay settle")
 	}
-	if _, found := k.GetSettledTask(ctx, taskId); found {
-		t.Fatal("KT-Issue2-D: SettledTask must NOT be written when settle returns false")
+	st, found := k.GetSettledTask(ctx, taskId)
+	if !found {
+		t.Fatal("Rule 4: SettledTask must be written even on shortfall — never silently drop")
 	}
-	// Balance untouched (no fee was charged).
+	if st.Status != types.TaskSettled {
+		t.Fatalf("Rule 4: expected TaskSettled on shortfall partial-pay, got %s", st.Status)
+	}
+	// Balance fully drained.
 	ia, _ := k.GetInferenceAccount(ctx, user)
-	if !ia.Balance.Amount.Equal(math.NewInt(100)) {
-		t.Fatalf("KT-Issue2-D: balance should be unchanged, got %s", ia.Balance.Amount)
+	if !ia.Balance.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("Rule 4: balance fully consumed by partial-pay, got %s", ia.Balance.Amount)
 	}
 }
 
 // ============================================================
-// KT-Issue2-E. FAIL-confirmed path: balance < failFee → return false at line 1735.
+// KT-Issue2-E. FAIL-confirmed path: balance < failFee.
 //
-// OriginalStatus=FAIL + auditPass=false → keeper.go:1583/1589 calls
-// settleAuditedTask(asSuccess=false). FailFee = fee × FailSettlementFeeRatio /
-// 1000 (default 150/1000 = 15%). Setup: deposit < failFee.
+// Pre-Rule-4: pending preserved on shortfall.
+// Post-Rule-4: settles partial-pay (FAIL still jails Worker), pending deleted.
 // ============================================================
 
-func TestKT_Issue2_FailPath_BalanceShortfall_PendingPreserved(t *testing.T) {
-	k, ctx, _, _ := setupKeeper(t)
+func TestKT_Issue2_FailPath_BalanceShortfall_SettlesPartialPay(t *testing.T) {
+	k, ctx, _, wk := setupKeeper(t)
 	k.SetCurrentSecondVerificationRate(ctx, 0)
 	k.SetCurrentThirdVerificationRate(ctx, 0)
 
@@ -260,152 +269,43 @@ func TestKT_Issue2_FailPath_BalanceShortfall_PendingPreserved(t *testing.T) {
 		ExpireBlock:       10000,
 	})
 
-	// 3 FAIL audits → !auditPass → keeper.go:1583/1589 → settleAuditedTask(asSuccess=false)
-	// → fails on balance check at keeper.go:1735.
+	// 3 FAIL audits → settleAuditedTask(asSuccess=false) → Rule 4 partial-pay.
 	submit3FailAuditResults(t, k, ctx, taskId, "kt-i2fb")
 
-	if _, found := k.GetSecondVerificationPending(ctx, taskId); !found {
-		t.Fatal("KT-Issue2-E: pending must be preserved when FAIL-path balance check fails")
-	}
-	if _, found := k.GetSettledTask(ctx, taskId); found {
-		t.Fatal("KT-Issue2-E: SettledTask must NOT be written when settle returns false")
-	}
-	ia, _ := k.GetInferenceAccount(ctx, user)
-	if !ia.Balance.Amount.Equal(math.NewInt(50)) {
-		t.Fatalf("KT-Issue2-E: balance should be unchanged, got %s", ia.Balance.Amount)
-	}
-}
-
-// ============================================================
-// KT-Issue2-F. Timeout retry succeeds after re-deposit.
-//
-// Round 1: balance shortfall → pending preserved (no SettledTask).
-// User re-deposits.
-// Block height advanced past SecondVerificationTimeout.
-// Round 2: HandleSecondVerificationTimeouts retries; balance now sufficient
-// → settle succeeds → pending deleted, SettledTask written.
-// ============================================================
-
-func TestKT_Issue2_TimeoutRetrySucceedsAfterRedeposit(t *testing.T) {
-	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentSecondVerificationRate(ctx, 0)
-	k.SetCurrentThirdVerificationRate(ctx, 0)
-
-	taskId := []byte("kt-issue2-retry-001")
-	user := makeAddr("kt-i2re-user")
-	worker := makeAddr("kt-i2re-worker")
-	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(100)))
-
-	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
-		TaskId:            taskId,
-		OriginalStatus:    types.SettlementSuccess,
-		SubmittedAt:       ctx.BlockHeight(),
-		UserAddress:       user.String(),
-		WorkerAddress:     worker.String(),
-		VerifierAddresses: []string{makeAddr("kt-i2re-orig-v1").String()},
-		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
-		ExpireBlock:       10000,
-	})
-
-	submit3PassAuditResults(t, k, ctx, taskId, "kt-i2re")
-
-	// Round 1 — settle failed, pending preserved.
-	if _, found := k.GetSecondVerificationPending(ctx, taskId); !found {
-		t.Fatal("KT-Issue2-F: pending must be preserved after first attempt fails")
-	}
-	if _, found := k.GetSettledTask(ctx, taskId); found {
-		t.Fatal("KT-Issue2-F: no SettledTask after first attempt")
-	}
-
-	// User re-deposits enough to cover the fee.
-	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(2_000_000)))
-
-	// Advance past audit timeout.
-	params := types.DefaultParams()
-	ctx = ctx.WithBlockHeight(ctx.BlockHeight() + params.SecondVerificationTimeout + 1)
-
-	// Round 2 — timeout retry should succeed.
-	processed := k.HandleSecondVerificationTimeouts(ctx)
-	if processed < 1 {
-		t.Fatalf("KT-Issue2-F: HandleSecondVerificationTimeouts should process the pending, got %d", processed)
-	}
-
-	// Pending now deleted, SettledTask written as TaskSettled.
 	if _, found := k.GetSecondVerificationPending(ctx, taskId); found {
-		t.Fatal("KT-Issue2-F: pending must be deleted after successful timeout retry")
+		t.Fatal("Rule 4: pending must be deleted on partial-pay settle")
 	}
 	st, found := k.GetSettledTask(ctx, taskId)
 	if !found {
-		t.Fatal("KT-Issue2-F: SettledTask must exist after successful retry")
+		t.Fatal("Rule 4: SettledTask must be written on FAIL-path shortfall partial-pay")
 	}
-	if st.Status != types.TaskSettled {
-		t.Fatalf("KT-Issue2-F: expected TaskSettled, got %s", st.Status)
+	if st.Status != types.TaskFailSettled {
+		t.Fatalf("Rule 4: expected TaskFailSettled, got %s", st.Status)
 	}
-}
-
-// ============================================================
-// KT-Issue2-G. Timeout force-terminal when both attempts fail.
-//
-// Round 1: balance shortfall → pending preserved.
-// User does NOT re-deposit (stays poor).
-// Block height advanced past SecondVerificationTimeout.
-// Round 2: HandleSecondVerificationTimeouts retries; settle still fails;
-// safety net writes a TaskFailed record (no fees) and deletes pending.
-// ============================================================
-
-func TestKT_Issue2_TimeoutForceTerminal(t *testing.T) {
-	k, ctx, _, _ := setupKeeper(t)
-	k.SetCurrentSecondVerificationRate(ctx, 0)
-	k.SetCurrentThirdVerificationRate(ctx, 0)
-
-	taskId := []byte("kt-issue2-terminal-01")
-	user := makeAddr("kt-i2tt-user")
-	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(100)))
-
-	k.SetSecondVerificationPending(ctx, types.SecondVerificationPendingTask{
-		TaskId:            taskId,
-		OriginalStatus:    types.SettlementSuccess,
-		SubmittedAt:       ctx.BlockHeight(),
-		UserAddress:       user.String(),
-		WorkerAddress:     makeAddr("kt-i2tt-worker").String(),
-		VerifierAddresses: []string{makeAddr("kt-i2tt-orig-v1").String()},
-		Fee:               sdk.NewCoin("ufai", math.NewInt(1_000_000)),
-		ExpireBlock:       10000,
-	})
-
-	submit3PassAuditResults(t, k, ctx, taskId, "kt-i2tt")
-
-	// Round 1 — settle failed, pending preserved.
-	if _, found := k.GetSecondVerificationPending(ctx, taskId); !found {
-		t.Fatal("KT-Issue2-G: pending must be preserved after first attempt fails")
-	}
-
-	// No re-deposit. Advance past timeout.
-	params := types.DefaultParams()
-	ctx = ctx.WithBlockHeight(ctx.BlockHeight() + params.SecondVerificationTimeout + 1)
-
-	// Round 2 — timeout retry; settle still fails (poor balance) → force-terminal.
-	processed := k.HandleSecondVerificationTimeouts(ctx)
-	if processed < 1 {
-		t.Fatalf("KT-Issue2-G: HandleSecondVerificationTimeouts should process the pending, got %d", processed)
-	}
-
-	// Pending must be deleted (timeout is the last chance).
-	if _, found := k.GetSecondVerificationPending(ctx, taskId); found {
-		t.Fatal("KT-Issue2-G: pending must be deleted at timeout (force-terminal)")
-	}
-	// SettledTask must exist with status TaskFailed (no fees collected).
-	st, found := k.GetSettledTask(ctx, taskId)
-	if !found {
-		t.Fatal("KT-Issue2-G: SettledTask must be force-written at timeout")
-	}
-	if st.Status != types.TaskFailed {
-		t.Fatalf("KT-Issue2-G: expected TaskFailed at force-terminal, got %s", st.Status)
-	}
-
-	// Balance still untouched — force-terminal does not collect a fee.
 	ia, _ := k.GetInferenceAccount(ctx, user)
-	if !ia.Balance.Amount.Equal(math.NewInt(100)) {
-		t.Fatalf("KT-Issue2-G: balance should be unchanged at force-terminal, got %s", ia.Balance.Amount)
+	if !ia.Balance.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("Rule 4: balance fully consumed by partial fail-fee, got %s", ia.Balance.Amount)
+	}
+	if len(wk.jailCalls) != 1 {
+		t.Fatalf("FAIL still jails Worker independent of shortfall, got %d jails", len(wk.jailCalls))
 	}
 }
+
+// KT-Issue2-F + KT-Issue2-G removed.
+//
+// Pre-Rule-4 those tests pinned the "two-round" flow: round 1 hits a balance
+// shortfall and returns false → pending preserved; round 2 (via
+// HandleSecondVerificationTimeouts) either retries successfully after a
+// re-deposit (F) or force-terminates with a TaskFailed record at audit
+// timeout (G). Rule 4 (audit max_fee pre-authorisation: never silently drop
+// a settled task) settles partial-pay in round 1 itself, deleting pending
+// immediately. The two-round retry-on-shortfall flow no longer exists for
+// balance shortfalls.
+//
+// Orphan recovery still applies for the OTHER settleAuditedTask
+// false-return triggers — bad UserAddress, bad WorkerAddress, missing
+// InferenceAccount, distributeSuccessFee SendCoins failure — covered by
+// tests A, B, C above and the integration timeout test in
+// integration_test.go. If a future trigger is added that legitimately
+// wants the two-round flow, copy the F/G shape from git history at
+// commit 215a79e.

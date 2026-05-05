@@ -1025,8 +1025,20 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 		ia, _ = k.GetInferenceAccount(ctx, userAddr)
 
 		if entry.Status == types.SettlementSuccess {
-			if ia.Balance.IsLT(actualFee) {
-				continue // REFUNDED
+			// Audit Rule 4: never silently drop a SUCCESS settlement on
+			// user-balance shortfall. The Worker has done the work; the task
+			// must land on chain. Pay min(actualFee, balance); the difference
+			// is absorbed by the Worker (and proportionally by the Verifier /
+			// audit fund through the existing distribution split). In normal
+			// post-MsgBatchReserve operation this branch is unreachable —
+			// the freeze underwrites max_fee >= actualFee. The shortfall path
+			// covers freeze-not-set legacy entries, freeze-race edge cases,
+			// and any future code path that bypasses MsgBatchReserve.
+			payableFee := actualFee
+			shortfall := sdk.NewCoin(actualFee.Denom, math.ZeroInt())
+			if ia.Balance.Amount.LT(actualFee.Amount) {
+				payableFee = sdk.NewCoin(actualFee.Denom, ia.Balance.Amount)
+				shortfall = sdk.NewCoin(actualFee.Denom, actualFee.Amount.Sub(ia.Balance.Amount))
 			}
 
 			// Issue H: per-entry CacheContext so a SendCoins failure inside
@@ -1037,14 +1049,16 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 			// the module account.
 			cacheCtx, writeFn := ctx.CacheContext()
 
-			ia.Balance = ia.Balance.Sub(actualFee)
+			ia.Balance = ia.Balance.Sub(payableFee)
 			k.SetInferenceAccount(cacheCtx, ia)
 
-			if err := k.distributeSuccessFee(cacheCtx, actualFee, workerAddr, entry.VerifierResults, params); err != nil {
-				k.logger.Error("distributeSuccessFee failed, entry skipped",
-					"task_id", fmt.Sprintf("%x", entry.TaskId),
-					"err", err.Error())
-				continue
+			if payableFee.IsPositive() {
+				if err := k.distributeSuccessFee(cacheCtx, payableFee, workerAddr, entry.VerifierResults, params); err != nil {
+					k.logger.Error("distributeSuccessFee failed, entry skipped",
+						"task_id", fmt.Sprintf("%x", entry.TaskId),
+						"err", err.Error())
+					continue
+				}
 			}
 
 			if k.workerKeeper != nil {
@@ -1052,7 +1066,7 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 				if k.workerKeeper.GetSuccessStreak(cacheCtx, workerAddr) >= 50 {
 					k.ResetDishonestCount(cacheCtx, workerAddr)
 				}
-				k.workerKeeper.UpdateWorkerStats(cacheCtx, workerAddr, actualFee)
+				k.workerKeeper.UpdateWorkerStats(cacheCtx, workerAddr, payableFee)
 				// Audit KT §3: successful settlement → reputation boost
 				k.workerKeeper.ReputationOnAccept(cacheCtx, workerAddr)
 				// Audit KT §5: update average latency from settlement data
@@ -1062,7 +1076,7 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 			}
 
 			if k.modelRegKeeper != nil && entry.ModelId != "" {
-				k.modelRegKeeper.RecordModelTask(cacheCtx, entry.ModelId, actualFee.Amount.Uint64(), entry.LatencyMs)
+				k.modelRegKeeper.RecordModelTask(cacheCtx, entry.ModelId, payableFee.Amount.Uint64(), entry.LatencyMs)
 			}
 
 			k.SetSettledTask(cacheCtx, types.SettledTaskID{
@@ -1072,13 +1086,25 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 				SettledAt:         currentHeight,
 				WorkerAddress:     entry.WorkerAddress,
 				OriginalVerifiers: verifierAddrs,
-				Fee:               actualFee,
+				Fee:               payableFee,
 				UserAddress:       entry.UserAddress,
 			})
 
 			writeFn()
+
+			if shortfall.IsPositive() {
+				ctx.EventManager().EmitEvent(sdk.NewEvent(
+					types.EventShortfall,
+					sdk.NewAttribute(types.AttributeKeyTaskId, hex.EncodeToString(entry.TaskId)),
+					sdk.NewAttribute(types.AttributeKeyWorker, entry.WorkerAddress),
+					sdk.NewAttribute(types.AttributeKeyExpectedFee, actualFee.String()),
+					sdk.NewAttribute(types.AttributeKeyPaidFee, payableFee.String()),
+					sdk.NewAttribute(types.AttributeKeyShortfallAmount, shortfall.String()),
+				))
+			}
+
 			successCount++
-			totalFees = totalFees.Add(actualFee.Amount)
+			totalFees = totalFees.Add(payableFee.Amount)
 		} else {
 			if entry.IsPerToken() {
 				// S9 §4.3: FAIL + per-token — charge fail_fee, refund rest.
@@ -1121,23 +1147,34 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 					k.workerKeeper.JailWorker(ctx, workerAddr, 0)
 				}
 			} else {
-				// Per-request FAIL: charge FailSettlementFeeRatio (default 15%) failFee
+				// Per-request FAIL: charge FailSettlementFeeRatio (default 15%) failFee.
+				//
+				// Audit Rule 4: same as the SUCCESS branch above — pay
+				// min(failFee, balance) and settle, never silently drop the
+				// task on shortfall. Worker is jailed regardless because the
+				// inference itself failed; the fee shortfall just adjusts the
+				// payout to verifiers / audit fund.
 				failFee := sdk.NewCoin(entry.Fee.Denom, entry.Fee.Amount.MulRaw(int64(params.FailSettlementFeeRatio)).QuoRaw(1000))
-				if ia.Balance.IsLT(failFee) {
-					continue
+				payableFailFee := failFee
+				failShortfall := sdk.NewCoin(failFee.Denom, math.ZeroInt())
+				if ia.Balance.Amount.LT(failFee.Amount) {
+					payableFailFee = sdk.NewCoin(failFee.Denom, ia.Balance.Amount)
+					failShortfall = sdk.NewCoin(failFee.Denom, failFee.Amount.Sub(ia.Balance.Amount))
 				}
 
 				// Issue H: per-entry CacheContext mirrors the SUCCESS branch.
 				cacheCtx, writeFn := ctx.CacheContext()
 
-				ia.Balance = ia.Balance.Sub(failFee)
+				ia.Balance = ia.Balance.Sub(payableFailFee)
 				k.SetInferenceAccount(cacheCtx, ia)
 
-				if err := k.distributeFailFee(cacheCtx, failFee, entry.VerifierResults, params); err != nil {
-					k.logger.Error("distributeFailFee failed (per-request), entry skipped",
-						"task_id", fmt.Sprintf("%x", entry.TaskId),
-						"err", err.Error())
-					continue
+				if payableFailFee.IsPositive() {
+					if err := k.distributeFailFee(cacheCtx, payableFailFee, entry.VerifierResults, params); err != nil {
+						k.logger.Error("distributeFailFee failed (per-request), entry skipped",
+							"task_id", fmt.Sprintf("%x", entry.TaskId),
+							"err", err.Error())
+						continue
+					}
 				}
 
 				if k.workerKeeper != nil {
@@ -1151,10 +1188,22 @@ func (k Keeper) ProcessBatchSettlement(ctx sdk.Context, msg *types.MsgBatchSettl
 					SettledAt:         currentHeight,
 					WorkerAddress:     entry.WorkerAddress,
 					OriginalVerifiers: verifierAddrs,
+					Fee:               payableFailFee,
 					UserAddress:       entry.UserAddress,
 				})
 
 				writeFn()
+
+				if failShortfall.IsPositive() {
+					ctx.EventManager().EmitEvent(sdk.NewEvent(
+						types.EventShortfall,
+						sdk.NewAttribute(types.AttributeKeyTaskId, hex.EncodeToString(entry.TaskId)),
+						sdk.NewAttribute(types.AttributeKeyWorker, entry.WorkerAddress),
+						sdk.NewAttribute(types.AttributeKeyExpectedFee, failFee.String()),
+						sdk.NewAttribute(types.AttributeKeyPaidFee, payableFailFee.String()),
+						sdk.NewAttribute(types.AttributeKeyShortfallAmount, failShortfall.String()),
+					))
+				}
 			}
 			failCount++
 			totalFees = totalFees.Add(actualFee.Amount)
@@ -2036,8 +2085,30 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationP
 			alreadyPaid := baseFee.Amount.MulRaw(int64(params.FailSettlementFeeRatio)).QuoRaw(1000)
 			chargeAmount = sdk.NewCoin(baseFee.Denom, baseFee.Amount.Sub(alreadyPaid))
 		}
-		if ia.Balance.IsLT(chargeAmount) && chargeAmount.IsPositive() {
-			return false
+
+		// Audit Rule 4: cap chargeAmount at the user's available balance
+		// rather than returning false (which silently kept the audit
+		// pending until orphan-cleanup). Worker absorbs the shortfall;
+		// the audit-resettled task lands on chain.
+		payableCharge := chargeAmount
+		shortfall := sdk.NewCoin(chargeAmount.Denom, math.ZeroInt())
+		if chargeAmount.IsPositive() && ia.Balance.Amount.LT(chargeAmount.Amount) {
+			payableCharge = sdk.NewCoin(chargeAmount.Denom, ia.Balance.Amount)
+			shortfall = sdk.NewCoin(chargeAmount.Denom, chargeAmount.Amount.Sub(ia.Balance.Amount))
+		}
+		// Worker payout still uses baseFee proportionally — but since we
+		// only debited payableCharge from the user, distribute the same
+		// payable amount to keep accounting consistent.
+		distributable := baseFee
+		if shortfall.IsPositive() {
+			// baseFee was the full nominal; with shortfall the actually
+			// debited fraction is payableCharge/chargeAmount of baseFee.
+			if chargeAmount.IsPositive() {
+				distAmount := baseFee.Amount.Mul(payableCharge.Amount).Quo(chargeAmount.Amount)
+				distributable = sdk.NewCoin(baseFee.Denom, distAmount)
+			} else {
+				distributable = sdk.NewCoin(baseFee.Denom, math.ZeroInt())
+			}
 		}
 
 		// Issue H: per-call CacheContext so a SendCoins failure inside
@@ -2049,18 +2120,20 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationP
 		// the entry (line ~2195) — no infinite-retry liability.
 		cacheCtx, writeFn := ctx.CacheContext()
 
-		ia.Balance = ia.Balance.Sub(chargeAmount)
+		ia.Balance = ia.Balance.Sub(payableCharge)
 		k.SetInferenceAccount(cacheCtx, ia)
-		if err := k.distributeSuccessFee(cacheCtx, baseFee, workerAddr, verifiers, params); err != nil {
-			k.logger.Error("distributeSuccessFee failed in settleAuditedTask, returning false for retry",
-				"task_id", fmt.Sprintf("%x", apt.TaskId),
-				"err", err.Error())
-			return false
+		if distributable.IsPositive() {
+			if err := k.distributeSuccessFee(cacheCtx, distributable, workerAddr, verifiers, params); err != nil {
+				k.logger.Error("distributeSuccessFee failed in settleAuditedTask, returning false for retry",
+					"task_id", fmt.Sprintf("%x", apt.TaskId),
+					"err", err.Error())
+				return false
+			}
 		}
 
 		if k.workerKeeper != nil {
 			k.workerKeeper.IncrementSuccessStreak(cacheCtx, workerAddr)
-			k.workerKeeper.UpdateWorkerStats(cacheCtx, workerAddr, baseFee)
+			k.workerKeeper.UpdateWorkerStats(cacheCtx, workerAddr, distributable)
 		}
 
 		k.SetSettledTask(cacheCtx, types.SettledTaskID{
@@ -2070,28 +2143,46 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationP
 			SettledAt:         ctx.BlockHeight(),
 			WorkerAddress:     apt.WorkerAddress,
 			OriginalVerifiers: apt.VerifierAddresses,
+			Fee:               distributable,
 			UserAddress:       apt.UserAddress,
 		})
 
 		writeFn()
+
+		if shortfall.IsPositive() {
+			ctx.EventManager().EmitEvent(sdk.NewEvent(
+				types.EventShortfall,
+				sdk.NewAttribute(types.AttributeKeyTaskId, hex.EncodeToString(apt.TaskId)),
+				sdk.NewAttribute(types.AttributeKeyWorker, apt.WorkerAddress),
+				sdk.NewAttribute(types.AttributeKeyExpectedFee, chargeAmount.String()),
+				sdk.NewAttribute(types.AttributeKeyPaidFee, payableCharge.String()),
+				sdk.NewAttribute(types.AttributeKeyShortfallAmount, shortfall.String()),
+			))
+		}
 		return true
 	}
 
 	failFee := sdk.NewCoin(baseFee.Denom, baseFee.Amount.MulRaw(int64(params.FailSettlementFeeRatio)).QuoRaw(1000))
-	if ia.Balance.IsLT(failFee) && failFee.IsPositive() {
-		return false
+	// Audit Rule 4: cap at available balance rather than returning false.
+	payableFailFee := failFee
+	failShortfall := sdk.NewCoin(failFee.Denom, math.ZeroInt())
+	if failFee.IsPositive() && ia.Balance.Amount.LT(failFee.Amount) {
+		payableFailFee = sdk.NewCoin(failFee.Denom, ia.Balance.Amount)
+		failShortfall = sdk.NewCoin(failFee.Denom, failFee.Amount.Sub(ia.Balance.Amount))
 	}
 
 	// Issue H: same CacheContext pattern as the success branch above.
 	cacheCtx, writeFn := ctx.CacheContext()
 
-	ia.Balance = ia.Balance.Sub(failFee)
+	ia.Balance = ia.Balance.Sub(payableFailFee)
 	k.SetInferenceAccount(cacheCtx, ia)
-	if err := k.distributeFailFee(cacheCtx, failFee, verifiers, params); err != nil {
-		k.logger.Error("distributeFailFee failed in settleAuditedTask, returning false for retry",
-			"task_id", fmt.Sprintf("%x", apt.TaskId),
-			"err", err.Error())
-		return false
+	if payableFailFee.IsPositive() {
+		if err := k.distributeFailFee(cacheCtx, payableFailFee, verifiers, params); err != nil {
+			k.logger.Error("distributeFailFee failed in settleAuditedTask, returning false for retry",
+				"task_id", fmt.Sprintf("%x", apt.TaskId),
+				"err", err.Error())
+			return false
+		}
 	}
 
 	if k.workerKeeper != nil {
@@ -2105,10 +2196,22 @@ func (k Keeper) settleAuditedTask(ctx sdk.Context, apt types.SecondVerificationP
 		SettledAt:         ctx.BlockHeight(),
 		WorkerAddress:     apt.WorkerAddress,
 		OriginalVerifiers: apt.VerifierAddresses,
+		Fee:               payableFailFee,
 		UserAddress:       apt.UserAddress,
 	})
 
 	writeFn()
+
+	if failShortfall.IsPositive() {
+		ctx.EventManager().EmitEvent(sdk.NewEvent(
+			types.EventShortfall,
+			sdk.NewAttribute(types.AttributeKeyTaskId, hex.EncodeToString(apt.TaskId)),
+			sdk.NewAttribute(types.AttributeKeyWorker, apt.WorkerAddress),
+			sdk.NewAttribute(types.AttributeKeyExpectedFee, failFee.String()),
+			sdk.NewAttribute(types.AttributeKeyPaidFee, payableFailFee.String()),
+			sdk.NewAttribute(types.AttributeKeyShortfallAmount, failShortfall.String()),
+		))
+	}
 	return true
 }
 

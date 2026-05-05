@@ -361,20 +361,20 @@ func TestKT19_PartialBatchExpiry_PerEntrySkip(t *testing.T) {
 // ============================================================
 // KT-20. Deposit progressively depleted mid-batch.
 //
-// User has balance for 3 of 4 SUCCESS entries (each 100 ufai). Per the
-// per-entry balance check (keeper.go:1010), the keeper deducts greedily
-// in iteration order; the entry that finds insufficient balance is skipped
-// silently (REFUNDED) and later entries with smaller-than-remaining balance
-// could theoretically still settle.
+// User has balance for 3 of 4 SUCCESS entries (each 100 ufai). The keeper
+// deducts greedily in iteration order. Per audit Rule 4 (max_fee
+// pre-authorisation: never silently drop a settlement on shortfall) the
+// entry that finds insufficient balance must STILL settle on what is
+// available — Worker absorbs the shortfall, the task lands as TaskSettled
+// with the partial Fee recorded.
 //
-// Expected after this test (deterministic order, all 4 entries cost 100):
-//   - first 3 settle (300 ufai debited)
-//   - the 4th finds 50 < 100 and is skipped
-//   - balance = 50
-//
-// Existing TestProcessBatchSettlement_InsufficientBalance pins single-entry
-// shortfall; TestBatchSettlement_AllInsufficientBalance pins all-entries-
-// shortfall. KT-20 fills the gap of *progressive* depletion across a batch.
+// Expected after this test (deterministic order, all 4 entries cost 100,
+// balance 350):
+//   - A, B, C settle full (debit 100 each → 300 total; balance now 50)
+//   - D settles partial (payable = 50, shortfall = 50; balance now 0)
+//   - all 4 produce SettledTask records
+//   - Worker streak called 4 times (work was done on every entry)
+//   - EventShortfall emitted exactly once for D
 // ============================================================
 
 func TestKT20_ProgressiveDepletion_MidBatch(t *testing.T) {
@@ -397,7 +397,7 @@ func TestKT20_ProgressiveDepletion_MidBatch(t *testing.T) {
 		{TaskId: []byte("kt20-task-A-settles"), UserAddress: user.String(), WorkerAddress: worker.String(), Fee: fee, ExpireBlock: 10000, Status: types.SettlementSuccess, VerifierResults: verifiers},
 		{TaskId: []byte("kt20-task-B-settles"), UserAddress: user.String(), WorkerAddress: worker.String(), Fee: fee, ExpireBlock: 10000, Status: types.SettlementSuccess, VerifierResults: verifiers},
 		{TaskId: []byte("kt20-task-C-settles"), UserAddress: user.String(), WorkerAddress: worker.String(), Fee: fee, ExpireBlock: 10000, Status: types.SettlementSuccess, VerifierResults: verifiers},
-		{TaskId: []byte("kt20-task-D-skipped"), UserAddress: user.String(), WorkerAddress: worker.String(), Fee: fee, ExpireBlock: 10000, Status: types.SettlementSuccess, VerifierResults: verifiers},
+		{TaskId: []byte("kt20-task-D-shortfall"), UserAddress: user.String(), WorkerAddress: worker.String(), Fee: fee, ExpireBlock: 10000, Status: types.SettlementSuccess, VerifierResults: verifiers},
 	}
 
 	msg := makeBatchMsg(t, makeAddr("proposer").String(), entries)
@@ -407,33 +407,37 @@ func TestKT20_ProgressiveDepletion_MidBatch(t *testing.T) {
 	}
 
 	br, _ := k.GetBatchRecord(ctx, batchId)
-	if br.ResultCount != 3 {
-		t.Fatalf("KT-20: expected 3 settled + 1 skipped, got %d settled", br.ResultCount)
+	if br.ResultCount != 4 {
+		t.Fatalf("KT-20: expected all 4 settled (Rule 4: shortfall entry settles partial), got %d", br.ResultCount)
 	}
 
 	ia, _ := k.GetInferenceAccount(ctx, user)
-	// 3 settled × 100 ufai = 300 debited; 50 left; D's 100-fee cannot be deducted.
-	if !ia.Balance.Amount.Equal(math.NewInt(50)) {
-		t.Fatalf("KT-20: expected residual 50 ufai, got %s", ia.Balance.Amount)
+	// 3 full × 100 = 300; 1 partial = 50; total debited = 350; balance now 0.
+	if !ia.Balance.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("KT-20: expected balance fully drained to 0 (Rule 4 partial-pay), got %s", ia.Balance.Amount)
 	}
 
-	// The shortfall entry must NOT produce a SettledTask record (silent REFUNDED).
-	if _, found := k.GetSettledTask(ctx, []byte("kt20-task-D-skipped")); found {
-		t.Fatal("KT-20: shortfall entry must not produce SettledTask")
-	}
-	// The 3 settled entries must all exist.
-	for _, ok := range [][]byte{
+	// All 4 entries must have SettledTask records.
+	for _, taskId := range [][]byte{
 		[]byte("kt20-task-A-settles"),
 		[]byte("kt20-task-B-settles"),
 		[]byte("kt20-task-C-settles"),
+		[]byte("kt20-task-D-shortfall"),
 	} {
-		if _, found := k.GetSettledTask(ctx, ok); !found {
-			t.Fatalf("KT-20: settled entry %s missing", ok)
+		if _, found := k.GetSettledTask(ctx, taskId); !found {
+			t.Fatalf("KT-20: settled entry %s missing — Rule 4 forbids silent drop", taskId)
 		}
 	}
 
-	// Streak should be called exactly 3 times (once per settled SUCCESS).
-	if len(wk.streakCalls) != 3 {
-		t.Fatalf("KT-20: expected 3 streak calls, got %d", len(wk.streakCalls))
+	// The shortfall entry's recorded Fee must reflect the partial payment.
+	dST, _ := k.GetSettledTask(ctx, []byte("kt20-task-D-shortfall"))
+	if !dST.Fee.Amount.Equal(math.NewInt(50)) {
+		t.Fatalf("KT-20: shortfall entry must record Fee=50 (the actually-paid amount), got %s", dST.Fee.Amount)
+	}
+
+	// Streak should be called 4 times (work was done on every entry, even
+	// the shortfall one).
+	if len(wk.streakCalls) != 4 {
+		t.Fatalf("KT-20: expected 4 streak calls (Rule 4: Worker is paid for the work even on shortfall), got %d", len(wk.streakCalls))
 	}
 }
