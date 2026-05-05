@@ -124,6 +124,17 @@ func (m msgServer) DeclareInstalled(goCtx context.Context, msg *types.MsgDeclare
 		return nil, sdkerrors.Wrap(types.ErrModelNotFound, "creator is not an active worker")
 	}
 
+	// Trust-boundary check (audit §7): worker can only declare installation of
+	// a model it actually registered in SupportedModels. Without this, a
+	// worker could DeclareInstalled on any model_id in the registry — that
+	// inflates InstalledStakeRatio / WorkerCount / OperatorCount and biases
+	// model activation thresholds + the VRF serving set, even though the
+	// worker has no obligation to actually serve.
+	if m.workerKeeper != nil && !m.workerKeeper.WorkerSupportsModel(ctx, creatorAddr, msg.ModelId) {
+		return nil, sdkerrors.Wrap(types.ErrModelNotFound,
+			"creator did not declare model_id in SupportedModels — register the model in MsgRegisterWorker first")
+	}
+
 	// Idempotency: if already installed, return success without re-scanning stats
 	if m.HasWorkerInstalledModel(ctx, creatorAddr, msg.ModelId) {
 		return &types.MsgDeclareInstalledResponse{}, nil

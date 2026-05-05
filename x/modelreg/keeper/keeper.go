@@ -22,6 +22,14 @@ type WorkerKeeper interface {
 	GetWorkerStake(ctx sdk.Context, addr sdk.AccAddress) math.Int
 	GetWorkerOperatorId(ctx sdk.Context, addr sdk.AccAddress) string
 	GetActiveWorkerStake(ctx sdk.Context) math.Int
+	// WorkerSupportsModel reports whether the worker registered the given
+	// model_id in MsgRegisterWorker.SupportedModels (or a later
+	// UpdateSupportedModels). DeclareInstalled uses this to refuse
+	// "I installed a model I never claimed to support" — without the
+	// check, an active worker can self-report installation of any model
+	// and pollute InstalledStakeRatio / WorkerCount, biasing model
+	// activation and the VRF serving set.
+	WorkerSupportsModel(ctx sdk.Context, addr sdk.AccAddress, modelId string) bool
 }
 
 // Keeper maintains the state for the modelreg module.

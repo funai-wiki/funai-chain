@@ -183,6 +183,26 @@ func (k Keeper) GetWorkerOperatorId(ctx sdk.Context, addr sdk.AccAddress) string
 	return w.OperatorId
 }
 
+// WorkerSupportsModel reports whether the worker registered the given
+// model_id in MsgRegisterWorker.SupportedModels (or a later update). Used
+// by modelreg's DeclareInstalled handler to refuse "I installed a model I
+// never declared support for" — the symmetric trust-boundary check that
+// prevents a worker from polluting InstalledStakeRatio / WorkerCount /
+// the VRF serving set with a model it never advertised in its
+// registration. Returns false for unknown workers.
+func (k Keeper) WorkerSupportsModel(ctx sdk.Context, addr sdk.AccAddress, modelId string) bool {
+	w, found := k.GetWorker(ctx, addr)
+	if !found {
+		return false
+	}
+	for _, m := range w.SupportedModels {
+		if m == modelId {
+			return true
+		}
+	}
+	return false
+}
+
 func (k Keeper) GetActiveWorkerCount(ctx sdk.Context) uint64 {
 	var count uint64
 	workers := k.GetAllWorkers(ctx)

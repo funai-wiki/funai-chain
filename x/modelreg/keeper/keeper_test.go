@@ -23,7 +23,11 @@ type mockWorkerKeeper struct {
 	activeAddrs map[string]bool
 	stakes      map[string]math.Int
 	operatorIds map[string]string
-	totalStake  math.Int
+	// supportedModels is the per-worker set of model_ids registered via
+	// MsgRegisterWorker.SupportedModels. The DeclareInstalled handler
+	// (audit §7) now requires the declared model to be in this set.
+	supportedModels map[string]map[string]bool
+	totalStake      math.Int
 }
 
 func (m *mockWorkerKeeper) IsWorkerActive(_ sdk.Context, addr sdk.AccAddress) bool {
@@ -51,6 +55,25 @@ func (m *mockWorkerKeeper) GetActiveWorkerStake(_ sdk.Context) math.Int {
 	return m.totalStake
 }
 
+func (m *mockWorkerKeeper) WorkerSupportsModel(_ sdk.Context, addr sdk.AccAddress, modelId string) bool {
+	models, ok := m.supportedModels[addr.String()]
+	if !ok {
+		return false
+	}
+	return models[modelId]
+}
+
+// addSupportedModel is a test helper that mirrors the production
+// MsgRegisterWorker.SupportedModels storage so DeclareInstalled tests can
+// satisfy the new audit-§7 trust-boundary check without booting a real
+// worker keeper.
+func (m *mockWorkerKeeper) addSupportedModel(addr sdk.AccAddress, modelId string) {
+	if m.supportedModels[addr.String()] == nil {
+		m.supportedModels[addr.String()] = make(map[string]bool)
+	}
+	m.supportedModels[addr.String()][modelId] = true
+}
+
 func setupModelregKeeper(t *testing.T) (keeper.Keeper, sdk.Context, *mockWorkerKeeper) {
 	t.Helper()
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
@@ -61,10 +84,11 @@ func setupModelregKeeper(t *testing.T) (keeper.Keeper, sdk.Context, *mockWorkerK
 	registry := codectypes.NewInterfaceRegistry()
 	cdc := codec.NewProtoCodec(registry)
 	wk := &mockWorkerKeeper{
-		activeAddrs: make(map[string]bool),
-		stakes:      make(map[string]math.Int),
-		operatorIds: make(map[string]string),
-		totalStake:  math.ZeroInt(),
+		activeAddrs:     make(map[string]bool),
+		stakes:          make(map[string]math.Int),
+		operatorIds:     make(map[string]string),
+		supportedModels: make(map[string]map[string]bool),
+		totalStake:      math.ZeroInt(),
 	}
 	// KT Issue 16: tests pass a deterministic authority string so the
 	// MsgUpdateModelStats authority-gate path can be exercised without
@@ -304,6 +328,7 @@ func TestDeclareInstalled(t *testing.T) {
 
 	workerAddr := sdk.AccAddress([]byte("active_worker_______"))
 	wk.activeAddrs[workerAddr.String()] = true
+	wk.addSupportedModel(workerAddr, "declare_test")
 
 	msg := types.NewMsgDeclareInstalled(workerAddr.String(), "declare_test")
 	_, err := msgServer.DeclareInstalled(ctx, msg)

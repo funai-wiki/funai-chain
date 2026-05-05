@@ -18,4 +18,5 @@ var (
 	ErrSeedNotFound       = errors.Register(ModuleName, 12, "VRF seed not found")
 	ErrWorkerBusy         = errors.Register(ModuleName, 13, "selected worker is busy")
 	ErrLeaderTimeout      = errors.Register(ModuleName, 14, "leader has timed out")
+	ErrUnauthorized       = errors.Register(ModuleName, 15, "submitter not authorized for this VRF entry")
 )

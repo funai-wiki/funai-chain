@@ -96,6 +96,7 @@ func TestDeclareInstalled_SameWorkerTwice(t *testing.T) {
 
 	workerAddr := sdk.AccAddress([]byte("active_worker_______"))
 	wk.activeAddrs[workerAddr.String()] = true
+	wk.addSupportedModel(workerAddr, "idempotent_declare")
 
 	msg := types.NewMsgDeclareInstalled(workerAddr.String(), "idempotent_declare")
 	_, err1 := msgServer.DeclareInstalled(ctx, msg)

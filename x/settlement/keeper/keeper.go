@@ -1656,6 +1656,18 @@ func (k Keeper) ProcessSecondVerificationResult(ctx sdk.Context, msg *types.MsgS
 		return fmt.Errorf("no SecondVerificationPending for task %x — second_verifier may not submit a result before the corresponding receipt has settled (§2.9 timing-attack rule)", msg.TaskId)
 	}
 
+	// Audit §1: reject results submitted past the pending entry's expiry. A
+	// SecondVerificationPending whose ExpireBlock is past must not be settled
+	// from an audit result — by design, the timeout sweep
+	// (HandleSecondVerificationTimeouts) is the only path that may finalise
+	// an expired entry. Without this check a late second_verifier could
+	// resurrect a task the timeout sweep hasn't yet reached and reroute its
+	// settlement on stale evidence.
+	currentHeight := ctx.BlockHeight()
+	if apt.ExpireBlock > 0 && currentHeight > apt.ExpireBlock {
+		return fmt.Errorf("SecondVerificationPending for task %x expired (expire_block=%d, current=%d) — late audit result rejected", msg.TaskId, apt.ExpireBlock, currentHeight)
+	}
+
 	// P2-7: reject audit results from original verifiers (conflict of interest)
 	for _, vAddr := range apt.VerifierAddresses {
 		if vAddr == msg.SecondVerifier {

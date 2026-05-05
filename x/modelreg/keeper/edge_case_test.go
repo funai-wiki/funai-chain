@@ -264,6 +264,7 @@ func TestDeclareInstalled_ActiveModel(t *testing.T) {
 
 	workerAddr := sdk.AccAddress([]byte("active_worker_______"))
 	wk.activeAddrs[workerAddr.String()] = true
+	wk.addSupportedModel(workerAddr, "active_declare")
 
 	msg := types.NewMsgDeclareInstalled(workerAddr.String(), "active_declare")
 	_, err := msgServer.DeclareInstalled(ctx, msg)
