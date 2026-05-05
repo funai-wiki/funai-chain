@@ -10,6 +10,11 @@ const (
 	EventSecondVerificationResultBatch = "second_verification_result_batch"
 	EventFailSettlement                = "fail_settlement"
 	EventTaskCleanup                   = "task_cleanup"
+	// EventShortfall is emitted when settlement could not pay the full
+	// actualFee because the user's account had insufficient balance at
+	// settle time (audit Rule 4 — never silently drop a settled task).
+	// The Worker absorbs the difference; the task is still marked settled.
+	EventShortfall = "settlement_shortfall"
 
 	AttributeKeyUser           = "user"
 	AttributeKeyAmount         = "amount"
@@ -27,4 +32,8 @@ const (
 	AttributeKeyCleanedTasks   = "cleaned_tasks"
 	AttributeKeyAcceptedCount  = "accepted_count"
 	AttributeKeyRejectedCount  = "rejected_count"
+	// EventShortfall attributes (audit Rule 4).
+	AttributeKeyExpectedFee      = "expected_fee"
+	AttributeKeyPaidFee          = "paid_fee"
+	AttributeKeyShortfallAmount  = "shortfall_amount"
 )

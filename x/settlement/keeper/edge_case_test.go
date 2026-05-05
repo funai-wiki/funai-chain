@@ -230,24 +230,29 @@ func TestBatchSettlement_MultiUser_OneInsufficientBalance(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Only 1 task should settle (rich user), poor user's task skipped
+	// Both tasks settle (Rule 4: shortfall entries land partial-pay).
 	br, _ := k.GetBatchRecord(ctx, batchId)
-	if br.ResultCount != 1 {
-		t.Fatalf("expected 1 result (poor user skipped), got %d", br.ResultCount)
+	if br.ResultCount != 2 {
+		t.Fatalf("Rule 4: both entries land (poor user partial-pay), got %d", br.ResultCount)
 	}
 
-	// Rich user charged, poor user untouched
+	// Rich user fully charged.
 	ia, _ := k.GetInferenceAccount(ctx, richUser)
 	if !ia.Balance.Amount.Equal(math.NewInt(4_000_000)) {
 		t.Fatalf("rich user balance: expected 4M, got %s", ia.Balance.Amount)
 	}
+	// Poor user fully drained (100 → 0; Worker absorbs the 999_900 shortfall).
 	ia2, _ := k.GetInferenceAccount(ctx, poorUser)
-	if !ia2.Balance.Amount.Equal(math.NewInt(100)) {
-		t.Fatalf("poor user balance should be unchanged, got %s", ia2.Balance.Amount)
+	if !ia2.Balance.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("Rule 4: poor user balance fully consumed by partial-pay, got %s", ia2.Balance.Amount)
+	}
+	stPoor, _ := k.GetSettledTask(ctx, []byte("multi-user-task-002"))
+	if !stPoor.Fee.Amount.Equal(math.NewInt(100)) {
+		t.Fatalf("Rule 4: poor user's settled Fee should equal available balance (100), got %s", stPoor.Fee.Amount)
 	}
 
-	if len(wk.streakCalls) != 1 {
-		t.Fatalf("expected 1 streak call, got %d", len(wk.streakCalls))
+	if len(wk.streakCalls) != 2 {
+		t.Fatalf("Rule 4: streak called for both tasks (Worker did the work on each), got %d", len(wk.streakCalls))
 	}
 }
 
@@ -262,7 +267,9 @@ func TestBatchSettlement_FailInsufficientForFailFee(t *testing.T) {
 	userAddr := makeAddr("fail-insuff-user")
 	worker := makeAddr("fail-insuff-wrk")
 
-	// Deposit 30 ufai. Fail fee = 1M * 150/1000 = 150_000. 30 < 150_000 → skip
+	// Deposit 30 ufai. Fail fee = 1M * 150/1000 = 150_000. 30 < 150_000.
+	// Per audit Rule 4 the FAIL settles partial: payable = 30, shortfall = 149_970.
+	// Worker is still jailed (FAIL = Worker fault).
 	_ = k.ProcessDeposit(ctx, userAddr, sdk.NewCoin("ufai", math.NewInt(30)))
 
 	entries := []types.SettlementEntry{
@@ -286,17 +293,21 @@ func TestBatchSettlement_FailInsufficientForFailFee(t *testing.T) {
 	}
 
 	br, _ := k.GetBatchRecord(ctx, batchId)
-	if br.ResultCount != 0 {
-		t.Fatalf("expected 0 results (insufficient for fail fee), got %d", br.ResultCount)
+	if br.ResultCount != 1 {
+		t.Fatalf("Rule 4: FAIL entry must land partial-pay, got %d settled", br.ResultCount)
 	}
 
 	ia, _ := k.GetInferenceAccount(ctx, userAddr)
-	if !ia.Balance.Amount.Equal(math.NewInt(30)) {
-		t.Fatalf("balance should be unchanged, got %s", ia.Balance.Amount)
+	if !ia.Balance.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("Rule 4: balance fully consumed by partial fail-fee, got %s", ia.Balance.Amount)
+	}
+	st, _ := k.GetSettledTask(ctx, []byte("fail-insuff-task-01"))
+	if !st.Fee.Amount.Equal(math.NewInt(30)) {
+		t.Fatalf("Rule 4: settled Fee should equal available balance (30), got %s", st.Fee.Amount)
 	}
 
-	if len(wk.jailCalls) != 0 {
-		t.Fatalf("no jail for skipped fail task, got %d", len(wk.jailCalls))
+	if len(wk.jailCalls) != 1 {
+		t.Fatalf("FAIL still jails Worker (Worker fault, independent of shortfall), got %d jails", len(wk.jailCalls))
 	}
 }
 
@@ -1439,17 +1450,17 @@ func TestBatchSettlement_FailTaskOverspend(t *testing.T) {
 	}
 
 	br, _ := k.GetBatchRecord(ctx, batchId)
-	if br.ResultCount != 0 {
-		t.Fatalf("expected 0 results (insufficient for fail fee), got %d", br.ResultCount)
+	if br.ResultCount != 1 {
+		t.Fatalf("Rule 4: FAIL with insufficient balance still settles partial-pay, got %d", br.ResultCount)
 	}
 
 	ia, _ := k.GetInferenceAccount(ctx, userAddr)
-	if !ia.Balance.Amount.Equal(math.NewInt(140_000)) {
-		t.Fatalf("balance should be unchanged at 140_000, got %s", ia.Balance.Amount)
+	if !ia.Balance.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("Rule 4: balance fully consumed by partial fail-fee, got %s", ia.Balance.Amount)
 	}
 
-	if len(wk.jailCalls) != 0 {
-		t.Fatalf("no jail for skipped fail task, got %d", len(wk.jailCalls))
+	if len(wk.jailCalls) != 1 {
+		t.Fatalf("FAIL still jails Worker even on shortfall, got %d", len(wk.jailCalls))
 	}
 }
 

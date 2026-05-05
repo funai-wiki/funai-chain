@@ -489,8 +489,13 @@ func TestAuditPass_OverturnsFail_UserPaysRemaining(t *testing.T) {
 }
 
 // ============================================================
-// B14. Batch with all entries failing due to insufficient balance
+// B14. Batch with all entries hitting balance shortfall.
 // ============================================================
+//
+// Audit Rule 4: shortfall entries must STILL settle on what is available
+// (here 10 ufai for the first entry, 0 for the second), Worker absorbs
+// the difference, the tasks land. This replaces the pre-Rule-4 "silent
+// REFUNDED skip" semantic that left Workers eating an unrecorded loss.
 
 func TestBatchSettlement_AllInsufficientBalance(t *testing.T) {
 	k, ctx, _, wk := setupKeeper(t)
@@ -498,7 +503,7 @@ func TestBatchSettlement_AllInsufficientBalance(t *testing.T) {
 
 	user := makeAddr("all-poor-user")
 	worker := makeAddr("all-poor-worker")
-	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(10))) // too little for any fee
+	_ = k.ProcessDeposit(ctx, user, sdk.NewCoin("ufai", math.NewInt(10))) // too little for any full fee
 
 	verifiers := []types.VerifierResult{
 		{Address: makeAddr("ap-v1").String(), Pass: true},
@@ -518,17 +523,31 @@ func TestBatchSettlement_AllInsufficientBalance(t *testing.T) {
 	}
 
 	br, _ := k.GetBatchRecord(ctx, batchId)
-	if br.ResultCount != 0 {
-		t.Fatalf("all should be skipped, got %d results", br.ResultCount)
+	if br.ResultCount != 2 {
+		t.Fatalf("Rule 4: both entries must land (partial-pay), got %d settled", br.ResultCount)
 	}
 
 	ia, _ := k.GetInferenceAccount(ctx, user)
-	if !ia.Balance.Amount.Equal(math.NewInt(10)) {
-		t.Fatalf("balance unchanged, got %s", ia.Balance.Amount)
+	if !ia.Balance.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("Rule 4: balance fully drained, got %s", ia.Balance.Amount)
 	}
 
-	if len(wk.jailCalls) != 0 || len(wk.streakCalls) != 0 {
-		t.Fatal("no jail/streak calls for skipped tasks")
+	// First entry receives whatever was available (10 ufai), second receives 0.
+	st1, _ := k.GetSettledTask(ctx, []byte("allpoor-task-000001"))
+	if !st1.Fee.Amount.Equal(math.NewInt(10)) {
+		t.Fatalf("Rule 4: first entry Fee should equal available balance (10), got %s", st1.Fee.Amount)
+	}
+	st2, _ := k.GetSettledTask(ctx, []byte("allpoor-task-000002"))
+	if !st2.Fee.Amount.Equal(math.NewInt(0)) {
+		t.Fatalf("Rule 4: second entry Fee should be 0 after first drained balance, got %s", st2.Fee.Amount)
+	}
+
+	// Worker streak still incremented for both — they did the work even on shortfall.
+	if len(wk.streakCalls) != 2 {
+		t.Fatalf("Rule 4: streak called once per Worker-completed entry, got %d", len(wk.streakCalls))
+	}
+	if len(wk.jailCalls) != 0 {
+		t.Fatal("Rule 4: SUCCESS-path shortfall should not jail Worker (no fault on Worker side)")
 	}
 }
 
