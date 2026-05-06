@@ -129,6 +129,20 @@ func (msg *MsgBatchSettlement) String() string {
 	return fmt.Sprintf("MsgBatchSettlement{%s,count=%d}", msg.Proposer, len(msg.Entries))
 }
 
+// MaxBatchSettlementEntries is the chain-side hard cap on entries per
+// MsgBatchSettlement. Pre-fix this had no upper bound — a malicious or buggy
+// proposer could submit an unbounded batch and OOM every validator.
+//
+// Value chosen against the binding constraint: CometBFT mempool tx-bytes
+// (1 MiB default). Per `bench/bench_test.go::TestReportWireSize`, a real-size
+// SettlementEntry serializes to ~783 bytes; 1 MiB / 783 ≈ 1338 entries.
+// 1300 leaves ~5% (40 KB) headroom for proto encoding variance.
+//
+// Operators that raise CometBFT `mempool.max_tx_bytes` to take larger batches
+// must coordinate raising this constant — bytes-dimension protection lives in
+// both places intentionally.
+const MaxBatchSettlementEntries = 1300
+
 func (msg *MsgBatchSettlement) ValidateBasic() error {
 	if _, err := sdk.AccAddressFromBech32(msg.Proposer); err != nil {
 		return sdkerrors.Wrap(err, "invalid proposer address")
@@ -138,6 +152,9 @@ func (msg *MsgBatchSettlement) ValidateBasic() error {
 	}
 	if len(msg.Entries) == 0 {
 		return sdkerrors.Wrap(ErrInvalidSettlement, "entries cannot be empty")
+	}
+	if len(msg.Entries) > MaxBatchSettlementEntries {
+		return sdkerrors.Wrapf(ErrInvalidSettlement, "batch size %d exceeds max %d", len(msg.Entries), MaxBatchSettlementEntries)
 	}
 	if len(msg.ProposerSig) == 0 {
 		return sdkerrors.Wrap(ErrInvalidSignature, "proposer_sig cannot be empty")

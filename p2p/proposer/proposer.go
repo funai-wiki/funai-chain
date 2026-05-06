@@ -505,16 +505,24 @@ func (p *Proposer) shouldAudit(taskId, blockHash []byte) bool {
 }
 
 // BuildBatch constructs a MsgBatchSettlement if enough tasks are accumulated.
-// MaxBatchEntries is the *default* maximum entries per batch to stay within
-// block gas limit (E17). gasLimit = 200000 + len*2000; at 100M block gas
-// limit, max = (100M - 200K) / 2K = 49900. Use 40000 as conservative limit.
+// MaxBatchEntries is the *default* maximum entries per batch.
+//
+// Pre-fix this was 40000, derived from a block-gas estimate
+// (gasLimit = 200000 + len*2000; (100M - 200K) / 2K ≈ 49900). That formula
+// ignored the binding constraint: CometBFT mempool tx-bytes (1 MiB default).
+// Per `bench/bench_test.go::TestReportWireSize`, a real-size SettlementEntry
+// serializes to ~783 bytes, so a 40000-entry batch is ~30 MiB — rejected by
+// every validator's mempool.
+//
+// 1300 entries × 783 B ≈ 1018 KiB, ~5% under the 1 MiB cap. To raise this,
+// CometBFT `mempool.max_tx_bytes` and the chain-side hard cap
+// `settlementtypes.MaxBatchSettlementEntries` must be raised together.
 //
 // KT 30-case Added A: at runtime this can be overridden lower via
-// SetBatchLimit / ShrinkBatchLimit. The override addresses the *bytes*
-// dimension (mempool max-tx-bytes) which is independent of gas — a 40 000
-// entry batch easily exceeds CometBFT's 1 MiB default mempool tx limit
-// even though it fits gas-wise.
-const MaxBatchEntries = 40000
+// SetBatchLimit / ShrinkBatchLimit, used by dispatch when chain.ErrTxTooLarge
+// indicates we are still over the bytes cap (e.g. operator running a smaller
+// mempool config).
+const MaxBatchEntries = 1300
 
 // effectiveBatchLimit returns the runtime-effective batch ceiling, falling
 // back to MaxBatchEntries when no override has been set. Caller MUST hold
