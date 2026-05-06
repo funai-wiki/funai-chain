@@ -2,17 +2,17 @@ package proposer
 
 // Tests for KT 30-case Added A — Proposer-side adaptive shrink.
 //
-// Pre-fix: const MaxBatchEntries = 40000 was the only ceiling. A batch of
-// 40k tasks fits the gas cap (40k * 2k + 200k = 80.2M < 100M block.max_gas)
-// but easily exceeds CometBFT's mempool max-tx-bytes default of 1 MiB
-// (40k * ~400 byte/entry ≈ 16 MiB). The chain rejected the batch; Proposer
-// kept retrying the same oversized payload forever.
+// Pre-fix: const MaxBatchEntries was set from a block-gas estimate (40000)
+// that ignored the binding constraint, CometBFT's mempool max-tx-bytes
+// default of 1 MiB. The chain rejected over-sized batches; Proposer kept
+// retrying the same payload forever.
 //
-// Post-fix: dispatch detects chain.ErrTxTooLarge and calls
-// Proposer.ShrinkBatchLimit, which halves the runtime ceiling. BuildBatch
-// and CommitBatch both honor the runtime limit, so the next tick produces
-// a chunk that fits. The shrink is floored at MinBatchLimit so we don't
-// shrink to absurd sizes.
+// Post-fix: MaxBatchEntries lowered to 1300 (~1 MiB at 783 B/entry, see
+// bench/bench_test.go::TestReportWireSize) AND dispatch detects
+// chain.ErrTxTooLarge and calls Proposer.ShrinkBatchLimit, which halves
+// the runtime ceiling further if an operator is running a tighter mempool.
+// BuildBatch and CommitBatch both honor the runtime limit. The shrink is
+// floored at MinBatchLimit so we don't shrink to absurd sizes.
 
 import (
 	"testing"
@@ -75,8 +75,8 @@ func TestProposer_SetBatchLimit_FlooredAtMin(t *testing.T) {
 func TestProposer_ShrinkBatchLimit_HalvesUntilFloor(t *testing.T) {
 	p := newProposerWithClearedTasks(t, 0)
 
-	// Sequence: 40000 → 20000 → 10000 → 5000 → 2500 → 1250 → 625 → 312 → 156 → 78 → 64 (floor) → 64 (no further shrink)
-	expected := []int{20000, 10000, 5000, 2500, 1250, 625, 312, 156, 78, MinBatchLimit, MinBatchLimit}
+	// Sequence: 1300 → 650 → 325 → 162 → 81 → 64 (floor) → 64 (no further shrink)
+	expected := []int{650, 325, 162, 81, MinBatchLimit, MinBatchLimit}
 	for i, want := range expected {
 		got := p.ShrinkBatchLimit()
 		if got != want {
@@ -112,21 +112,21 @@ func TestProposer_BuildBatch_HonorsRuntimeLimit(t *testing.T) {
 // loop — N too-large rejections shrink the limit; eventually the batch fits.
 // Pin that the queue drains correctly across the shrink/commit cycles.
 func TestProposer_BuildBatch_ConvergesUnderShrink(t *testing.T) {
-	p := newProposerWithClearedTasks(t, 5000)
+	p := newProposerWithClearedTasks(t, 162)
 	p.PrivKey = nil
 
-	// Simulate 3 ShrinkBatchLimit calls (40000 → 20000 → 10000 → 5000).
+	// Simulate 3 ShrinkBatchLimit calls (1300 → 650 → 325 → 162).
 	for i := 0; i < 3; i++ {
 		p.ShrinkBatchLimit()
 	}
-	if got := p.GetBatchLimit(); got != 5000 {
-		t.Fatalf("expected limit 5000 after 3 shrinks, got %d", got)
+	if got := p.GetBatchLimit(); got != 162 {
+		t.Fatalf("expected limit 162 after 3 shrinks, got %d", got)
 	}
 
-	// First "successful" tick: drain all 5000 (limit happens to equal queue).
+	// First "successful" tick: drain all 162 (limit happens to equal queue).
 	msg := p.BuildBatch()
-	if len(msg.Entries) != 5000 {
-		t.Fatalf("BuildBatch should produce 5000, got %d", len(msg.Entries))
+	if len(msg.Entries) != 162 {
+		t.Fatalf("BuildBatch should produce 162, got %d", len(msg.Entries))
 	}
 	p.CommitBatch()
 	if got := p.ClearedCount(); got != 0 {
